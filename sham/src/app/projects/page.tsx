@@ -149,6 +149,7 @@ export default function ProjectsPage() {
     type: "project" | "invoice" | "view" | "invoice-preview" | null;
     mode?: "create" | "edit";
     data?: any;
+    context?: { projectId?: string };
   }>({ type: null });
 
   // Form states
@@ -625,25 +626,25 @@ export default function ProjectsPage() {
                   <div class="detail-item">
                     <span class="detail-label">اسم المشروع:</span>
                     <span class="detail-value">${
-                      project?.name || "غير محدد"
+                      project?.name || "اسم المشروع"
                     }</span>
                   </div>
                   <div class="detail-item">
                     <span class="detail-label">كود المشروع:</span>
                     <span class="detail-value">${
-                      project?.code || "غير محدد"
+                      project?.code || "كود المشروع"
                     }</span>
                   </div>
                   <div class="detail-item">
                     <span class="detail-label">العميل:</span>
                     <span class="detail-value">${
-                      project?.client || "غير محدد"
+                      project?.client || "اسم العميل"
                     }</span>
                   </div>
                   <div class="detail-item">
                     <span class="detail-label">موقع المشروع:</span>
                     <span class="detail-value">${
-                      project?.location || "غير محدد"
+                      project?.location || "موقع المشروع"
                     }</span>
                   </div>
                 </div>
@@ -800,6 +801,11 @@ export default function ProjectsPage() {
   const closeAllModals = () => {
     setCurrentModal({ type: null });
     resetForms();
+  };
+
+  // CLOSE PREVIEW ONLY (without resetting forms)
+  const closePreviewModal = () => {
+    setCurrentModal({ type: null });
   };
 
   const resetForms = () => {
@@ -1059,8 +1065,15 @@ export default function ProjectsPage() {
     setCurrentModal({ type: "invoice", data: projectId });
   };
 
-  const openInvoicePreview = (invoice: EnhancedInvoice | InvoiceFormData) => {
-    setCurrentModal({ type: "invoice-preview", data: invoice });
+  const openInvoicePreview = (
+    invoice: EnhancedInvoice | InvoiceFormData,
+    projectId?: string
+  ) => {
+    setCurrentModal({
+      type: "invoice-preview",
+      data: invoice,
+      context: { projectId: projectId || (invoice as any)?.projectId },
+    });
   };
 
   return (
@@ -1315,7 +1328,7 @@ export default function ProjectsPage() {
         setInvoiceForm={setInvoiceForm}
         onClose={closeAllModals}
         onSubmit={handleCreateInvoice}
-        onPreview={() => openInvoicePreview(invoiceForm)}
+        onPreview={() => openInvoicePreview(invoiceForm, currentModal.data?.id)}
       />
 
       <ViewProjectModal
@@ -1362,11 +1375,22 @@ export default function ProjectsPage() {
                 <div className="flex items-center space-x-2 space-x-reverse">
                   <Button
                     onClick={() => {
-                      if (
-                        typeof currentModal.data === "object" &&
-                        currentModal.data.id
-                      ) {
-                        printInvoice(currentModal.data);
+                      if (typeof currentModal.data === "object") {
+                        // For form previews, create a temporary invoice object with the current project context
+                        if (!currentModal.data.id) {
+                          const projectId =
+                            currentModal.context?.projectId || "";
+                          const tempInvoice = {
+                            ...currentModal.data,
+                            id: "preview",
+                            projectId: projectId,
+                            invoiceNumber:
+                              currentModal.data.invoiceNumber || "معاينة",
+                          };
+                          printInvoice(tempInvoice as EnhancedInvoice);
+                        } else {
+                          printInvoice(currentModal.data as EnhancedInvoice);
+                        }
                       }
                     }}
                     variant="outline"
@@ -1379,7 +1403,7 @@ export default function ProjectsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={closeAllModals}
+                    onClick={closePreviewModal}
                     className="h-8 w-8 p-0 text-white hover:bg-white/20"
                   >
                     <X className="h-4 w-4 no-flip" />
@@ -1396,13 +1420,11 @@ export default function ProjectsPage() {
                     | EnhancedInvoice
                     | InvoiceFormData;
 
-                  // For form preview, we need to get the projectId from the modal context
+                  // Get project ID from invoice data or modal context
                   const projectId =
-                    "projectId" in invoice
-                      ? invoice.projectId
-                      : typeof currentModal.data === "string"
-                      ? currentModal.data
-                      : null;
+                    ("projectId" in invoice && invoice.projectId) ||
+                    currentModal.context?.projectId ||
+                    null;
                   const project = projectId
                     ? projects.find((p) => p.id === projectId)
                     : null;
@@ -1562,10 +1584,18 @@ export default function ProjectsPage() {
                             <div className="space-y-3">
                               <div className="flex justify-between">
                                 <span className="text-gray-700 arabic-spacing">
-                                  المشروع:
+                                  اسم المشروع:
                                 </span>
                                 <span className="font-semibold text-gray-900 arabic-spacing">
-                                  {project?.name || "غير محدد"}
+                                  {project?.name || "اسم المشروع"}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-700 arabic-spacing">
+                                  كود المشروع:
+                                </span>
+                                <span className="font-semibold text-gray-900 arabic-spacing">
+                                  {project?.code || "كود المشروع"}
                                 </span>
                               </div>
                               <div className="flex justify-between">
@@ -1573,15 +1603,15 @@ export default function ProjectsPage() {
                                   العميل:
                                 </span>
                                 <span className="font-semibold text-gray-900 arabic-spacing">
-                                  {project?.client || "غير محدد"}
+                                  {project?.client || "اسم العميل"}
                                 </span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-gray-600 arabic-spacing">
-                                  الموقع:
+                                <span className="text-gray-700 arabic-spacing">
+                                  موقع المشروع:
                                 </span>
-                                <span className="font-semibold arabic-spacing">
-                                  {project?.location || "غير محدد"}
+                                <span className="font-semibold text-gray-900 arabic-spacing">
+                                  {project?.location || "موقع المشروع"}
                                 </span>
                               </div>
                             </div>

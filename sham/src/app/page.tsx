@@ -250,7 +250,7 @@ export default function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {visibleModules.map((module) => (
               <Link key={module.id} href={module.href}>
-                <Card className="group card-hover border-0 shadow-xl bg-white overflow-hidden">
+                <Card className="group card-hover border-0 shadow-xl bg-gray-300 overflow-hidden">
                   <CardContent className="p-0">
                     <div
                       className={`h-32 bg-gradient-to-br ${module.color} flex items-center justify-center relative overflow-hidden`}
