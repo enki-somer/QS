@@ -2,7 +2,7 @@
   base = "sham"
   command = "npm run build"
   functions = "netlify/functions"
-  publish = ".next"
+  publish = "out"
 
 [[redirects]]
   from = "/api/auth/login"
