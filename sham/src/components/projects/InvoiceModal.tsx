@@ -439,20 +439,18 @@ export default function InvoiceModal({
                                 value={
                                   item.unitPrice === 0 ? "" : item.unitPrice
                                 }
+                                onChange={(e) =>
+                                  updateLineItem(
+                                    item.id,
+                                    "unitPrice",
+                                    parseFloat(e.target.value)
+                                  )
+                                }
                                 onFocus={(e) => {
                                   if (e.target.value === "0") {
                                     e.target.value = "";
                                   }
                                 }}
-                                onChange={(e) =>
-                                  updateLineItem(
-                                    item.id,
-                                    "unitPrice",
-                                    Math.round(
-                                      (parseFloat(e.target.value) || 0) * 100
-                                    ) / 100
-                                  )
-                                }
                                 className="text-center"
                                 placeholder=""
                               />

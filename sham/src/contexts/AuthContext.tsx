@@ -7,6 +7,13 @@ import React, {
   useEffect,
   ReactNode,
 } from "react";
+import {
+  apiRequest,
+  setAuthToken,
+  setAuthUser,
+  removeAuthToken,
+  removeAuthUser,
+} from "@/lib/api";
 
 // Types from backend (keep in sync)
 export type UserRole = "admin" | "data_entry";
@@ -57,7 +64,21 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_BASE_URL = "http://localhost:8000/api";
+// Dynamic API base URL - works for both development and production
+const getApiBaseUrl = () => {
+  if (typeof window !== "undefined") {
+    // Client-side: use current domain for production, localhost for development
+    const { hostname, protocol } = window.location;
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "http://localhost:8000/api";
+    }
+    return `${protocol}//${hostname}/api`;
+  }
+  // Server-side: fallback to localhost for SSR
+  return "http://localhost:8000/api";
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
@@ -79,12 +100,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         }
 
         // Verify token with backend
-        const response = await fetch(`${API_BASE_URL}/auth/verify`, {
+        const response = await apiRequest("/auth/verify", {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
         });
 
         if (response.ok) {
@@ -114,11 +131,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   const fetchUserProfile = async (token: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      const response = await apiRequest("/auth/profile", {
+        method: "GET",
       });
 
       if (response.ok) {
@@ -138,11 +152,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     try {
       setIsLoading(true);
 
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await apiRequest("/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify(credentials),
       });
 
@@ -150,11 +161,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
       if (result.success && result.user && result.token) {
         // Store auth data
-        localStorage.setItem("financial-auth-token", result.token);
-        localStorage.setItem(
-          "financial-auth-user",
-          JSON.stringify(result.user)
-        );
+        setAuthToken(result.token);
+        setAuthUser(result.user);
 
         // Set state
         setUser(result.user);
@@ -176,23 +184,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   const logout = () => {
+    // Call backend logout endpoint
+    apiRequest("/auth/logout", {
+      method: "POST",
+    }).catch((error) => console.error("Logout error:", error));
+
     clearAuth();
-    // Optionally call backend logout endpoint
-    const token = localStorage.getItem("financial-auth-token");
-    if (token) {
-      fetch(`${API_BASE_URL}/auth/logout`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }).catch((error) => console.error("Logout error:", error));
-    }
   };
 
   const clearAuth = () => {
-    localStorage.removeItem("financial-auth-token");
-    localStorage.removeItem("financial-auth-user");
+    removeAuthToken();
+    removeAuthUser();
     setUser(null);
     setPermissions(null);
   };
