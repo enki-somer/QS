@@ -91,35 +91,45 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const token = localStorage.getItem("financial-auth-token");
-        const storedUser = localStorage.getItem("financial-auth-user");
+        const token = getAuthToken();
+        const storedUser = getAuthUser();
 
         if (!token || !storedUser) {
           setIsLoading(false);
           return;
         }
 
-        // Verify token with backend
-        const response = await apiRequest("/auth/verify", {
-          method: "POST",
-        });
+        // Set user from localStorage immediately
+        setUser(storedUser);
 
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success && result.user) {
-            setUser(result.user);
-            // Get user permissions
-            await fetchUserProfile(token);
+        // Verify token with backend in background
+        try {
+          const response = await apiRequest("/auth/verify", {
+            method: "POST",
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.user) {
+              // Update user data from server
+              setUser(result.user);
+              // Get user permissions
+              await fetchUserProfile(token);
+            } else {
+              // Invalid token, clear storage
+              clearAuth();
+            }
           } else {
-            // Invalid token, clear storage
+            // Token expired or invalid
             clearAuth();
           }
-        } else {
-          // Token expired or invalid
-          clearAuth();
+        } catch (verifyError) {
+          console.error("Token verification failed:", verifyError);
+          // Keep user logged in with stored data, server verification failed
+          // This allows offline functionality
         }
       } catch (error) {
-        console.error("Auth verification error:", error);
+        console.error("Auth load error:", error);
         clearAuth();
       } finally {
         setIsLoading(false);

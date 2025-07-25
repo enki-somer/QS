@@ -8,31 +8,37 @@
   from = "/api/auth/login"
   to = "/.netlify/functions/auth-login"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/auth/profile"
   to = "/.netlify/functions/auth-profile"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/auth/verify"
   to = "/.netlify/functions/auth-verify"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/auth/logout"
   to = "/.netlify/functions/auth-logout"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/api/auth/users"
   to = "/.netlify/functions/auth-users"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/health"
   to = "/.netlify/functions/health"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/*"
