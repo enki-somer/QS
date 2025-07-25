@@ -44,4 +44,5 @@
 
 [build.environment]
   NODE_VERSION = "18"
-  SECRETS_SCAN_ENABLED = "false" 
+  SECRETS_SCAN_OMIT_PATHS = "backend/*,README.md,*.md"
+  SECRETS_SCAN_OMIT_KEYS = "CORS_ORIGIN" 
