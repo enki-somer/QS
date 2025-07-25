@@ -42,4 +42,5 @@
   node_bundler = "esbuild"
 
 [build.environment]
-  NODE_VERSION = "18" 
+  NODE_VERSION = "18"
+  SECRETS_SCAN_OMIT_PATHS = ".env.example,.env.local,DEPLOYMENT.md,README.md,backend/README.md" 

@@ -34,7 +34,7 @@ JWT_SECRET=your-super-secure-jwt-secret-key-replace-this
 JWT_EXPIRES_IN=7d
 
 # CORS Configuration (replace with your actual Netlify URL)
-CORS_ORIGIN=https://your-app-name.netlify.app
+CORS_ORIGIN=https://YOUR_SITE_NAME.netlify.app
 ```
 
 ### 3. Connect to Netlify
@@ -71,10 +71,10 @@ CORS_ORIGIN=https://your-app-name.netlify.app
 ```
 JWT_SECRET = your-super-secure-jwt-secret-key
 JWT_EXPIRES_IN = 7d
-CORS_ORIGIN = https://your-app-name.netlify.app
+CORS_ORIGIN = https://YOUR_SITE_NAME.netlify.app
 ```
 
-⚠️ **Important**: Replace `your-app-name.netlify.app` with your actual Netlify URL.
+⚠️ **Important**: Replace `YOUR_SITE_NAME.netlify.app` with your actual Netlify URL.
 
 ### 5. Deploy
 
@@ -92,7 +92,7 @@ After deployment, test these endpoints:
 ### Health Check
 
 ```bash
-curl https://your-app-name.netlify.app/health
+curl https://YOUR_SITE_NAME.netlify.app/health
 ```
 
 Expected response:
@@ -110,7 +110,7 @@ Expected response:
 ### Login Test
 
 ```bash
-curl -X POST https://your-app-name.netlify.app/api/auth/login \
+curl -X POST https://YOUR_SITE_NAME.netlify.app/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "admin123"}'
 ```
