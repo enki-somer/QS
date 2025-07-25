@@ -9,6 +9,8 @@ import React, {
 } from "react";
 import {
   apiRequest,
+  getAuthToken,
+  getAuthUser,
   setAuthToken,
   setAuthUser,
   removeAuthToken,
@@ -83,60 +85,31 @@ const API_BASE_URL = getApiBaseUrl();
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [permissions, setPermissions] = useState<RolePermissions | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // TEMPORARY: Bypass authentication for testing
+  const [user, setUser] = useState<AuthUser | null>({
+    id: "1",
+    username: "admin",
+    role: "admin",
+    fullName: "مدير النظام",
+    email: "admin@example.com",
+  });
+  const [permissions, setPermissions] = useState<RolePermissions | null>({
+    canViewSafe: true,
+    canEditSafe: true,
+    canDeleteRecords: true,
+    canMakePayments: true,
+    canManageProjects: true,
+    canManageEmployees: true,
+    canViewReports: true,
+    canExportReports: true,
+    canManageExpenses: true,
+  });
+  const [isLoading, setIsLoading] = useState(false); // No loading needed
 
-  // Load user from localStorage and verify token on app start
+  // TEMPORARY: Skip authentication loading for testing
   useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const token = getAuthToken();
-        const storedUser = getAuthUser();
-
-        if (!token || !storedUser) {
-          setIsLoading(false);
-          return;
-        }
-
-        // Set user from localStorage immediately
-        setUser(storedUser);
-
-        // Verify token with backend in background
-        try {
-          const response = await apiRequest("/auth/verify", {
-            method: "POST",
-          });
-
-          if (response.ok) {
-            const result = await response.json();
-            if (result.success && result.user) {
-              // Update user data from server
-              setUser(result.user);
-              // Get user permissions
-              await fetchUserProfile(token);
-            } else {
-              // Invalid token, clear storage
-              clearAuth();
-            }
-          } else {
-            // Token expired or invalid
-            clearAuth();
-          }
-        } catch (verifyError) {
-          console.error("Token verification failed:", verifyError);
-          // Keep user logged in with stored data, server verification failed
-          // This allows offline functionality
-        }
-      } catch (error) {
-        console.error("Auth load error:", error);
-        clearAuth();
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadUser();
+    // Authentication is bypassed - user is already set above
+    console.log("🚧 Authentication bypassed for testing");
   }, []);
 
   const fetchUserProfile = async (token: string) => {
@@ -159,47 +132,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   const login = async (
     credentials: LoginCredentials
   ): Promise<LoginResponse> => {
-    try {
-      setIsLoading(true);
+    // TEMPORARY: Mock successful login for testing
+    console.log("🚧 Mock login for testing:", credentials.username);
 
-      const response = await apiRequest("/auth/login", {
-        method: "POST",
-        body: JSON.stringify(credentials),
-      });
-
-      const result: LoginResponse = await response.json();
-
-      if (result.success && result.user && result.token) {
-        // Store auth data
-        setAuthToken(result.token);
-        setAuthUser(result.user);
-
-        // Set state
-        setUser(result.user);
-
-        // Fetch permissions
-        await fetchUserProfile(result.token);
-      }
-
-      return result;
-    } catch (error) {
-      console.error("Login error:", error);
-      return {
-        success: false,
-        message: "حدث خطأ في الاتصال بالخادم",
-      };
-    } finally {
-      setIsLoading(false);
-    }
+    return {
+      success: true,
+      user: {
+        id: "1",
+        username: credentials.username,
+        role: "admin",
+        fullName: "مدير النظام",
+        email: "admin@example.com",
+      },
+      token: "mock-token-for-testing",
+      message: "تم تسجيل الدخول بنجاح (وضع التجربة)",
+    };
   };
 
   const logout = () => {
-    // Call backend logout endpoint
-    apiRequest("/auth/logout", {
-      method: "POST",
-    }).catch((error) => console.error("Logout error:", error));
-
-    clearAuth();
+    // TEMPORARY: Mock logout for testing
+    console.log("🚧 Mock logout for testing");
+    // Don't actually clear auth in testing mode - just reload page
+    window.location.href = "/login";
   };
 
   const clearAuth = () => {
