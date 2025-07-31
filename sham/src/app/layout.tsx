@@ -3,6 +3,7 @@ import { Cairo } from "next/font/google";
 import "./globals.css";
 import MainLayout from "@/components/layout/MainLayout";
 import { SafeProvider } from "@/contexts/SafeContext";
+import { ContractorProvider } from "@/contexts/ContractorContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 
 const cairo = Cairo({
@@ -31,7 +32,9 @@ export default function RootLayout({
       >
         <AuthProvider>
           <SafeProvider>
-            <MainLayout>{children}</MainLayout>
+            <ContractorProvider>
+              <MainLayout>{children}</MainLayout>
+            </ContractorProvider>
           </SafeProvider>
         </AuthProvider>
       </body>

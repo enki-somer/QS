@@ -21,7 +21,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { login, isAuthenticated, isLoading } = useAuth();
   const { addToast } = useToast();
-
+  // TODO: Add backend login
   const [credentials, setCredentials] = useState<LoginCredentials>({
     username: "",
     password: "",
@@ -155,6 +155,7 @@ export default function LoginPage() {
 
         <CardContent>
           {/* TEMPORARY: Testing Mode Banner */}
+          {/* TODO: Remove this banner when backend login is implemented */}
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-center gap-2 mb-3">
               <AlertCircle className="h-5 w-5 text-yellow-600" />

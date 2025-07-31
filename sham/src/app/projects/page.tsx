@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Plus,
@@ -35,10 +36,10 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { formatCurrency, formatDate, generateId } from "@/lib/utils";
-import { Project, Invoice } from "@/types";
+import { Project, Invoice, EnhancedProjectFormData } from "@/types";
 import PageNavigation from "@/components/layout/PageNavigation";
 import { useToast } from "@/components/ui/Toast";
-import ProjectModal from "@/components/projects/ProjectModal";
+import EnhancedProjectModal from "@/components/projects/EnhancedProjectModal";
 import InvoiceModal from "@/components/projects/InvoiceModal";
 import ViewProjectModal from "@/components/projects/ViewProjectModal";
 import ProjectsTable from "@/components/projects/ProjectsTable";
@@ -79,27 +80,75 @@ const generateProjectCode = (existingProjects: Project[]): string => {
 // Note: Simplified to single unified invoice type (no more templates)
 
 export default function ProjectsPage() {
+  const router = useRouter();
   const { addToast } = useToast();
   const { safeState, deductForInvoice, hasBalance } = useSafe();
   const { hasPermission, isDataEntry, user } = useAuth();
 
-  // Start with empty state, load from localStorage
+  // Start with empty state, load from API
   const [projects, setProjects] = useState<Project[]>([]);
   const [invoices, setInvoices] = useState<EnhancedInvoice[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
 
-  // Function to reload data from localStorage
-  const reloadDataFromStorage = () => {
-    const storedProjects = localStorage.getItem("financial-projects");
-    const storedInvoices = localStorage.getItem("financial-invoices");
+  // Function to load projects from API
+  const loadProjectsFromAPI = async () => {
+    try {
+      setProjectsLoading(true);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects`
+      );
 
-    if (storedProjects) {
-      try {
-        setProjects(JSON.parse(storedProjects));
-      } catch (error) {
-        console.warn("Failed to load projects from localStorage:", error);
+      if (!response.ok) {
+        throw new Error("Failed to fetch projects");
       }
-    }
 
+      const apiProjects = await response.json();
+
+      // Convert API projects to frontend format
+      const formattedProjects = apiProjects.map((project: any) => ({
+        id: project.id,
+        name: project.name,
+        code: project.code,
+        location: project.location,
+        area: project.area,
+        budgetEstimate: project.budget_estimate,
+        client: project.client,
+        startDate: project.start_date?.split("T")[0] || "",
+        endDate: project.end_date?.split("T")[0] || "",
+        status: project.status,
+        createdAt: project.created_at,
+        updatedAt: project.updated_at,
+        categoryAssignments: project.categoryAssignments || [],
+      }));
+
+      setProjects(formattedProjects);
+    } catch (error) {
+      console.error("Error loading projects:", error);
+      addToast({
+        type: "error",
+        message: "فشل في تحميل المشاريع",
+        title: "",
+      });
+      // Fallback to localStorage on API error
+      const storedProjects = localStorage.getItem("financial-projects");
+      if (storedProjects) {
+        try {
+          setProjects(JSON.parse(storedProjects));
+        } catch (error) {
+          console.warn("Failed to load projects from localStorage:", error);
+        }
+      }
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
+  // Function to reload data (keeping for backward compatibility)
+  const reloadDataFromStorage = () => {
+    loadProjectsFromAPI();
+
+    // Still load invoices from localStorage for now
+    const storedInvoices = localStorage.getItem("financial-invoices");
     if (storedInvoices) {
       try {
         setInvoices(JSON.parse(storedInvoices));
@@ -152,15 +201,17 @@ export default function ProjectsPage() {
     context?: { projectId?: string };
   }>({ type: null });
 
-  // Form states
-  const [projectForm, setProjectForm] = useState({
+  // Enhanced form states
+  const [projectForm, setProjectForm] = useState<EnhancedProjectFormData>({
     name: "",
     location: "",
+    area: "",
     budgetEstimate: "",
     client: "",
     startDate: "",
     endDate: "",
     status: "planning" as "planning" | "active" | "completed" | "cancelled",
+    categoryAssignments: [],
   });
 
   const [invoiceForm, setInvoiceForm] = useState<InvoiceFormData>({
@@ -812,11 +863,13 @@ export default function ProjectsPage() {
     setProjectForm({
       name: "",
       location: "",
+      area: "",
       budgetEstimate: "",
       client: "",
       startDate: "",
       endDate: "",
       status: "planning",
+      categoryAssignments: [],
     });
     setInvoiceForm({
       invoiceNumber: "",
@@ -842,6 +895,7 @@ export default function ProjectsPage() {
       name: projectForm.name,
       code: autoCode, // AUTO GENERATED!
       location: projectForm.location,
+      area: parseFloat(projectForm.area) || undefined,
       budgetEstimate: parseFloat(projectForm.budgetEstimate) || 0,
       client: projectForm.client,
       startDate: projectForm.startDate,
@@ -868,6 +922,7 @@ export default function ProjectsPage() {
       ...currentModal.data,
       name: projectForm.name,
       location: projectForm.location,
+      area: parseFloat(projectForm.area) || undefined,
       budgetEstimate: parseFloat(projectForm.budgetEstimate) || 0,
       client: projectForm.client,
       startDate: projectForm.startDate,
@@ -1030,21 +1085,22 @@ export default function ProjectsPage() {
     }
   };
 
-  // Modal openers
+  // Navigation functions
   const openCreateProjectModal = () => {
-    resetForms();
-    setCurrentModal({ type: "project", mode: "create" });
+    router.push("/projects/create");
   };
 
   const openEditProjectModal = (project: Project) => {
     setProjectForm({
       name: project.name,
       location: project.location,
+      area: project.area?.toString() || "",
       budgetEstimate: project.budgetEstimate.toString(),
       client: project.client,
       startDate: project.startDate,
       endDate: project.endDate,
       status: project.status,
+      categoryAssignments: [], // TODO: Load existing category assignments from database
     });
     setCurrentModal({ type: "project", mode: "edit", data: project });
   };
@@ -1146,7 +1202,15 @@ export default function ProjectsPage() {
             <div className="text-center">
               <div className="text-lg font-bold text-purple-600 arabic-nums">
                 {formatCurrency(
-                  projects.reduce((sum, p) => sum + p.budgetEstimate, 0)
+                  projects.reduce(
+                    (sum, p) =>
+                      sum +
+                      (typeof p.budgetEstimate === "number" &&
+                      !isNaN(p.budgetEstimate)
+                        ? p.budgetEstimate
+                        : 0),
+                    0
+                  )
                 )}
               </div>
               <div className="text-xs text-gray-500 arabic-spacing">
@@ -1263,8 +1327,25 @@ export default function ProjectsPage() {
         </Card>
       )}
 
+      {/* Loading State */}
+      {projectsLoading && (
+        <Card className="shadow-lg border-0">
+          <CardContent className="p-16 text-center">
+            <div className="bg-blue-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+              <Building2 className="h-12 w-12 text-blue-500 no-flip animate-bounce" />
+            </div>
+            <h3 className="text-2xl font-medium text-gray-900 mb-3 arabic-spacing">
+              جاري تحميل المشاريع...
+            </h3>
+            <p className="text-gray-500 arabic-spacing">
+              يرجى الانتظار بينما نحضر البيانات من قاعدة البيانات
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Enhanced Empty State */}
-      {filteredProjects.length === 0 && (
+      {!projectsLoading && filteredProjects.length === 0 && (
         <Card className="shadow-lg border-0">
           <CardContent className="p-16 text-center">
             <div className="bg-gray-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -1306,7 +1387,7 @@ export default function ProjectsPage() {
       )}
 
       {/* Enhanced Modals */}
-      <ProjectModal
+      <EnhancedProjectModal
         isOpen={currentModal.type === "project"}
         mode={currentModal.mode!}
         project={currentModal.data}

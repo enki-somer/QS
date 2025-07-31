@@ -128,11 +128,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       console.error("Profile fetch error:", error);
     }
   };
-
+  // TODO: Add backend login
   const login = async (
     credentials: LoginCredentials
   ): Promise<LoginResponse> => {
     // TEMPORARY: Mock successful login for testing
+
     console.log("🚧 Mock login for testing:", credentials.username);
 
     return {
@@ -175,7 +176,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     return user?.role === "data_entry";
   };
 
-  const isAuthenticated = !!user;
+  const isAuthenticated = !!user; // TODO: Add backend check
 
   const contextValue: AuthContextType = {
     user,

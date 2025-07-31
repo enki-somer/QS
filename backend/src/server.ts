@@ -4,6 +4,10 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/auth';
+import safeRoutes from './routes/safe';
+import contractorRoutes from './routes/contractors';
+import projectRoutes from './routes/projects';
+import { testConnection, initializeDatabase } from '../database/config';
 
 // Load environment variables
 dotenv.config();
@@ -51,6 +55,9 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/safe', safeRoutes);
+app.use('/api/contractors', contractorRoutes);
+app.use('/api/projects', projectRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -69,6 +76,21 @@ app.use('*', (req, res) => {
   });
 });
 
+// Initialize database and start server
+const startServer = async () => {
+  try {
+    // Test database connection
+    console.log('🔌 Testing database connection...');
+    const dbConnected = await testConnection();
+    
+    if (!dbConnected) {
+      console.error('❌ Database connection failed. Please check your configuration.');
+      process.exit(1);
+    }
+    
+    // Initialize database
+    await initializeDatabase();
+
 // Start server
 app.listen(PORT, () => {
   console.log('🚀 Financial Management System Backend');
@@ -76,7 +98,16 @@ app.listen(PORT, () => {
   console.log(`🌍 CORS enabled for: ${CORS_ORIGIN}`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
   console.log(`🔐 Auth API: http://localhost:${PORT}/api/auth`);
+      console.log(`💰 Safe API: http://localhost:${PORT}/api/safe`);
+      console.log(`👥 Contractors API: http://localhost:${PORT}/api/contractors`);
   console.log('');
 });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 export default app; 

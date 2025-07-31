@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 // Currency formatting for Iraqi context with Arabic numerals
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('ar-IQ', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'IQD',
     minimumFractionDigits: 0,

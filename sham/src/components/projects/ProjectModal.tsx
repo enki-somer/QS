@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   Save,
@@ -7,25 +7,37 @@ import {
   User,
   MapPin,
   DollarSign,
+  Ruler,
+  Plus,
+  Trash2,
+  Users,
+  Package,
+  Settings,
+  Briefcase,
+  ChevronDown,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Project } from "@/types";
+import { Select } from "@/components/ui/Select";
+import {
+  Project,
+  EnhancedProjectFormData,
+  ProjectCategoryAssignmentFormData,
+  Contractor,
+} from "@/types";
+import {
+  PROJECT_CATEGORIES,
+  getSubcategoriesByCategory,
+} from "@/constants/projectCategories";
+import { useContractors } from "@/contexts/ContractorContext";
 
 interface ProjectModalProps {
   isOpen: boolean;
   mode: "create" | "edit";
   project?: Project;
-  projectForm: {
-    name: string;
-    location: string;
-    budgetEstimate: string;
-    client: string;
-    startDate: string;
-    endDate: string;
-    status: "planning" | "active" | "completed" | "cancelled";
-  };
-  setProjectForm: (form: any) => void;
+  projectForm: EnhancedProjectFormData;
+  setProjectForm: (form: EnhancedProjectFormData) => void;
   onClose: () => void;
   onSubmit: () => void;
   generateProjectCode: () => string;
@@ -37,23 +49,35 @@ const statusOptions = [
     value: "planning",
     label: "في مرحلة التخطيط",
     color: "text-yellow-700 bg-yellow-50 border-yellow-200",
+    icon: Settings,
   },
   {
     value: "active",
     label: "نشط ومستمر",
     color: "text-green-700 bg-green-50 border-green-200",
+    icon: Package,
   },
   {
     value: "completed",
     label: "مكتمل بنجاح",
     color: "text-blue-700 bg-blue-50 border-blue-200",
+    icon: Building2,
   },
   {
     value: "cancelled",
     label: "ملغي أو متوقف",
     color: "text-red-700 bg-red-50 border-red-200",
+    icon: X,
   },
 ];
+
+// Category icons mapping
+const categoryIcons = {
+  implementation_construction: Package,
+  materials_supply: Briefcase,
+  specialized_works: Settings,
+  administrative_operational: Users,
+};
 
 export default function ProjectModal({
   isOpen,
@@ -171,6 +195,36 @@ export default function ProjectModal({
                   className="h-12 text-base arabic-spacing"
                   placeholder="مثال: شارع الرشيد، بغداد"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="flex items-center space-x-2 space-x-reverse text-base font-semibold text-gray-800">
+                  <Ruler className="h-5 w-5 text-[#182C61] no-flip" />
+                  <span className="arabic-spacing">
+                    مساحة المشروع (متر مربع)
+                  </span>
+                </label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={projectForm.area}
+                  onChange={(e) =>
+                    setProjectForm({ ...projectForm, area: e.target.value })
+                  }
+                  className="h-12 text-base"
+                  placeholder="مثال: 500.00"
+                />
+                {projectForm.area && (
+                  <p className="text-[#182C61] text-sm font-medium">
+                    📐{" "}
+                    {new Intl.NumberFormat("ar-IQ", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    }).format(Number(projectForm.area))}{" "}
+                    متر مربع
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

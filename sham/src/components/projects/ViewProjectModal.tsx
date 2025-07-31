@@ -12,6 +12,7 @@ import {
   DollarSign,
   Building2,
   Clock,
+  Ruler,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -145,6 +146,25 @@ export default function ViewProjectModal({
                       </p>
                     </div>
 
+                    {project.area && (
+                      <div className="bg-white rounded-xl p-4 border border-gray-200">
+                        <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                          <Ruler className="h-5 w-5 text-[#182C61] no-flip" />
+                          <label className="text-sm font-medium text-gray-600 arabic-spacing">
+                            المساحة
+                          </label>
+                        </div>
+                        <p className="text-gray-900 font-medium">
+                          📐{" "}
+                          {new Intl.NumberFormat("ar-IQ", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }).format(project.area)}{" "}
+                          متر مربع
+                        </p>
+                      </div>
+                    )}
+
                     <div className="bg-white rounded-xl p-4 border border-gray-200">
                       <div className="flex items-center space-x-2 space-x-reverse mb-2">
                         <User className="h-5 w-5 text-[#182C61] no-flip" />
@@ -195,6 +215,210 @@ export default function ViewProjectModal({
                   </div>
                 </div>
               </div>
+
+              {/* Project Category Assignments */}
+              {project.categoryAssignments &&
+                project.categoryAssignments.length > 0 && (
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-100 rounded-2xl p-6 border border-green-200">
+                    <h4 className="text-xl font-bold text-gray-800 arabic-spacing mb-6 flex items-center">
+                      <Building2 className="h-6 w-6 ml-2 text-green-600 no-flip" />
+                      فئات المشروع والمقاولون
+                    </h4>
+
+                    <div className="space-y-4">
+                      {/* Group assignments by subcategory */}
+                      {(() => {
+                        const groupedAssignments: { [key: string]: any[] } = {};
+                        project.categoryAssignments.forEach(
+                          (assignment: any) => {
+                            const key = `${assignment.main_category}-${assignment.subcategory}`;
+                            if (!groupedAssignments[key]) {
+                              groupedAssignments[key] = [];
+                            }
+                            groupedAssignments[key].push(assignment);
+                          }
+                        );
+
+                        return Object.entries(groupedAssignments).map(
+                          ([key, assignments], index) => {
+                            const firstAssignment = assignments[0];
+                            const totalAmount = assignments.reduce(
+                              (sum, a) => sum + (a.estimated_amount || 0),
+                              0
+                            );
+
+                            // Color scheme for each category
+                            const colorSchemes = [
+                              {
+                                bg: "bg-blue-50",
+                                border: "border-blue-200",
+                                text: "text-blue-800",
+                                dot: "bg-blue-500",
+                              },
+                              {
+                                bg: "bg-purple-50",
+                                border: "border-purple-200",
+                                text: "text-purple-800",
+                                dot: "bg-purple-500",
+                              },
+                              {
+                                bg: "bg-orange-50",
+                                border: "border-orange-200",
+                                text: "text-orange-800",
+                                dot: "bg-orange-500",
+                              },
+                              {
+                                bg: "bg-teal-50",
+                                border: "border-teal-200",
+                                text: "text-teal-800",
+                                dot: "bg-teal-500",
+                              },
+                              {
+                                bg: "bg-pink-50",
+                                border: "border-pink-200",
+                                text: "text-pink-800",
+                                dot: "bg-pink-500",
+                              },
+                              {
+                                bg: "bg-indigo-50",
+                                border: "border-indigo-200",
+                                text: "text-indigo-800",
+                                dot: "bg-indigo-500",
+                              },
+                            ];
+                            const colorScheme =
+                              colorSchemes[index % colorSchemes.length];
+
+                            return (
+                              <div
+                                key={key}
+                                className={`${colorScheme.bg} ${colorScheme.border} border rounded-xl p-4 relative`}
+                              >
+                                {/* Decorative accent */}
+                                <div
+                                  className={`absolute top-0 left-0 w-1 h-full ${colorScheme.dot} rounded-r`}
+                                ></div>
+
+                                {/* Category Header */}
+                                <div className="flex justify-between items-start mb-3 pr-3">
+                                  <div className="flex-1">
+                                    <h5
+                                      className={`font-bold text-lg ${colorScheme.text} arabic-spacing`}
+                                    >
+                                      {firstAssignment.subcategory}
+                                    </h5>
+                                    <p
+                                      className={`text-sm ${colorScheme.text} opacity-75 arabic-spacing mt-1`}
+                                    >
+                                      📋 {firstAssignment.main_category}
+                                    </p>
+                                  </div>
+                                  <div className="text-left">
+                                    <p
+                                      className={`text-lg font-bold ${colorScheme.text}`}
+                                    >
+                                      {new Intl.NumberFormat("ar-IQ").format(
+                                        totalAmount
+                                      )}{" "}
+                                      د.ع
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      إجمالي تقديري
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Contractors List */}
+                                <div className="space-y-2">
+                                  {assignments.map(
+                                    (assignment, contractorIndex) => (
+                                      <div
+                                        key={contractorIndex}
+                                        className="bg-white/80 rounded-lg p-3 flex items-center justify-between"
+                                      >
+                                        <div className="flex items-center space-x-3 space-x-reverse">
+                                          <div
+                                            className={`w-3 h-3 ${colorScheme.dot} rounded-full`}
+                                          ></div>
+                                          <div>
+                                            <span className="font-semibold text-gray-900 arabic-spacing">
+                                              {assignment.contractor_name}
+                                            </span>
+                                            {assignment.notes && (
+                                              <p className="text-xs text-gray-600 arabic-spacing mt-1">
+                                                📝 {assignment.notes}
+                                              </p>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="text-left">
+                                          <span className="font-bold text-green-700 bg-green-100 px-2 py-1 rounded text-sm">
+                                            {new Intl.NumberFormat(
+                                              "ar-IQ"
+                                            ).format(
+                                              assignment.estimated_amount
+                                            )}{" "}
+                                            د.ع
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )
+                                  )}
+                                </div>
+
+                                {/* Summary for this subcategory */}
+                                <div className="mt-3 pt-3 border-t border-white/50">
+                                  <div className="flex justify-between items-center text-sm">
+                                    <span
+                                      className={`${colorScheme.text} arabic-spacing`}
+                                    >
+                                      المقاولون: {assignments.length}
+                                    </span>
+                                    <span
+                                      className={`font-bold ${colorScheme.text}`}
+                                    >
+                                      المجموع:{" "}
+                                      {new Intl.NumberFormat("ar-IQ").format(
+                                        totalAmount
+                                      )}{" "}
+                                      د.ع
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
+                        );
+                      })()}
+
+                      {/* Overall Summary */}
+                      <div className="bg-gradient-to-r from-green-100 to-emerald-100 rounded-xl p-4 border-2 border-green-300">
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center space-x-2 space-x-reverse">
+                            <DollarSign className="h-5 w-5 text-green-700 no-flip" />
+                            <span className="font-bold text-green-800 arabic-spacing">
+                              إجمالي تقديرات المقاولين
+                            </span>
+                          </div>
+                          <span className="text-2xl font-bold text-green-800">
+                            {new Intl.NumberFormat("ar-IQ").format(
+                              project.categoryAssignments.reduce(
+                                (sum: number, assignment: any) =>
+                                  sum + (assignment.estimated_amount || 0),
+                                0
+                              )
+                            )}{" "}
+                            د.ع
+                          </span>
+                        </div>
+                        <p className="text-sm text-green-700 arabic-spacing mt-2">
+                          هذه تقديرات أولية للمقاولين - المبالغ الفعلية ستُحدث
+                          عند إنشاء الفواتير
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
               {/* Project Progress */}
               <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl p-6 border border-blue-200">

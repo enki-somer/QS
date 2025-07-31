@@ -83,6 +83,15 @@ export default function SafePage() {
     source: "",
   });
 
+  const fundingSources = [
+    { value: "مقاولات", label: "مقاولات" },
+    { value: "بدل ايجار", label: "بدل ايجار" },
+    { value: "مصنع", label: "مصنع" },
+    { value: "بيع وشراء عقار", label: "بيع وشراء عقار" },
+    { value: "ديون", label: "ديون" },
+    { value: "اخرى", label: "اخرى" },
+  ];
+
   const transactions = getTransactionHistory();
 
   const filteredTransactions = transactions.filter((transaction) => {
@@ -110,17 +119,26 @@ export default function SafePage() {
       return;
     }
 
-    if (!fundingForm.description.trim()) {
+    if (!fundingForm.description) {
+      addToast({
+        type: "error",
+        title: "مصدر التمويل مطلوب",
+        message: "يرجى اختيار مصدر التمويل",
+      });
+      return;
+    }
+
+    if (fundingForm.description === "اخرى" && !fundingForm.source.trim()) {
       addToast({
         type: "error",
         title: "الوصف مطلوب",
-        message: "يرجى إدخال وصف لعملية التمويل",
+        message: "يرجى إدخال وصف لمصدر التمويل عند اختيار 'اخرى'",
       });
       return;
     }
 
     const fullDescription = fundingForm.source
-      ? `${fundingForm.description} - المصدر: ${fundingForm.source}`
+      ? `${fundingForm.description} - ملاحظات: ${fundingForm.source}`
       : fundingForm.description;
 
     addFunding(amount, fullDescription);
@@ -528,7 +546,7 @@ export default function SafePage() {
                   {fundingForm.amount && (
                     <p className="text-green-600 text-sm font-medium">
                       💰{" "}
-                      {new Intl.NumberFormat("ar-IQ").format(
+                      {new Intl.NumberFormat("en-US").format(
                         Number(fundingForm.amount)
                       )}{" "}
                       دينار عراقي
@@ -547,9 +565,9 @@ export default function SafePage() {
 
                 <div className="space-y-2">
                   <label className="text-base font-semibold text-gray-800 arabic-spacing">
-                    وصف التمويل *
+                    مصدر التمويل *
                   </label>
-                  <Input
+                  <Select
                     value={fundingForm.description}
                     onChange={(e) =>
                       setFundingForm({
@@ -558,13 +576,19 @@ export default function SafePage() {
                       })
                     }
                     className="h-12 text-base arabic-spacing"
-                    placeholder="مثال: رأس مال المشروع الابتدائي"
-                  />
+                  >
+                    <option value="">اختر مصدر التمويل</option>
+                    {fundingSources.map((source) => (
+                      <option key={source.value} value={source.value}>
+                        {source.label}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-base font-semibold text-gray-800 arabic-spacing">
-                    مصدر التمويل (اختياري)
+                    ملاحظات إضافية (اختياري)
                   </label>
                   <Input
                     value={fundingForm.source}
@@ -572,7 +596,7 @@ export default function SafePage() {
                       setFundingForm({ ...fundingForm, source: e.target.value })
                     }
                     className="h-12 text-base arabic-spacing"
-                    placeholder="مثال: بنك الرشيد، استثمار شخصي، قرض تجاري"
+                    placeholder="مثال: تفاصيل إضافية حول مصدر التمويل"
                   />
                 </div>
               </div>
@@ -611,7 +635,10 @@ export default function SafePage() {
                   <Button
                     onClick={handleAddFunding}
                     disabled={
-                      !fundingForm.amount || !fundingForm.description.trim()
+                      !fundingForm.amount ||
+                      !fundingForm.description ||
+                      (fundingForm.description === "اخرى" &&
+                        !fundingForm.source.trim())
                     }
                     className="px-6 py-3 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50"
                   >

@@ -12,6 +12,7 @@ import {
   Home,
   Settings,
   HelpCircle,
+  UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavigationItem } from "@/types";
@@ -40,6 +41,13 @@ const navigationItems: NavigationItem[] = [
     description: "سجل التدفق النقدي والمعاملات",
   },
   {
+    id: "contractors",
+    label: "المقاولين",
+    href: "/contractors",
+    icon: "UserCheck",
+    description: "إدارة المقاولين والموردين",
+  },
+  {
     id: "resources",
     label: "الموارد البشرية",
     href: "/resources",
@@ -66,6 +74,7 @@ const iconMap = {
   Home,
   Building2,
   Wallet,
+  UserCheck,
   Users,
   Receipt,
   BarChart3,
@@ -91,6 +100,9 @@ export default function Navigation({ collapsed = false }: NavigationProps) {
         case "safe":
           // Completely hide for data entry users
           return hasPermission("canViewSafe");
+        case "contractors":
+          // Available to all authenticated users
+          return true;
         case "resources":
           // Completely hide for data entry users
           return hasPermission("canManageEmployees");

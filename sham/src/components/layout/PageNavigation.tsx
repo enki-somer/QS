@@ -10,6 +10,7 @@ import {
   Receipt,
   BarChart3,
   Home,
+  UserCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +33,12 @@ const navigationItems = [
     label: "الخزينة",
     href: "/safe",
     icon: Wallet,
+  },
+  {
+    id: "contractors",
+    label: "المقاولين",
+    href: "/contractors",
+    icon: UserCheck,
   },
   {
     id: "resources",
@@ -71,6 +78,9 @@ export default function PageNavigation({ currentPage }: PageNavigationProps) {
         case "safe":
           // Completely hide for data entry users
           return hasPermission("canViewSafe");
+        case "contractors":
+          // Available to all authenticated users
+          return true;
         case "resources":
           // Completely hide for data entry users
           return hasPermission("canManageEmployees");

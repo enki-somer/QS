@@ -98,4 +98,7 @@ temp/
 *.sln
 *.sw? 
 
-/backend
+/backend/.env.example
+/backend/README.md
+/backend/README.md
+/backend/src/server.js

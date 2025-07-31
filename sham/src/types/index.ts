@@ -1,10 +1,12 @@
 // Core entity types for the financial management system
 
 export interface Project {
+  [x: string]: any;
   id: string;
   name: string;
   code: string; // Immutable after creation
   location: string;
+  area?: number; // Project area in square meters (m²)
   budgetEstimate: number;
   client: string;
   startDate: string; // ISO date string
@@ -24,6 +26,17 @@ export interface Invoice {
   attachments: string[]; // Array of file URLs/paths
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
+}
+
+export interface Contractor {
+  id: string;
+  full_name: string;
+  phone_number: string;
+  category: 'main_contractor' | 'sub_contractor' | 'building_materials_supplier' | 'equipment_supplier' | 'transport_services' | 'engineering_consultant' | 'specialized_technical_services' | 'other';
+  notes?: string;
+  is_active: boolean;
+  created_at: string; // Backend uses snake_case
+  updated_at: string; // Backend uses snake_case
 }
 
 export interface Employee {
@@ -135,6 +148,53 @@ export interface TransactionFormData {
   paymentMethod: 'cash' | 'transfer' | 'cheque' | 'card' | 'other';
   date: string;
   notes: string;
+}
+
+export interface ContractorFormData {
+  full_name: string;
+  phone_number: string;
+  category: string;
+  notes: string;
+}
+
+// Project category assignment types (frontend)
+export interface ProjectCategoryAssignment {
+  id: string;
+  projectId: string;
+  mainCategory: string;
+  subcategory: string;
+  contractorId?: string;
+  contractorName: string;
+  estimatedAmount: number;
+  actualAmount?: number;
+  notes?: string;
+  status: 'planned' | 'active' | 'completed' | 'cancelled';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectCategoryAssignmentFormData {
+  mainCategory: string;
+  subcategory: string;
+  contractors: Array<{
+    contractorId?: string;
+    contractorName: string;
+    estimatedAmount: string; // String for form input
+    notes?: string;
+  }>;
+}
+
+// Enhanced project form data to include category assignments
+export interface EnhancedProjectFormData {
+  name: string;
+  location: string;
+  area: string;
+  budgetEstimate: string;
+  client: string;
+  startDate: string;
+  endDate: string;
+  status: 'planning' | 'active' | 'completed' | 'cancelled';
+  categoryAssignments: ProjectCategoryAssignmentFormData[];
 }
 
 export interface EmployeeFormData {
