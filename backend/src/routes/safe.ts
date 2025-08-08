@@ -10,21 +10,29 @@ router.use(requireSafeAccess);
 
 /**
  * GET /api/safe/state
- * Get current safe state (balance, totals)
+ * Get current safe state (balance, totals) with recent transactions
  */
 router.get('/state', async (req: Request, res: Response) => {
   try {
-    const result = await safeService.getSafeState();
+    const [stateResult, transactionsResult] = await Promise.all([
+      safeService.getSafeState(),
+      safeService.getTransactionHistory({}, 1, 100) // Get recent 100 transactions
+    ]);
     
-    if (result.success) {
+    if (stateResult.success) {
+      const responseData = {
+        ...stateResult.data,
+        transactions: transactionsResult.success ? transactionsResult.data?.data || [] : []
+      };
+      
       res.json({
         success: true,
-        data: result.data
+        ...responseData
       });
     } else {
       res.status(500).json({
         success: false,
-        message: result.error || 'Failed to get safe state'
+        message: stateResult.error || 'Failed to get safe state'
       });
     }
   } catch (error) {

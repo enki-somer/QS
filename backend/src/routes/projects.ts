@@ -159,8 +159,11 @@ router.put('/:id', async (req, res) => {
       startDate,
       endDate,
       status,
-      notes
+      notes,
+      categoryAssignments
     } = req.body;
+
+    console.log('PUT /api/projects/:id - Request body:', req.body);
 
     const updateData: Partial<CreateProjectData> = {};
     
@@ -174,6 +177,49 @@ router.put('/:id', async (req, res) => {
     if (status !== undefined) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes;
 
+    // Handle category assignments if provided
+    if (categoryAssignments !== undefined) {
+      const preparedCategoryAssignments = [];
+      if (categoryAssignments && Array.isArray(categoryAssignments)) {
+        for (const assignment of categoryAssignments) {
+          // Handle both nested format (with contractors array) and flat format
+          if (assignment.contractors && Array.isArray(assignment.contractors)) {
+            // Nested format - each assignment contains multiple contractors
+            for (const contractor of assignment.contractors) {
+              preparedCategoryAssignments.push({
+                main_category: assignment.mainCategory,
+                subcategory: assignment.subcategory,
+                contractor_id: contractor.contractorId || null,
+                contractor_name: contractor.contractorName,
+                estimated_amount: parseFloat(contractor.estimatedAmount || '0'),
+                notes: contractor.notes || null
+              });
+            }
+          } else if (assignment.main_category && assignment.contractor_id) {
+            // Flat format - each assignment is a single contractor assignment
+            // Validate contractor_id is not empty
+            const contractorId = assignment.contractor_id?.trim();
+            if (!contractorId) {
+              return res.status(400).json({
+                error: 'Invalid assignment data',
+                details: `Contractor ID is required for assignment: ${assignment.main_category} - ${assignment.subcategory}`
+              });
+            }
+
+            preparedCategoryAssignments.push({
+              main_category: assignment.main_category,
+              subcategory: assignment.subcategory,
+              contractor_id: contractorId,
+              contractor_name: assignment.contractor_name,
+              estimated_amount: parseFloat(assignment.estimated_amount?.toString() || '0'),
+              notes: assignment.notes || null
+            });
+          }
+        }
+      }
+      updateData.categoryAssignments = preparedCategoryAssignments;
+    }
+
     const project = await projectService.updateProject(id, updateData);
     
     if (!project) {
@@ -185,8 +231,18 @@ router.put('/:id', async (req, res) => {
       project
     });
 
-  } catch (error) {
-    console.error('Error updating project:', error);
+  } catch (error: any) {
+    // Check if this is a business validation error (not a technical error)
+    if (error?.isValidationError) {
+      console.log('ℹ️ Business validation failed:', error.message);
+      return res.status(400).json({ 
+        error: 'Validation failed',
+        details: error.message
+      });
+    }
+    
+    // This is a technical error, log it properly
+    console.error('❌ Technical error updating project:', error);
     res.status(500).json({ 
       error: 'Failed to update project',
       details: error instanceof Error ? error.message : 'Unknown error'

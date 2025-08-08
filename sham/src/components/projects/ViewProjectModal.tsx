@@ -1,3 +1,15 @@
+/**
+ * @deprecated ViewProjectModal is no longer used
+ *
+ * This component has been replaced by the ProjectDetailClient page.
+ * All project viewing now happens via navigation to /projects/[id]
+ * instead of opening this modal.
+ *
+ * See: sham/src/app/projects/[id]/ProjectDetailClient.tsx
+ *
+ * This file can be safely removed in the future.
+ */
+
 import React from "react";
 import {
   X,
@@ -13,11 +25,18 @@ import {
   Building2,
   Clock,
   Ruler,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Shield,
+  ChevronRight,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Project } from "@/types";
 import { EnhancedInvoice } from "@/types/shared";
+import { useSafe } from "@/contexts/SafeContext";
 
 interface ViewProjectModalProps {
   isOpen: boolean;
@@ -56,14 +75,33 @@ export default function ViewProjectModal({
 }: ViewProjectModalProps) {
   if (!isOpen) return null;
 
-  const totalInvoiced = invoices.reduce(
-    (sum, invoice) => sum + invoice.amount,
+  const { safeState } = useSafe();
+
+  // Calculate actual amounts from category assignments (approved invoices)
+  const actualSpent = project.categoryAssignments
+    ? project.categoryAssignments.reduce(
+        (sum: number, assignment: any) => sum + (assignment.actual_amount || 0),
+        0
+      )
+    : 0;
+
+  const completionPercentage = Math.round(
+    (actualSpent / project.budgetEstimate) * 100
+  );
+  const remainingBudget = project.budgetEstimate - actualSpent;
+
+  // Calculate project's impact on safe
+  const projectTransactions = safeState.transactions.filter(
+    (transaction) => transaction.projectId === project.id
+  );
+  const projectTotalSpent = projectTransactions.reduce(
+    (sum, transaction) => sum + Math.abs(transaction.amount),
     0
   );
-  const completionPercentage = Math.round(
-    (totalInvoiced / project.budgetEstimate) * 100
-  );
-  const remainingBudget = project.budgetEstimate - totalInvoiced;
+  const safeImpactPercentage =
+    safeState.totalSpent > 0
+      ? Math.round((projectTotalSpent / safeState.totalSpent) * 100)
+      : 0;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -449,10 +487,10 @@ export default function ViewProjectModal({
                   <div className="grid grid-cols-3 gap-4 pt-4">
                     <div className="text-center">
                       <div className="text-lg font-bold text-green-600">
-                        {formatCurrency(totalInvoiced)}
+                        {formatCurrency(actualSpent)}
                       </div>
                       <div className="text-sm text-gray-600 arabic-spacing">
-                        المفوتر
+                        المنفذ فعلياً
                       </div>
                     </div>
                     <div className="text-center">
@@ -473,6 +511,175 @@ export default function ViewProjectModal({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Simplified Financial Summary */}
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl p-6 border border-blue-200">
+                <h4 className="text-xl font-bold text-gray-800 arabic-spacing mb-6 flex items-center">
+                  <Wallet className="h-6 w-6 ml-2 text-blue-600 no-flip" />
+                  الملخص المالي للمشروع
+                </h4>
+
+                {/* Key Financial Metrics - Compact */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                    <div className="text-xl font-bold text-blue-600 mb-1">
+                      {formatCurrency(project.budgetEstimate)}
+                    </div>
+                    <div className="text-sm text-gray-600 arabic-spacing">
+                      الميزانية المعتمدة
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                    <div className="text-xl font-bold text-green-600 mb-1">
+                      {formatCurrency(actualSpent)}
+                    </div>
+                    <div className="text-sm text-gray-600 arabic-spacing">
+                      المنفذ فعلياً
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                    <div className="text-xl font-bold text-orange-600 mb-1">
+                      {formatCurrency(remainingBudget)}
+                    </div>
+                    <div className="text-sm text-gray-600 arabic-spacing">
+                      المتبقي
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                    <div className="text-xl font-bold text-purple-600 mb-1">
+                      {completionPercentage}%
+                    </div>
+                    <div className="text-sm text-gray-600 arabic-spacing">
+                      نسبة الإنجاز
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700 arabic-spacing">
+                      تقدم المشروع
+                    </span>
+                    <span className="text-sm font-medium text-gray-700">
+                      {completionPercentage}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(completionPercentage, 100)}%`,
+                      }}
+                    ></div>
+                  </div>
+                </div>
+
+                {/* Safe Impact & Assignment Stats - Compact */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-white/70 rounded-xl p-4">
+                    <h6 className="font-semibold text-gray-800 arabic-spacing mb-3 flex items-center">
+                      <Wallet className="h-4 w-4 ml-2 text-emerald-600 no-flip" />
+                      تأثير على الخزينة
+                    </h6>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600 arabic-spacing">
+                          المنصرف من الخزينة:
+                        </span>
+                        <span className="font-bold text-emerald-700">
+                          {formatCurrency(projectTotalSpent)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600 arabic-spacing">
+                          رصيد الخزينة الحالي:
+                        </span>
+                        <span className="font-bold text-blue-600">
+                          {formatCurrency(safeState.currentBalance)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/70 rounded-xl p-4">
+                    <h6 className="font-semibold text-gray-800 arabic-spacing mb-3 flex items-center">
+                      <Building2 className="h-4 w-4 ml-2 text-blue-600 no-flip" />
+                      إحصائيات المشروع
+                    </h6>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600 arabic-spacing">
+                          إجمالي التعيينات:
+                        </span>
+                        <span className="font-bold text-blue-600">
+                          {project.categoryAssignments?.length || 0}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600 arabic-spacing">
+                          الفواتير:
+                        </span>
+                        <span className="font-bold text-green-600">
+                          {invoices.length}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Budget Status Alert */}
+                {(() => {
+                  const categoryEstimated = project.categoryAssignments
+                    ? project.categoryAssignments.reduce(
+                        (sum: number, assignment: any) =>
+                          sum + (assignment.estimated_amount || 0),
+                        0
+                      )
+                    : 0;
+                  const budgetDifference =
+                    project.budgetEstimate - categoryEstimated;
+                  const isOverBudget = budgetDifference < 0;
+
+                  return (
+                    <div
+                      className={`mt-4 p-3 rounded-lg flex items-center justify-between ${
+                        isOverBudget
+                          ? "bg-red-50 border border-red-200"
+                          : "bg-green-50 border border-green-200"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2 space-x-reverse">
+                        {isOverBudget ? (
+                          <AlertTriangle className="h-5 w-5 text-red-600 no-flip" />
+                        ) : (
+                          <Shield className="h-5 w-5 text-green-600 no-flip" />
+                        )}
+                        <span
+                          className={`text-sm font-medium arabic-spacing ${
+                            isOverBudget ? "text-red-700" : "text-green-700"
+                          }`}
+                        >
+                          {isOverBudget
+                            ? "تجاوز في التقديرات"
+                            : "التقديرات ضمن الميزانية"}
+                        </span>
+                      </div>
+                      <span
+                        className={`font-bold ${
+                          isOverBudget ? "text-red-600" : "text-green-600"
+                        }`}
+                      >
+                        {isOverBudget ? "-" : "+"}
+                        {formatCurrency(Math.abs(budgetDifference))}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

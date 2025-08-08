@@ -6,18 +6,34 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Currency formatting for Iraqi context with Arabic numerals
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number | null | undefined): string {
+  // Handle invalid values
+  if (amount == null || isNaN(Number(amount))) {
+    return "0 د.ع";
+  }
+  
+  const numericAmount = Number(amount);
+  
+  // Format using Intl but replace the currency symbol
   return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'IQD',
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(numericAmount) + " د.ع";
 }
 
 // Date formatting for Arabic context but with English numerals
-export function formatDate(dateString: string): string {
+export function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) {
+    return "غير محدد";
+  }
+  
   const date = new Date(dateString);
+  
+  // Check if the date is valid
+  if (isNaN(date.getTime())) {
+    return "تاريخ غير صالح";
+  }
+  
   return new Intl.DateTimeFormat('en-GB', {
     year: 'numeric',
     month: 'short',

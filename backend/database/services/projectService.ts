@@ -145,11 +145,29 @@ class ProjectService {
             'estimated_amount', pca.estimated_amount,
             'actual_amount', pca.actual_amount,
             'notes', pca.notes,
-            'status', pca.status
+            'status', pca.status,
+            'has_approved_invoice', pca.has_approved_invoice,
+            'budget_exhausted', pca.budget_exhausted,
+            'invoice_count', pca.invoice_count,
+            'last_invoice_date', pca.last_invoice_date,
+            'total_invoices', COALESCE(inv_counts.total_invoices, 0),
+            'pending_invoices', COALESCE(inv_counts.pending_invoices, 0),
+            'approved_invoices', COALESCE(inv_counts.approved_invoices, 0),
+            'paid_invoices', COALESCE(inv_counts.paid_invoices, 0)
           ) ORDER BY pca.main_category, pca.subcategory, pca.contractor_name
         ) FILTER (WHERE pca.id IS NOT NULL) as category_assignments
       FROM projects p
       LEFT JOIN project_category_assignments pca ON p.id = pca.project_id
+      LEFT JOIN (
+        SELECT 
+          category_assignment_id,
+          COUNT(*) as total_invoices,
+          SUM(CASE WHEN status = 'pending_approval' THEN 1 ELSE 0 END) as pending_invoices,
+          SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_invoices,
+          SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_invoices
+        FROM invoices 
+        GROUP BY category_assignment_id
+      ) inv_counts ON pca.id = inv_counts.category_assignment_id
       GROUP BY p.id
       ORDER BY p.created_at DESC
     `;
@@ -177,11 +195,29 @@ class ProjectService {
             'estimated_amount', pca.estimated_amount,
             'actual_amount', pca.actual_amount,
             'notes', pca.notes,
-            'status', pca.status
+            'status', pca.status,
+            'has_approved_invoice', pca.has_approved_invoice,
+            'budget_exhausted', pca.budget_exhausted,
+            'invoice_count', pca.invoice_count,
+            'last_invoice_date', pca.last_invoice_date,
+            'total_invoices', COALESCE(inv_counts.total_invoices, 0),
+            'pending_invoices', COALESCE(inv_counts.pending_invoices, 0),
+            'approved_invoices', COALESCE(inv_counts.approved_invoices, 0),
+            'paid_invoices', COALESCE(inv_counts.paid_invoices, 0)
           ) ORDER BY pca.main_category, pca.subcategory, pca.contractor_name
         ) FILTER (WHERE pca.id IS NOT NULL) as category_assignments
       FROM projects p
       LEFT JOIN project_category_assignments pca ON p.id = pca.project_id
+      LEFT JOIN (
+        SELECT 
+          category_assignment_id,
+          COUNT(*) as total_invoices,
+          SUM(CASE WHEN status = 'pending_approval' THEN 1 ELSE 0 END) as pending_invoices,
+          SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_invoices,
+          SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid_invoices
+        FROM invoices 
+        GROUP BY category_assignment_id
+      ) inv_counts ON pca.id = inv_counts.category_assignment_id
       WHERE p.id = $1
       GROUP BY p.id
     `;
@@ -199,8 +235,14 @@ class ProjectService {
     };
   }
 
-  // Update project
-  async updateProject(id: string, data: Partial<CreateProjectData>): Promise<Project | null> {
+  // Update project with category assignments
+  async updateProject(id: string, data: Partial<CreateProjectData>): Promise<ProjectWithAssignments | null> {
+    const client = await getPool().connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Update basic project fields
     const setClauses = [];
     const values = [];
     let paramCount = 1;
@@ -213,10 +255,8 @@ class ProjectService {
       }
     });
 
-    if (setClauses.length === 0) {
-      throw new Error('No fields to update');
-    }
-
+      let project = null;
+      if (setClauses.length > 0) {
     setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(id);
 
@@ -227,8 +267,155 @@ class ProjectService {
       RETURNING *
     `;
 
-    const result = await getPool().query(query, values);
-    return result.rows[0] || null;
+        const result = await client.query(query, values);
+        project = result.rows[0];
+      } else {
+        // If no basic fields to update, just get the existing project
+        const result = await client.query('SELECT * FROM projects WHERE id = $1', [id]);
+        project = result.rows[0];
+      }
+
+      if (!project) {
+        throw new Error('Project not found');
+      }
+
+      // Handle category assignments update if provided
+      let categoryAssignments = [];
+      if (data.categoryAssignments !== undefined) {
+        // Get existing assignments with invoice information
+        const existingAssignmentsQuery = `
+          SELECT pca.*, 
+            CASE WHEN COUNT(i.id) > 0 THEN true ELSE false END as has_invoices
+          FROM project_category_assignments pca
+          LEFT JOIN invoices i ON i.category_assignment_id = pca.id
+          WHERE pca.project_id = $1
+          GROUP BY pca.id
+        `;
+        const existingResult = await client.query(existingAssignmentsQuery, [id]);
+        const existingAssignments = existingResult.rows;
+
+        console.log('🔍 DEBUG: Existing assignments:', existingAssignments.map(a => ({
+          id: a.id,
+          category: `${a.main_category} - ${a.subcategory}`,
+          contractor: a.contractor_name,
+          has_invoices: a.has_invoices
+        })));
+
+        console.log('🔍 DEBUG: Incoming assignments from frontend:', data.categoryAssignments?.map(a => ({
+          category: `${a.main_category} - ${a.subcategory}`,
+          contractor: a.contractor_name,
+          amount: a.estimated_amount
+        })));
+
+        // Frontend now sends ONLY new assignments in ADD mode, complete list in EDIT mode
+        console.log('🔍 DEBUG: Processing incoming assignments');
+
+        // Insert or update assignments
+        if (data.categoryAssignments && data.categoryAssignments.length > 0) {
+          for (const assignment of data.categoryAssignments) {
+            console.log('📝 DEBUG: Processing assignment:', {
+              category: `${assignment.main_category} - ${assignment.subcategory}`,
+              contractor: assignment.contractor_name,
+              amount: assignment.estimated_amount
+            });
+
+            // Check if this exact assignment already exists
+            const existingMatch = existingAssignments.find(existing => 
+              existing.main_category === assignment.main_category &&
+              existing.subcategory === assignment.subcategory &&
+              existing.contractor_id === assignment.contractor_id
+            );
+
+            if (existingMatch) {
+              const errorMessage = `التعيين موجود مسبقاً: المقاول "${assignment.contractor_name}" مُعيّن بالفعل لـ "${assignment.main_category} - ${assignment.subcategory}". استخدم زر التعديل لتحديث التعيين الموجود.`;
+              
+              console.log('✋ Business validation: Duplicate assignment rejected', {
+                existingId: existingMatch.id,
+                category: `${assignment.main_category} - ${assignment.subcategory}`,
+                contractor: assignment.contractor_name,
+                existingAmount: existingMatch.estimated_amount,
+                attemptedAmount: assignment.estimated_amount
+              });
+              
+              // Create a validation error (not a technical error)
+              const validationError = new Error(errorMessage);
+              (validationError as any).isValidationError = true;
+              throw validationError;
+            }
+
+            // Insert NEW assignment only
+            console.log('✨ DEBUG: Creating NEW assignment');
+            const insertQuery = `
+              INSERT INTO project_category_assignments (
+                project_id, main_category, subcategory, contractor_id,
+                contractor_name, estimated_amount, notes, created_by
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+              RETURNING *
+            `;
+
+            const insertValues = [
+              id,
+              assignment.main_category,
+              assignment.subcategory,
+              assignment.contractor_id,
+              assignment.contractor_name,
+              assignment.estimated_amount,
+              assignment.notes,
+              data.created_by || null
+            ];
+
+            const insertResult = await client.query(insertQuery, insertValues);
+            categoryAssignments.push(insertResult.rows[0]);
+            console.log('✅ DEBUG: NEW assignment created with ID:', insertResult.rows[0].id);
+          }
+        }
+
+        // Get ALL assignments for this project (existing + newly created)
+        const allAssignmentsQuery = `
+          SELECT * FROM project_category_assignments 
+          WHERE project_id = $1 
+          ORDER BY main_category, subcategory, contractor_name
+        `;
+        const allResult = await client.query(allAssignmentsQuery, [id]);
+        categoryAssignments = allResult.rows;
+        
+        console.log('✅ DEBUG: All assignments after operation:', categoryAssignments.map(a => ({
+          id: a.id,
+          category: `${a.main_category} - ${a.subcategory}`,
+          contractor: a.contractor_name,
+          amount: a.estimated_amount
+        })));
+      } else {
+        // If category assignments not provided, get existing ones
+        const assignmentsQuery = `
+          SELECT * FROM project_category_assignments 
+          WHERE project_id = $1 
+          ORDER BY main_category, subcategory, contractor_name
+        `;
+        const assignmentsResult = await client.query(assignmentsQuery, [id]);
+        categoryAssignments = assignmentsResult.rows;
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        ...project,
+        categoryAssignments
+      };
+
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      
+      // Handle unique constraint violation specifically
+      if (error.code === '23505' && error.constraint === 'unique_project_category_contractor') {
+        console.log('🚫 DEBUG: Unique constraint violation:', error.detail);
+        throw new Error(`تعيين مكرر: لا يمكن تعيين نفس المقاول أكثر من مرة لنفس الفئة الفرعية. هذا يمنع مشاكل الحسابات المالية.`);
+      }
+      
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   // Delete project

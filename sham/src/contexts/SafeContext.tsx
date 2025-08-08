@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { generateTransactionId } from "@/lib/utils";
+import { apiRequest } from "@/lib/api";
 
 interface SafeTransaction {
   id: string;
@@ -26,6 +27,7 @@ interface SafeState {
 
 interface SafeContextType {
   safeState: SafeState;
+  refreshSafeState: () => Promise<void>;
   addFunding: (amount: number, description: string) => void;
   deductForInvoice: (
     amount: number,
@@ -56,18 +58,71 @@ export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
     totalSpent: 0,
   });
 
-  // Load from localStorage on mount
+  // Load safe state from database API
   useEffect(() => {
-    const stored = localStorage.getItem("financial-safe-state");
-    if (stored) {
+    const loadSafeState = async () => {
       try {
-        const parsedState = JSON.parse(stored);
-        setSafeState(parsedState);
+        // Load safe state and transactions from database
+        const response = await apiRequest("/safe/state");
+        if (response.ok) {
+          const data = await response.json();
+          setSafeState({
+            currentBalance: data.current_balance || 0,
+            totalFunded: data.total_funded || 0,
+            totalSpent: data.total_spent || 0,
+            transactions: data.transactions || [],
+          });
+          console.log("✅ Safe state loaded from database:", data);
+        } else {
+          console.warn(
+            "Failed to load safe state from API, using localStorage fallback"
+          );
+          // Fallback to localStorage if API fails
+          const stored = localStorage.getItem("financial-safe-state");
+          if (stored) {
+            const parsedState = JSON.parse(stored);
+            setSafeState(parsedState);
+          }
+        }
       } catch (error) {
-        console.warn("Failed to load SAFE state from localStorage:", error);
+        console.warn("Error loading safe state from API:", error);
+        // Fallback to localStorage
+        const stored = localStorage.getItem("financial-safe-state");
+        if (stored) {
+          try {
+            const parsedState = JSON.parse(stored);
+            setSafeState(parsedState);
+          } catch (localError) {
+            console.warn(
+              "Failed to load SAFE state from localStorage:",
+              localError
+            );
+          }
+        }
       }
-    }
+    };
+
+    loadSafeState();
   }, []);
+
+  // Method to refresh safe state (for use after transactions)
+  const refreshSafeState = async () => {
+    try {
+      const response = await apiRequest("/safe/state");
+      if (response.ok) {
+        const data = await response.json();
+        setSafeState({
+          currentBalance: data.current_balance || 0,
+          totalFunded: data.total_funded || 0,
+          totalSpent: data.total_spent || 0,
+          transactions: data.transactions || [],
+        });
+        console.log("✅ Safe state refreshed from database");
+      }
+    } catch (error) {
+      console.warn("Error refreshing safe state:", error);
+    }
+  };
 
   // Save to localStorage whenever state changes
   useEffect(() => {
@@ -194,6 +249,7 @@ export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const contextValue: SafeContextType = {
     safeState,
+    refreshSafeState,
     addFunding,
     deductForInvoice,
     deductForSalary,

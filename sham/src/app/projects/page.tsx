@@ -36,12 +36,16 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { formatCurrency, formatDate, generateId } from "@/lib/utils";
-import { Project, Invoice, EnhancedProjectFormData } from "@/types";
+import {
+  Project,
+  Invoice,
+  EnhancedProjectFormData,
+  ProjectCategoryAssignmentFormData,
+} from "@/types";
 import PageNavigation from "@/components/layout/PageNavigation";
 import { useToast } from "@/components/ui/Toast";
 import EnhancedProjectModal from "@/components/projects/EnhancedProjectModal";
-import InvoiceModal from "@/components/projects/InvoiceModal";
-import ViewProjectModal from "@/components/projects/ViewProjectModal";
+
 import ProjectsTable from "@/components/projects/ProjectsTable";
 import { EnhancedInvoice, InvoiceFormData } from "@/types/shared";
 import { useSafe } from "@/contexts/SafeContext";
@@ -195,7 +199,7 @@ export default function ProjectsPage() {
 
   // Single modal state management
   const [currentModal, setCurrentModal] = useState<{
-    type: "project" | "invoice" | "view" | "invoice-preview" | null;
+    type: "project" | "invoice" | "invoice-preview" | null;
     mode?: "create" | "edit";
     data?: any;
     context?: { projectId?: string };
@@ -915,32 +919,79 @@ export default function ProjectsPage() {
     });
   };
 
-  const handleEditProject = () => {
+  const handleEditProject = async () => {
     if (!currentModal.data) return;
 
-    const updatedProject: Project = {
-      ...currentModal.data,
-      name: projectForm.name,
-      location: projectForm.location,
-      area: parseFloat(projectForm.area) || undefined,
-      budgetEstimate: parseFloat(projectForm.budgetEstimate) || 0,
-      client: projectForm.client,
-      startDate: projectForm.startDate,
-      endDate: projectForm.endDate,
-      status: projectForm.status,
-      updatedAt: new Date().toISOString(),
-    };
+    try {
+      console.log("Updating project with data:", projectForm);
 
-    setProjects((prev) =>
-      prev.map((p) => (p.id === currentModal.data.id ? updatedProject : p))
-    );
-    closeAllModals();
+      // Make API call to update project
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${currentModal.data.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: projectForm.name,
+            location: projectForm.location,
+            area: projectForm.area,
+            budgetEstimate: projectForm.budgetEstimate,
+            client: projectForm.client,
+            startDate: projectForm.startDate,
+            endDate: projectForm.endDate,
+            status: projectForm.status,
+            categoryAssignments: projectForm.categoryAssignments,
+          }),
+        }
+      );
 
-    addToast({
-      type: "success",
-      title: "تم تحديث المشروع",
-      message: `تم تحديث تفاصيل "${updatedProject.name}" بنجاح`,
-    });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to update project");
+      }
+
+      const result = await response.json();
+      console.log("Project updated successfully:", result);
+
+      // Update local state with the updated project
+      const updatedProject: Project = {
+        ...currentModal.data,
+        name: projectForm.name,
+        location: projectForm.location,
+        area: parseFloat(projectForm.area) || undefined,
+        budgetEstimate: parseFloat(projectForm.budgetEstimate) || 0,
+        client: projectForm.client,
+        startDate: projectForm.startDate,
+        endDate: projectForm.endDate,
+        status: projectForm.status,
+        updatedAt: new Date().toISOString(),
+        categoryAssignments: result.project?.categoryAssignments || [],
+      };
+
+      setProjects((prev) =>
+        prev.map((p) => (p.id === currentModal.data.id ? updatedProject : p))
+      );
+
+      closeAllModals();
+
+      addToast({
+        type: "success",
+        title: "تم تحديث المشروع",
+        message: `تم تحديث تفاصيل "${updatedProject.name}" بنجاح مع تحديث ${projectForm.categoryAssignments.length} من المهام`,
+      });
+    } catch (error) {
+      console.error("Error updating project:", error);
+      addToast({
+        type: "error",
+        title: "خطأ في التحديث",
+        message:
+          error instanceof Error
+            ? error.message
+            : "حدث خطأ أثناء تحديث المشروع",
+      });
+    }
   };
 
   const handleCreateInvoice = async () => {
@@ -1090,7 +1141,45 @@ export default function ProjectsPage() {
     router.push("/projects/create");
   };
 
+  // Helper function to transform backend category assignments to frontend form structure
+  const transformCategoryAssignmentsForEdit = (
+    backendAssignments: any[]
+  ): ProjectCategoryAssignmentFormData[] => {
+    if (!backendAssignments || backendAssignments.length === 0) {
+      return [];
+    }
+
+    // Group assignments by main_category and subcategory
+    const grouped = backendAssignments.reduce((acc, assignment) => {
+      const key = `${assignment.main_category}||${assignment.subcategory}`;
+      if (!acc[key]) {
+        acc[key] = {
+          mainCategory: assignment.main_category,
+          subcategory: assignment.subcategory,
+          contractors: [],
+        };
+      }
+
+      // Add contractor to the group
+      acc[key].contractors.push({
+        contractorId: assignment.contractor_id || "",
+        contractorName: assignment.contractor_name || "",
+        estimatedAmount: assignment.estimated_amount?.toString() || "0",
+        notes: assignment.notes || "",
+      });
+
+      return acc;
+    }, {} as Record<string, ProjectCategoryAssignmentFormData>);
+
+    return Object.values(grouped);
+  };
+
   const openEditProjectModal = (project: Project) => {
+    // Transform category assignments from backend structure to frontend form structure
+    const transformedAssignments = transformCategoryAssignmentsForEdit(
+      project.categoryAssignments || []
+    );
+
     setProjectForm({
       name: project.name,
       location: project.location,
@@ -1100,13 +1189,15 @@ export default function ProjectsPage() {
       startDate: project.startDate,
       endDate: project.endDate,
       status: project.status,
-      categoryAssignments: [], // TODO: Load existing category assignments from database
+      categoryAssignments: transformedAssignments,
     });
     setCurrentModal({ type: "project", mode: "edit", data: project });
   };
 
-  const openViewProjectModal = (project: Project) => {
-    setCurrentModal({ type: "view", data: project });
+  const openProjectDetail = (project: Project) => {
+    // Navigate to project detail page (ProjectDetailClient.tsx)
+    // ViewProjectModal is no longer used - all project details are shown in the dedicated detail page
+    router.push(`/projects/${project.id}`);
   };
 
   const openCreateInvoiceModal = (projectId: string) => {
@@ -1287,7 +1378,7 @@ export default function ProjectsPage() {
         projects={filteredProjects}
         getProjectInvoices={getProjectInvoices}
         getProjectTotalInvoiced={getProjectTotalInvoiced}
-        onViewProject={openViewProjectModal}
+        onViewProject={openProjectDetail}
         onEditProject={openEditProjectModal}
         onCreateInvoice={openCreateInvoiceModal}
       />
@@ -1400,35 +1491,6 @@ export default function ProjectsPage() {
             : handleEditProject
         }
         generateProjectCode={() => generateProjectCode(projects)}
-      />
-
-      <InvoiceModal
-        isOpen={currentModal.type === "invoice"}
-        project={projects.find((p) => p.id === currentModal.data)}
-        invoiceForm={invoiceForm}
-        setInvoiceForm={setInvoiceForm}
-        onClose={closeAllModals}
-        onSubmit={handleCreateInvoice}
-        onPreview={() => openInvoicePreview(invoiceForm, currentModal.data?.id)}
-      />
-
-      <ViewProjectModal
-        isOpen={currentModal.type === "view"}
-        project={currentModal.data}
-        invoices={
-          currentModal.data ? getProjectInvoices(currentModal.data.id) : []
-        }
-        onClose={closeAllModals}
-        onEdit={() => {
-          closeAllModals();
-          setTimeout(() => openEditProjectModal(currentModal.data), 100);
-        }}
-        onCreateInvoice={() => {
-          closeAllModals();
-          setTimeout(() => openCreateInvoiceModal(currentModal.data.id), 100);
-        }}
-        onPrintInvoice={printInvoice}
-        onPreviewInvoice={openInvoicePreview}
       />
 
       {/* Invoice Preview Modal */}

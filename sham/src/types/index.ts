@@ -71,15 +71,20 @@ export interface Transaction {
 
 export interface GeneralExpense {
   id: string;
+  project_id: string;
+  expense_name: string;
   category: string;
-  description: string;
-  amount: number;
-  receiptUrl?: string;
-  receiptImage?: string; // Alternative field name for backwards compatibility
-  notes?: string; // Added optional notes field
-  date: string;
-  createdAt: string;
-  updatedAt: string;
+  cost: number;
+  details?: string;
+  expense_date: string;
+  receipt_url?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: string;
+  updated_at: string;
+  submitted_by?: string;
+  approved_by?: string;
+  approved_at?: string;
+  rejection_reason?: string;
 }
 
 // Utility types for reports and filtering
@@ -159,6 +164,10 @@ export interface ContractorFormData {
 
 // Project category assignment types (frontend)
 export interface ProjectCategoryAssignment {
+  contractor_id: string | undefined;
+  actual_amount: number | undefined;
+  estimated_amount: number;
+  main_category: string;
   id: string;
   projectId: string;
   mainCategory: string;

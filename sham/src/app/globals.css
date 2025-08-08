@@ -1,5 +1,58 @@
 @import "tailwindcss";
 
+/* Custom Animations for Project Detail Page */
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-right {
+  0% {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.5s ease-out;
+}
+
 :root {
   --background: #f9fafb;
   --foreground: #111827;
@@ -254,4 +307,154 @@ body {
 
 .focus\:ring-primary:focus {
   --tw-ring-color: #182C61;
+}
+
+/* Enhanced Invoice Modal Styles */
+.enhanced-invoice-modal select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e");
+  background-position: left 0.5rem center;
+  background-repeat: no-repeat;
+  background-size: 1.5em 1.5em;
+  padding-left: 2.5rem;
+}
+
+.enhanced-invoice-modal select:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Smooth scrolling for invoice modal */
+.invoice-modal-scroll {
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.invoice-modal-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.invoice-modal-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.invoice-modal-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.invoice-modal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Print Styles for Invoice */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-area {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .no-print-input {
+    display: none;
+  }
+  
+  .print\:inline {
+    display: inline !important;
+  }
+  
+  .print\:block {
+    display: block !important;
+  }
+  
+  table {
+    page-break-inside: avoid;
+  }
+  
+  thead {
+    display: table-header-group;
+  }
+  
+  tr {
+    page-break-inside: avoid;
+  }
+  
+  .page-break {
+    page-break-before: always;
+  }
+  
+  /* Make sure borders show in print */
+  .border {
+    border: 1px solid #e5e7eb !important;
+  }
+  
+  .border-gray-300 {
+    border-color: #d1d5db !important;
+  }
+  
+  /* Ensure text is black in print */
+  .text-gray-900,
+  .text-gray-800,
+  .text-gray-700 {
+    color: #000 !important;
+  }
+}
+
+/* Dropdown Visibility Fix */
+.enhanced-dropdown {
+  position: relative;
+  z-index: 1000;
+}
+
+.enhanced-dropdown select {
+  background-color: white;
+  border: 2px solid #d1d5db;
+  border-radius: 0.5rem;
+  padding: 0.5rem 2.5rem 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.enhanced-dropdown select:hover {
+  border-color: #9ca3af;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.enhanced-dropdown select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Line Item Table Styling */
+.invoice-line-items table {
+  border-collapse: collapse;
+}
+
+.invoice-line-items th,
+.invoice-line-items td {
+  border: 1px solid #e5e7eb;
+  vertical-align: middle;
+}
+
+.invoice-line-items input,
+.invoice-line-items select {
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+.invoice-line-items input:focus,
+.invoice-line-items select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }

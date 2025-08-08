@@ -86,7 +86,7 @@ export class UserService {
 
       const token = jwt.sign(payload, this.jwtSecret, {
         expiresIn: this.jwtExpiresIn,
-      });
+      } as jwt.SignOptions);
 
       return {
         success: true,

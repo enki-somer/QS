@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { userService } from '../services/userService';
+import { databaseUserService } from '../../database/services/userService';
 import { AuthenticatedUser, UserRole, ROLE_PERMISSIONS } from '../types';
 
 // Extend Express Request type to include user
@@ -11,8 +11,13 @@ declare global {
   }
 }
 
-export const authenticate = (req: Request, res: Response, next: NextFunction): void => {
+export const authenticate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
+    // Skip authentication for OPTIONS requests (CORS preflight)
+    if (req.method === 'OPTIONS') {
+      return next();
+    }
+    
     const authHeader = req.headers.authorization;
     
     if (!authHeader) {
@@ -33,7 +38,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
       return;
     }
 
-    const user = userService.verifyToken(token);
+    const user = await databaseUserService.verifyToken(token);
     
     if (!user) {
       res.status(401).json({

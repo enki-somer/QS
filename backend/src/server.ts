@@ -7,6 +7,8 @@ import authRoutes from './routes/auth';
 import safeRoutes from './routes/safe';
 import contractorRoutes from './routes/contractors';
 import projectRoutes from './routes/projects';
+import categoryInvoiceRoutes from './routes/categoryInvoices';
+import generalExpenseRoutes from './routes/generalExpenses';
 import { testConnection, initializeDatabase } from '../database/config';
 
 // Load environment variables
@@ -14,7 +16,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
+const CORS_ORIGIN = process.env.CORS_ORIGIN || ['http://localhost:3000', 'http://localhost:3001'];
 
 // Security middleware
 app.use(helmet());
@@ -33,11 +35,24 @@ app.use('/api', limiter);
 
 // CORS configuration
 app.use(cors({
-  origin: CORS_ORIGIN,
+  origin: (origin, callback) => {
+    // Allow requests from localhost on any port for development
+    if (!origin || /^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
+
+// Handle preflight requests explicitly
+app.options('*', cors());
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -58,6 +73,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/safe', safeRoutes);
 app.use('/api/contractors', contractorRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/category-invoices', categoryInvoiceRoutes);
+app.use('/api/general-expenses', generalExpenseRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

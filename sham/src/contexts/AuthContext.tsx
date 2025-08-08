@@ -85,31 +85,49 @@ const API_BASE_URL = getApiBaseUrl();
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
-  // TEMPORARY: Bypass authentication for testing
-  const [user, setUser] = useState<AuthUser | null>({
-    id: "1",
-    username: "admin",
-    role: "admin",
-    fullName: "مدير النظام",
-    email: "admin@example.com",
-  });
-  const [permissions, setPermissions] = useState<RolePermissions | null>({
-    canViewSafe: true,
-    canEditSafe: true,
-    canDeleteRecords: true,
-    canMakePayments: true,
-    canManageProjects: true,
-    canManageEmployees: true,
-    canViewReports: true,
-    canExportReports: true,
-    canManageExpenses: true,
-  });
-  const [isLoading, setIsLoading] = useState(false); // No loading needed
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [permissions, setPermissions] = useState<RolePermissions | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // TEMPORARY: Skip authentication loading for testing
+  // Load authentication state on app start
   useEffect(() => {
-    // Authentication is bypassed - user is already set above
-    console.log("🚧 Authentication bypassed for testing");
+    const initAuth = async () => {
+      const token = getAuthToken();
+      const storedUser = getAuthUser();
+
+      if (token && storedUser) {
+        try {
+          // Verify token with backend
+          const response = await apiRequest("/auth/profile", {
+            method: "GET",
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              setUser(storedUser);
+              setPermissions(result.permissions);
+            } else {
+              // Token invalid, clear auth
+              removeAuthToken();
+              removeAuthUser();
+            }
+          } else {
+            // Token invalid, clear auth
+            removeAuthToken();
+            removeAuthUser();
+          }
+        } catch (error) {
+          console.error("Auth verification failed:", error);
+          removeAuthToken();
+          removeAuthUser();
+        }
+      }
+
+      setIsLoading(false);
+    };
+
+    initAuth();
   }, []);
 
   const fetchUserProfile = async (token: string) => {
@@ -128,32 +146,51 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       console.error("Profile fetch error:", error);
     }
   };
-  // TODO: Add backend login
   const login = async (
     credentials: LoginCredentials
   ): Promise<LoginResponse> => {
-    // TEMPORARY: Mock successful login for testing
+    try {
+      setIsLoading(true);
 
-    console.log("🚧 Mock login for testing:", credentials.username);
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(credentials),
+      });
 
-    return {
-      success: true,
-      user: {
-        id: "1",
-        username: credentials.username,
-        role: "admin",
-        fullName: "مدير النظام",
-        email: "admin@example.com",
-      },
-      token: "mock-token-for-testing",
-      message: "تم تسجيل الدخول بنجاح (وضع التجربة)",
-    };
+      const result = await response.json();
+
+      if (result.success && result.user && result.token) {
+        // Store auth data
+        setAuthToken(result.token);
+        setAuthUser(result.user);
+        setUser(result.user);
+
+        // Fetch user permissions
+        await fetchUserProfile(result.token);
+
+        return result;
+      } else {
+        return {
+          success: false,
+          message: result.message || "فشل تسجيل الدخول",
+        };
+      }
+    } catch (error) {
+      console.error("Login error:", error);
+      return {
+        success: false,
+        message: "خطأ في الاتصال بالخادم",
+      };
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const logout = () => {
-    // TEMPORARY: Mock logout for testing
-    console.log("🚧 Mock logout for testing");
-    // Don't actually clear auth in testing mode - just reload page
+    clearAuth();
     window.location.href = "/login";
   };
 
@@ -176,7 +213,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     return user?.role === "data_entry";
   };
 
-  const isAuthenticated = !!user; // TODO: Add backend check
+  const isAuthenticated = !!user && !!getAuthToken();
 
   const contextValue: AuthContextType = {
     user,

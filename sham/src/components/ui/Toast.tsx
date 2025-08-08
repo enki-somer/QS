@@ -66,25 +66,25 @@ const ToastItem = ({
   return (
     <div
       className={cn(
-        "flex items-start p-4 rounded-lg border shadow-lg transition-all duration-300",
-        "animate-in slide-in-from-right-5",
+        "flex items-center p-3 rounded-lg border shadow-lg transition-all duration-300",
+        "animate-in slide-in-from-top-2 backdrop-blur-sm",
         bgColor
       )}
     >
       <ToastIcon type={toast.type} />
-      <div className="mr-3 flex-1">
-        <h4 className="font-medium text-gray-900 arabic-spacing">
+      <div className="mr-3 flex-1 min-w-0">
+        <div className="font-medium text-gray-900 arabic-spacing text-sm">
           {toast.title}
-        </h4>
-        {toast.message && (
-          <p className="mt-1 text-sm text-gray-600 arabic-spacing">
-            {toast.message}
-          </p>
-        )}
+          {toast.message && (
+            <span className="text-gray-600 font-normal mr-2">
+              {toast.message}
+            </span>
+          )}
+        </div>
       </div>
       <button
         onClick={() => onRemove(toast.id)}
-        className="text-gray-400 hover:text-gray-600 transition-colors"
+        className="text-gray-400 hover:text-gray-600 transition-colors flex-shrink-0"
       >
         <X className="h-4 w-4 no-flip" />
       </button>
@@ -110,8 +110,8 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
     <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
       {children}
 
-      {/* Toast Container */}
-      <div className="fixed bottom-4 left-4 z-50 space-y-2 max-w-sm w-full">
+      {/* Toast Container - Top Center */}
+      <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 space-y-2 max-w-md w-full px-4">
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
         ))}

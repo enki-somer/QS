@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { User, Bell, LogOut, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
@@ -8,6 +8,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { EnhancedInvoice, EnhancedGeneralExpense } from "@/types/shared";
 import ApprovalsModal from "./ApprovalsModal";
+import { apiRequest } from "@/lib/api";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -21,9 +22,12 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [showApprovalsModal, setShowApprovalsModal] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
 
-  // Public routes that don't require authentication
-  const publicRoutes = ["/login"];
-  const isPublicRoute = publicRoutes.includes(pathname);
+  // Public routes that don't require authentication - memoized to prevent re-renders
+  const isPublicRoute = useMemo(() => {
+    const publicRoutes = ["/login"];
+    const normalizedPathname = pathname.replace(/\/$/, "") || "/"; // Remove trailing slash
+    return publicRoutes.includes(normalizedPathname);
+  }, [pathname]);
 
   React.useEffect(() => {
     const timer = setInterval(() => {
@@ -36,10 +40,10 @@ export default function MainLayout({ children }: MainLayoutProps) {
   // Check for pending approvals (Admin only)
   React.useEffect(() => {
     if (hasPermission("canMakePayments") && isAuthenticated) {
-      const checkPendingApprovals = () => {
+      const checkPendingApprovals = async () => {
         let count = 0;
 
-        // Check pending invoices
+        // Check pending invoices (localStorage)
         const storedInvoices = localStorage.getItem("financial-invoices");
         if (storedInvoices) {
           try {
@@ -52,18 +56,35 @@ export default function MainLayout({ children }: MainLayoutProps) {
           }
         }
 
-        // Check pending expenses
+        // Check pending global expenses (localStorage)
         const storedExpenses = localStorage.getItem("financial-expenses");
         if (storedExpenses) {
           try {
             const expenses: EnhancedGeneralExpense[] =
               JSON.parse(storedExpenses);
-            count += expenses.filter(
+            const pendingGlobalExpenses = expenses.filter(
               (exp) => exp.status === "pending_approval"
-            ).length;
+            );
+            console.log(
+              `💰 Found ${expenses.length} global expenses, ${pendingGlobalExpenses.length} pending approval`
+            );
+            count += pendingGlobalExpenses.length;
           } catch (error) {
             console.warn("Failed to load expenses for notification:", error);
           }
+        } else {
+          console.log("💰 No global expenses found in localStorage");
+        }
+
+        // Check pending project expenses (database API)
+        try {
+          const response = await apiRequest("/general-expenses/pending-count");
+          if (response.ok) {
+            const data = await response.json();
+            count += data.count || 0;
+          }
+        } catch (error) {
+          console.warn("Failed to load pending project expenses:", error);
         }
 
         setPendingCount(count);
@@ -72,8 +93,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
       // Initial check
       checkPendingApprovals();
 
-      // Set up interval to check every 30 seconds
-      const pendingTimer = setInterval(checkPendingApprovals, 30000);
+      // Set up interval to check every 10 seconds for better responsiveness
+      const pendingTimer = setInterval(checkPendingApprovals, 10000);
 
       // Listen for storage events to update count immediately when approvals are made
       const handleStorageChange = () => {
@@ -88,8 +109,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
     }
   }, [hasPermission, isAuthenticated]);
 
-  // Authentication redirect logic
-  React.useEffect(() => {
+  // Stable redirect function to prevent infinite loops
+  const handleRedirect = useCallback(() => {
     if (!isLoading) {
       if (!isAuthenticated && !isPublicRoute) {
         router.push("/login");
@@ -98,6 +119,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
       }
     }
   }, [isAuthenticated, isLoading, isPublicRoute, router]);
+
+  // Authentication redirect logic
+  React.useEffect(() => {
+    handleRedirect();
+  }, [handleRedirect]);
 
   const handleLogout = () => {
     logout();

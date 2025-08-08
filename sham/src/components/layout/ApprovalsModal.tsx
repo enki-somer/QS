@@ -27,6 +27,7 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSafe } from "@/contexts/SafeContext";
 import { useToast } from "@/components/ui/Toast";
+import { apiRequest } from "@/lib/api";
 
 interface ApprovalsModalProps {
   isOpen: boolean;
@@ -38,7 +39,8 @@ export default function ApprovalsModal({
   onClose,
 }: ApprovalsModalProps) {
   const { user } = useAuth();
-  const { deductForInvoice, deductForExpense, hasBalance } = useSafe();
+  const { deductForInvoice, deductForExpense, hasBalance, refreshSafeState } =
+    useSafe();
   const { addToast } = useToast();
 
   const [pendingInvoices, setPendingInvoices] = useState<EnhancedInvoice[]>([]);
@@ -80,6 +82,26 @@ export default function ApprovalsModal({
     return `مشروع ${projectId}`;
   };
 
+  // Helper function to convert user ID to user-friendly name
+  const getUserFriendlyName = (userId: string | undefined): string => {
+    if (!userId) return "غير محدد";
+
+    // If it's a UUID, return generic role-based names
+    const uuidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidPattern.test(userId)) {
+      // Check if current user is the one who submitted (for better labeling)
+      if (user?.id === userId) {
+        return user.role === "admin" ? "الإدارة" : "مدخل البيانات";
+      }
+      // Generic role-based naming for other users
+      return "مدخل البيانات";
+    }
+
+    // If it's already a friendly name, return as is
+    return userId;
+  };
+
   // Load pending items
   useEffect(() => {
     if (isOpen) {
@@ -113,10 +135,10 @@ export default function ApprovalsModal({
     setShowItemDetailModal(false);
   };
 
-  const loadPendingItems = () => {
-    console.log("🔄 Loading pending items from localStorage...");
+  const loadPendingItems = async () => {
+    console.log("🔄 Loading pending items from localStorage and database...");
 
-    // Load pending invoices
+    // Load pending invoices (localStorage)
     const storedInvoices = localStorage.getItem("financial-invoices");
     if (storedInvoices) {
       try {
@@ -136,28 +158,76 @@ export default function ApprovalsModal({
       setPendingInvoices([]);
     }
 
-    // Load pending expenses
+    // Load pending global expenses (localStorage)
     const storedExpenses = localStorage.getItem("financial-expenses");
+    let localPendingExpenses: EnhancedGeneralExpense[] = [];
     if (storedExpenses) {
       try {
         const expenses: EnhancedGeneralExpense[] = JSON.parse(storedExpenses);
-        const pendingExps = expenses.filter(
+        localPendingExpenses = expenses.filter(
           (exp) => exp.status === "pending_approval"
         );
         console.log(
-          `💰 Found ${expenses.length} total expenses, ${pendingExps.length} pending`
+          `💰 Found ${expenses.length} total global expenses, ${localPendingExpenses.length} pending`
         );
-        setPendingExpenses(pendingExps);
       } catch (error) {
-        console.warn("Failed to load pending expenses:", error);
+        console.warn("Failed to load pending global expenses:", error);
       }
     } else {
-      console.log("💰 No expenses found in localStorage");
-      setPendingExpenses([]);
+      console.log("💰 No global expenses found in localStorage");
     }
+
+    // Load pending project expenses (database API)
+    let projectPendingExpenses: any[] = [];
+    try {
+      const response = await apiRequest("/general-expenses/pending");
+      if (response.ok) {
+        const data = await response.json();
+        projectPendingExpenses = data.expenses || [];
+        console.log(
+          `🏗️ Found ${projectPendingExpenses.length} pending project expenses from database`
+        );
+      }
+    } catch (error) {
+      console.warn("Failed to load pending project expenses:", error);
+    }
+
+    // Combine both types of expenses
+    const allPendingExpenses = [
+      ...localPendingExpenses,
+      ...projectPendingExpenses.map((exp: any) => ({
+        id: exp.id,
+        description: exp.expense_name,
+        category: exp.category,
+        amount: exp.cost,
+        date: exp.expense_date,
+        notes: exp.details || "",
+        createdAt: exp.created_at,
+        updatedAt: exp.updated_at,
+        status: "pending_approval" as const,
+        submittedBy: exp.submitted_by_name || "مجهول",
+        isProjectExpense: true, // Flag to distinguish project expenses
+        projectId: exp.project_id,
+      })),
+    ];
+
+    setPendingExpenses(allPendingExpenses);
+    console.log(
+      `💰 Total pending expenses: ${allPendingExpenses.length} (${localPendingExpenses.length} global + ${projectPendingExpenses.length} project)`
+    );
   };
 
   const approveInvoice = async (invoice: EnhancedInvoice) => {
+    // Check if user has admin permissions
+    if (!user || user.role !== "admin") {
+      addToast({
+        type: "error",
+        title: "صلاحية غير كافية",
+        message: "فقط المدير يمكنه اعتماد الفواتير",
+      });
+      return;
+    }
+
     if (!hasBalance(invoice.amount)) {
       addToast({
         type: "error",
@@ -169,51 +239,166 @@ export default function ApprovalsModal({
       return;
     }
 
-    const success = deductForInvoice(
-      invoice.amount,
-      invoice.projectId,
-      getProjectName(invoice.projectId),
-      invoice.invoiceNumber
-    );
+    try {
+      // Call backend API to approve the invoice and lock the assignment
+      const response = await apiRequest(
+        `/category-invoices/${invoice.id}/approve`,
+        {
+          method: "POST",
+        }
+      );
 
-    if (success) {
-      updateInvoiceStatus(invoice.id, "paid");
+      if (!response.ok) {
+        const errorData = await response.json();
+
+        // Handle specific case where assignment already has approved invoices
+        if (
+          errorData.error &&
+          errorData.error.includes(
+            "Cannot edit category assignment with approved invoices"
+          )
+        ) {
+          addToast({
+            type: "warning",
+            title: "التعيين محمي مسبقاً",
+            message: "هذا التعيين يحتوي على فواتير معتمدة مسبقاً",
+          });
+          // Still proceed with local approval since the assignment is already locked
+          const success = deductForInvoice(
+            invoice.amount,
+            invoice.projectId,
+            getProjectName(invoice.projectId),
+            invoice.invoiceNumber
+          );
+
+          if (success) {
+            updateInvoiceStatus(invoice.id, "paid");
+            addToast({
+              type: "success",
+              title: "تم اعتماد الفاتورة",
+              message: `تم اعتماد فاتورة ${
+                invoice.invoiceNumber
+              } ودفع ${formatCurrency(invoice.amount)}`,
+            });
+          }
+          return;
+        }
+
+        throw new Error(errorData.error || "Failed to approve invoice");
+      }
+
+      // Backend approval successful, now deduct from safe
+      const success = deductForInvoice(
+        invoice.amount,
+        invoice.projectId,
+        getProjectName(invoice.projectId),
+        invoice.invoiceNumber
+      );
+
+      if (success) {
+        updateInvoiceStatus(invoice.id, "paid");
+        addToast({
+          type: "success",
+          title: "تم اعتماد الفاتورة",
+          message: `تم اعتماد فاتورة ${
+            invoice.invoiceNumber
+          } ودفع ${formatCurrency(invoice.amount)}`,
+        });
+      }
+    } catch (error: any) {
+      console.error("Error approving invoice:", error);
       addToast({
-        type: "success",
-        title: "تم اعتماد الفاتورة",
-        message: `تم اعتماد فاتورة ${
-          invoice.invoiceNumber
-        } ودفع ${formatCurrency(invoice.amount)}`,
+        type: "error",
+        title: "فشل في اعتماد الفاتورة",
+        message: error.message || "حدث خطأ أثناء اعتماد الفاتورة",
       });
     }
   };
 
-  const approveExpense = async (expense: EnhancedGeneralExpense) => {
-    if (!hasBalance(expense.amount)) {
+  const approveExpense = async (
+    expense: EnhancedGeneralExpense & {
+      isProjectExpense?: boolean;
+      projectId?: string;
+    }
+  ) => {
+    // Check if user has admin permissions
+    if (!user || user.role !== "admin") {
       addToast({
         type: "error",
-        title: "رصيد الخزينة غير كافي",
-        message: `المبلغ المطلوب ${formatCurrency(
-          expense.amount
-        )} أكبر من الرصيد المتاح`,
+        title: "صلاحية غير كافية",
+        message: "فقط المدير يمكنه اعتماد المصروفات",
       });
       return;
     }
 
-    const success = deductForExpense(
-      expense.amount,
-      expense.description,
-      expense.category
-    );
+    try {
+      if (expense.isProjectExpense) {
+        // Handle project expenses via API
+        const response = await apiRequest(
+          `/general-expenses/${expense.id}/approve`,
+          {
+            method: "POST",
+          }
+        );
 
-    if (success) {
-      updateExpenseStatus(expense.id, "paid");
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.userMessage || "Failed to approve project expense"
+          );
+        }
+
+        // Remove from pending list
+        setPendingExpenses((prev) =>
+          prev.filter((exp) => exp.id !== expense.id)
+        );
+
+        // Refresh safe state to reflect the transaction
+        await refreshSafeState();
+
+        addToast({
+          type: "success",
+          title: "تم اعتماد مصروف المشروع",
+          message: `تم اعتماد مصروف "${
+            expense.description
+          }" ودفع ${formatCurrency(expense.amount)} من الخزينة`,
+        });
+      } else {
+        // Handle global expenses via localStorage (existing logic)
+        if (!hasBalance(expense.amount)) {
+          addToast({
+            type: "error",
+            title: "رصيد الخزينة غير كافي",
+            message: `المبلغ المطلوب ${formatCurrency(
+              expense.amount
+            )} أكبر من الرصيد المتاح`,
+          });
+          return;
+        }
+
+        const success = deductForExpense(
+          expense.amount,
+          expense.description,
+          expense.category
+        );
+
+        if (success) {
+          updateExpenseStatus(expense.id, "paid");
+          addToast({
+            type: "success",
+            title: "تم اعتماد المصروف العام",
+            message: `تم اعتماد مصروف ${
+              expense.description
+            } ودفع ${formatCurrency(expense.amount)}`,
+          });
+        }
+      }
+    } catch (error: any) {
+      console.error("Error approving expense:", error);
       addToast({
-        type: "success",
-        title: "تم اعتماد المصروف",
-        message: `تم اعتماد مصروف ${expense.description} ودفع ${formatCurrency(
-          expense.amount
-        )}`,
+        type: "error",
+        title: "خطأ في اعتماد المصروف",
+        message: error.message || "حدث خطأ أثناء اعتماد المصروف",
       });
     }
   };
@@ -703,7 +888,8 @@ export default function ApprovalsModal({
                               <div className="flex items-center space-x-1 space-x-reverse">
                                 <UserIcon className="h-3 w-3 no-flip" />
                                 <span className="arabic-spacing">
-                                  تم الإدخال بواسطة: {item.submittedBy}
+                                  تم الإدخال بواسطة:{" "}
+                                  {getUserFriendlyName(item.submittedBy)}
                                 </span>
                               </div>
                               <div className="flex items-center space-x-1 space-x-reverse">
@@ -898,7 +1084,8 @@ export default function ApprovalsModal({
                           }`}
                     </h2>
                     <p className="text-blue-100 arabic-spacing">
-                      مُدخل بواسطة: {selectedItem.submittedBy} •{" "}
+                      مُدخل بواسطة:{" "}
+                      {getUserFriendlyName(selectedItem.submittedBy)} •{" "}
                       {formatDate(selectedItem.date)}
                     </p>
                   </div>

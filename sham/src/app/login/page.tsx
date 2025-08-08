@@ -2,15 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Eye,
-  EyeOff,
-  Lock,
-  User,
-  AlertCircle,
-  Loader2,
-  ArrowRight,
-} from "lucide-react";
+import { Eye, EyeOff, Lock, User, AlertCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -36,11 +28,6 @@ export default function LoginPage() {
       router.push("/");
     }
   }, [isAuthenticated, isLoading, router]);
-
-  // TEMPORARY: Skip login function for testing
-  const handleSkipLogin = () => {
-    router.push("/");
-  };
 
   const validateForm = (): boolean => {
     const newErrors: Partial<LoginCredentials> = {};
@@ -154,25 +141,6 @@ export default function LoginPage() {
         </CardHeader>
 
         <CardContent>
-          {/* TEMPORARY: Testing Mode Banner */}
-          {/* TODO: Remove this banner when backend login is implemented */}
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-center gap-2 mb-3">
-              <AlertCircle className="h-5 w-5 text-yellow-600" />
-              <span className="font-semibold text-yellow-800">وضع التجربة</span>
-            </div>
-            <p className="text-sm text-yellow-700 mb-3">
-              تم تعطيل نظام المصادقة مؤقتاً لاختبار التطبيق
-            </p>
-            <Button
-              onClick={handleSkipLogin}
-              className="w-full bg-yellow-600 hover:bg-yellow-700 text-white"
-            >
-              <ArrowRight className="h-4 w-4 ml-2" />
-              الدخول مباشرة إلى النظام
-            </Button>
-          </div>
-
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Username Field */}
             <div className="space-y-2">

@@ -97,7 +97,57 @@ export default function EnhancedProjectModal({
   const [currentStep, setCurrentStep] = useState<"basic" | "categories">(
     "basic"
   );
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [categoryInvoiceStatus, setCategoryInvoiceStatus] = useState<any[]>([]);
+  const [loadingInvoiceStatus, setLoadingInvoiceStatus] = useState(false);
+
+  // Quick category addition state (same as creation page)
+  const [quickCategory, setQuickCategory] = useState({
+    mainCategory: "",
+    subcategory: "",
+    contractorId: "",
+    contractorName: "",
+    estimatedAmount: "",
+    notes: "",
+  });
+
+  // Load category invoice status when in edit mode
+  useEffect(() => {
+    if (mode === "edit" && project?.id && isOpen) {
+      loadCategoryInvoiceStatus();
+    }
+  }, [mode, project?.id, isOpen]);
+
+  const loadCategoryInvoiceStatus = async () => {
+    if (!project?.id) return;
+
+    try {
+      setLoadingInvoiceStatus(true);
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/category-invoices/project/${project.id}/status`
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        setCategoryInvoiceStatus(result.categoryStatus || []);
+      }
+    } catch (error) {
+      console.error("Error loading category invoice status:", error);
+    } finally {
+      setLoadingInvoiceStatus(false);
+    }
+  };
+
+  // Check if a category assignment is locked (has invoices)
+  const isCategoryLocked = (assignment: any) => {
+    return categoryInvoiceStatus.some(
+      (status) =>
+        status.main_category === assignment.mainCategory &&
+        status.subcategory === assignment.subcategory &&
+        status.contractor_name ===
+          assignment.contractors?.[0]?.contractorName &&
+        (status.edit_status === "locked" || status.has_approved_invoice)
+    );
+  };
 
   if (!isOpen) return null;
 
@@ -115,94 +165,166 @@ export default function EnhancedProjectModal({
       (assignment) =>
         assignment.mainCategory &&
         assignment.subcategory &&
+        assignment.contractors &&
         assignment.contractors.length > 0 &&
         assignment.contractors.every(
           (contractor) =>
-            contractor.contractorName.trim() &&
+            contractor.contractorName?.trim() &&
             contractor.estimatedAmount &&
             parseFloat(contractor.estimatedAmount) > 0
         )
     );
 
+  const hasLockedCategories =
+    mode === "edit" &&
+    projectForm.categoryAssignments.some((assignment) => {
+      const isLocked = isCategoryLocked(assignment);
+      return isLocked;
+    });
+
+  const canSaveProject =
+    isBasicFormValid &&
+    (currentStep === "basic" || isCategoriesValid) &&
+    (mode === "create" || !hasLockedCategories || currentStep === "basic");
+
   const isFormValid =
     isBasicFormValid && (currentStep === "basic" || isCategoriesValid);
-
-  // Add new category assignment
-  const addCategoryAssignment = () => {
-    const newAssignment: ProjectCategoryAssignmentFormData = {
-      mainCategory: "",
-      subcategory: "",
-      contractors: [],
-    };
-
-    setProjectForm({
-      ...projectForm,
-      categoryAssignments: [...projectForm.categoryAssignments, newAssignment],
-    });
-  };
-
-  // Remove category assignment
-  const removeCategoryAssignment = (index: number) => {
-    const updatedAssignments = projectForm.categoryAssignments.filter(
-      (_, i) => i !== index
-    );
-    setProjectForm({
-      ...projectForm,
-      categoryAssignments: updatedAssignments,
-    });
-  };
-
-  // Update category assignment
-  const updateCategoryAssignment = (
-    index: number,
-    field: keyof ProjectCategoryAssignmentFormData,
-    value: string
-  ) => {
-    const updatedAssignments = [...projectForm.categoryAssignments];
-    updatedAssignments[index] = {
-      ...updatedAssignments[index],
-      [field]: value,
-    };
-
-    // Reset subcategory when main category changes
-    if (field === "mainCategory") {
-      updatedAssignments[index].subcategory = "";
-    }
-
-    // Update contractor name when contractor ID changes
-    if (field === "contractors") {
-      const selectedContractor = contractors.find((c) => c.id === value);
-      updatedAssignments[index].contractors = [
-        {
-          contractorId: selectedContractor?.id || "",
-          contractorName: selectedContractor?.full_name || "",
-          estimatedAmount: "",
-          notes: "",
-        },
-      ];
-    }
-
-    setProjectForm({
-      ...projectForm,
-      categoryAssignments: updatedAssignments,
-    });
-  };
 
   // Calculate total estimated budget from category assignments
   const calculateTotalEstimated = () => {
     return projectForm.categoryAssignments.reduce((sum, assignment) => {
-      return sum + (parseFloat(assignment.contractors[0].estimatedAmount) || 0);
+      const assignmentTotal = assignment.contractors.reduce(
+        (contractorSum, contractor) => {
+          return contractorSum + (parseFloat(contractor.estimatedAmount) || 0);
+        },
+        0
+      );
+      return sum + assignmentTotal;
     }, 0);
+  };
+
+  // Add category assignment (from creation page) with strict validation
+  const addCategoryAssignment = () => {
+    // Strict validation - must select from dropdowns only
+    const isValidMainCategory = PROJECT_CATEGORIES.some(
+      (cat) => cat.name === quickCategory.mainCategory
+    );
+    const isValidSubcategory =
+      quickCategory.mainCategory &&
+      PROJECT_CATEGORIES.find(
+        (cat) => cat.name === quickCategory.mainCategory
+      )?.subcategories.includes(quickCategory.subcategory);
+
+    const isValidContractor =
+      quickCategory.contractorId &&
+      contractors.some(
+        (c) => c.id === quickCategory.contractorId && c.is_active
+      );
+
+    // Validation errors
+    if (!isValidMainCategory) {
+      alert("❌ يجب اختيار الفئة الرئيسية من القائمة المتاحة");
+      return;
+    }
+
+    if (!isValidSubcategory) {
+      alert("❌ يجب اختيار الوصف/الأعمال من القائمة المتاحة للفئة المحددة");
+      return;
+    }
+
+    if (!isValidContractor) {
+      alert("❌ يجب اختيار المقاول من قائمة المقاولين المسجلين فقط");
+      return;
+    }
+
+    if (
+      !quickCategory.estimatedAmount ||
+      parseFloat(quickCategory.estimatedAmount) <= 0
+    ) {
+      alert("❌ يجب إدخال مبلغ مقدر صحيح");
+      return;
+    }
+
+    const selectedContractor = contractors.find(
+      (c) => c.id === quickCategory.contractorId
+    );
+    const contractorName = selectedContractor?.full_name || "";
+
+    // Check if subcategory already exists
+    const existingAssignmentIndex = projectForm.categoryAssignments.findIndex(
+      (assignment) =>
+        assignment.mainCategory === quickCategory.mainCategory &&
+        assignment.subcategory === quickCategory.subcategory
+    );
+
+    const newContractor = {
+      contractorId: quickCategory.contractorId,
+      contractorName: contractorName,
+      estimatedAmount: quickCategory.estimatedAmount,
+      notes: quickCategory.notes,
+    };
+
+    if (existingAssignmentIndex !== -1) {
+      // Add contractor to existing assignment
+      const updatedAssignments = [...projectForm.categoryAssignments];
+      updatedAssignments[existingAssignmentIndex].contractors.push(
+        newContractor
+      );
+      setProjectForm({
+        ...projectForm,
+        categoryAssignments: updatedAssignments,
+      });
+    } else {
+      // Create new assignment
+      const newAssignment: ProjectCategoryAssignmentFormData = {
+        mainCategory: quickCategory.mainCategory,
+        subcategory: quickCategory.subcategory,
+        contractors: [newContractor],
+      };
+      setProjectForm({
+        ...projectForm,
+        categoryAssignments: [
+          ...projectForm.categoryAssignments,
+          newAssignment,
+        ],
+      });
+    }
+
+    // Reset quick category form
+    setQuickCategory({
+      mainCategory: "",
+      subcategory: "",
+      contractorId: "",
+      contractorName: "",
+      estimatedAmount: "",
+      notes: "",
+    });
+  };
+
+  // Remove contractor from assignment
+  const removeContractor = (
+    assignmentIndex: number,
+    contractorIndex: number
+  ) => {
+    const updatedAssignments = [...projectForm.categoryAssignments];
+    updatedAssignments[assignmentIndex].contractors.splice(contractorIndex, 1);
+
+    // If no contractors left, remove the entire assignment
+    if (updatedAssignments[assignmentIndex].contractors.length === 0) {
+      updatedAssignments.splice(assignmentIndex, 1);
+    }
+
+    setProjectForm({
+      ...projectForm,
+      categoryAssignments: updatedAssignments,
+    });
   };
 
   // Handle next step
   const handleNext = () => {
     if (currentStep === "basic" && isBasicFormValid) {
       setCurrentStep("categories");
-      // Add initial category assignment if none exist
-      if (projectForm.categoryAssignments.length === 0) {
-        addCategoryAssignment();
-      }
+      // Categories will be added using the quick add form
     }
   };
 
@@ -514,40 +636,246 @@ export default function EnhancedProjectModal({
               </div>
             </div>
           ) : (
-            /* Categories Step - Redesigned for Better UX */
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 h-full">
-              {/* Left Sidebar - Category Selection */}
-              <div className="lg:col-span-2 space-y-4">
-                {/* Budget Summary - Fixed Header */}
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4 sticky top-0 z-10">
-                  <div className="flex items-center space-x-2 space-x-reverse mb-3">
-                    <div className="bg-[#182C61] p-2 rounded-lg">
-                      <DollarSign className="h-4 w-4 text-white no-flip" />
-                    </div>
-                    <h4 className="font-bold text-gray-800 arabic-spacing">
-                      ملخص الميزانية
-                    </h4>
+            /* Categories Step - Creation Page Style Interface */
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
+              {/* Left Side - Quick Add Form */}
+              <div className="p-6 bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-xl h-fit">
+                <div className="flex items-center space-x-3 space-x-reverse mb-6">
+                  <div className="bg-green-100 p-2 rounded-lg">
+                    <Plus className="h-5 w-5 text-green-600 no-flip" />
+                  </div>
+                  <h2 className="text-xl font-bold text-gray-900 arabic-spacing">
+                    إضافة فئة جديدة
+                  </h2>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Main Category */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-2">
+                      الفئة الرئيسية *
+                    </label>
+                    <Select
+                      value={quickCategory.mainCategory}
+                      onChange={(e) =>
+                        setQuickCategory({
+                          ...quickCategory,
+                          mainCategory: e.target.value,
+                          subcategory: "", // Reset subcategory
+                        })
+                      }
+                      className="h-12"
+                    >
+                      <option value="">اختر الفئة الرئيسية</option>
+                      {PROJECT_CATEGORIES.map((category) => (
+                        <option key={category.id} value={category.name}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600 arabic-spacing">
-                        إجمالي المقدرة:
-                      </span>
-                      <span className="font-bold text-[#182C61]">
+                  {/* Subcategory */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-2">
+                      الوصف/الأعمال *
+                    </label>
+                    <Select
+                      value={quickCategory.subcategory}
+                      onChange={(e) =>
+                        setQuickCategory({
+                          ...quickCategory,
+                          subcategory: e.target.value,
+                        })
+                      }
+                      className="h-12"
+                      disabled={!quickCategory.mainCategory}
+                    >
+                      <option value="">اختر نوع الأعمال</option>
+                      {quickCategory.mainCategory &&
+                        PROJECT_CATEGORIES.find(
+                          (cat) => cat.name === quickCategory.mainCategory
+                        )?.subcategories.map((sub) => (
+                          <option key={sub} value={sub}>
+                            {sub}
+                          </option>
+                        ))}
+                    </Select>
+                  </div>
+
+                  {/* Contractor */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-2">
+                      المقاول *
+                    </label>
+                    <Select
+                      value={quickCategory.contractorId}
+                      onChange={(e) => {
+                        const selectedContractor = contractors.find(
+                          (c) => c.id === e.target.value
+                        );
+                        setQuickCategory({
+                          ...quickCategory,
+                          contractorId: e.target.value,
+                          contractorName: selectedContractor?.full_name || "",
+                        });
+                      }}
+                      className="h-12"
+                    >
+                      <option value="">اختر من المقاولين المسجلين</option>
+                      {contractors
+                        .filter((c) => c.is_active)
+                        .map((contractor) => (
+                          <option key={contractor.id} value={contractor.id}>
+                            {contractor.full_name}
+                          </option>
+                        ))}
+                    </Select>
+                    {!quickCategory.contractorId && (
+                      <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-yellow-800 arabic-spacing">
+                          ⚠️ يجب اختيار مقاول من القائمة أعلاه فقط. لإضافة مقاول
+                          جديد، يرجى الذهاب إلى صفحة المقاولين أولاً.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Amount */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-2">
+                      المبلغ المقدر (دينار عراقي) *
+                    </label>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={quickCategory.estimatedAmount}
+                      onChange={(e) =>
+                        setQuickCategory({
+                          ...quickCategory,
+                          estimatedAmount: e.target.value,
+                        })
+                      }
+                      className="h-12"
+                      placeholder="مثال: 5000000"
+                    />
+                    {quickCategory.estimatedAmount && (
+                      <p className="text-[#182C61] text-sm font-medium mt-1">
+                        💰{" "}
+                        {new Intl.NumberFormat("ar-IQ").format(
+                          Number(quickCategory.estimatedAmount)
+                        )}{" "}
+                        دينار عراقي
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-2">
+                      ملاحظات
+                    </label>
+                    <Input
+                      value={quickCategory.notes}
+                      onChange={(e) =>
+                        setQuickCategory({
+                          ...quickCategory,
+                          notes: e.target.value,
+                        })
+                      }
+                      className="h-12 arabic-spacing"
+                      placeholder="أي ملاحظات إضافية..."
+                    />
+                  </div>
+
+                  {/* Add Button */}
+                  <Button
+                    onClick={addCategoryAssignment}
+                    disabled={
+                      !quickCategory.mainCategory ||
+                      !quickCategory.subcategory ||
+                      !quickCategory.contractorId ||
+                      !quickCategory.estimatedAmount ||
+                      parseFloat(quickCategory.estimatedAmount) <= 0
+                    }
+                    className="w-full h-12 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="h-5 w-5 ml-2 no-flip" />
+                    <span className="arabic-spacing">
+                      {quickCategory.mainCategory &&
+                      quickCategory.subcategory &&
+                      projectForm.categoryAssignments.some(
+                        (a) =>
+                          a.mainCategory === quickCategory.mainCategory &&
+                          a.subcategory === quickCategory.subcategory
+                      )
+                        ? "إضافة مقاول للفئة"
+                        : "إضافة فئة جديدة"}
+                    </span>
+                  </Button>
+
+                  {/* Helper text */}
+                  {quickCategory.mainCategory && quickCategory.subcategory && (
+                    <div className="text-center">
+                      <p className="text-xs text-gray-600 arabic-spacing">
+                        {projectForm.categoryAssignments.some(
+                          (a) =>
+                            a.mainCategory === quickCategory.mainCategory &&
+                            a.subcategory === quickCategory.subcategory
+                        )
+                          ? "🔄 ستتم إضافة المقاول للفئة الموجودة"
+                          : "✨ ستتم إضافة فئة جديدة"}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Side - Budget Summary & Added Categories */}
+              <div className="space-y-6">
+                {/* Budget Summary */}
+                <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+                  <div className="flex items-center space-x-3 space-x-reverse mb-4">
+                    <DollarSign className="h-6 w-6 text-[#182C61] no-flip" />
+                    <h3 className="text-lg font-bold text-gray-900 arabic-spacing">
+                      ملخص الميزانية
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-white rounded-lg p-4">
+                      <p className="text-sm text-gray-600 arabic-spacing">
+                        الميزانية الإجمالية
+                      </p>
+                      <p className="text-xl font-bold text-[#182C61]">
+                        {new Intl.NumberFormat("ar-IQ").format(
+                          Number(projectForm.budgetEstimate) || 0
+                        )}{" "}
+                        د.ع
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-lg p-4">
+                      <p className="text-sm text-gray-600 arabic-spacing">
+                        المبلغ المعين
+                      </p>
+                      <p className="text-xl font-bold text-green-600">
                         {new Intl.NumberFormat("ar-IQ").format(
                           calculateTotalEstimated()
                         )}{" "}
                         د.ع
-                      </span>
+                      </p>
                     </div>
-                    {projectForm.budgetEstimate && (
-                      <div className="flex justify-between items-center">
+                  </div>
+
+                  {projectForm.budgetEstimate && (
+                    <div className="mt-4 bg-white rounded-lg p-4">
+                      <div className="flex justify-between items-center mb-2">
                         <span className="text-sm text-gray-600 arabic-spacing">
-                          نسبة التغطية:
+                          نسبة التغطية
                         </span>
                         <span
-                          className={`text-sm font-medium ${
+                          className={`font-bold ${
                             calculateTotalEstimated() >
                             parseFloat(projectForm.budgetEstimate)
                               ? "text-red-600"
@@ -562,295 +890,220 @@ export default function EnhancedProjectModal({
                           %
                         </span>
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Category Selection */}
-                <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="p-4 bg-gray-50 border-b border-gray-200">
-                    <h4 className="font-semibold text-gray-800 arabic-spacing">
-                      اختر الفئات
-                    </h4>
-                    <p className="text-sm text-gray-600 arabic-spacing">
-                      انقر على فئة لإضافة مقاولين
-                    </p>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto">
-                    {PROJECT_CATEGORIES.map((category) => {
-                      const CategoryIcon =
-                        categoryIcons[
-                          category.id as keyof typeof categoryIcons
-                        ];
-                      const categoryContractors =
-                        projectForm.categoryAssignments.filter(
-                          (a) => a.mainCategory === category.name
-                        );
-
-                      return (
-                        <div key={category.id}>
-                          <button
-                            onClick={() =>
-                              setExpandedCategory(
-                                expandedCategory === category.id
-                                  ? null
-                                  : category.id
-                              )
-                            }
-                            className="w-full p-3 text-right hover:bg-blue-50 border-b border-gray-100 transition-colors"
-                          >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2 space-x-reverse">
-                                <CategoryIcon className="h-5 w-5 text-[#182C61] no-flip" />
-                                <span className="font-medium text-gray-800 arabic-spacing">
-                                  {category.name}
-                                </span>
-                              </div>
-                              <div className="flex items-center space-x-2 space-x-reverse">
-                                {categoryContractors.length > 0 && (
-                                  <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                                    {categoryContractors.length}
-                                  </span>
-                                )}
-                                <ChevronDown
-                                  className={`h-4 w-4 text-gray-400 transition-transform ${
-                                    expandedCategory === category.id
-                                      ? "rotate-180"
-                                      : ""
-                                  } no-flip`}
-                                />
-                              </div>
-                            </div>
-                          </button>
-
-                          {expandedCategory === category.id && (
-                            <div className="bg-gray-50 border-t border-gray-200">
-                              {category.subcategories.map((subcategory) => {
-                                const subcategoryContractors =
-                                  categoryContractors.filter(
-                                    (a) => a.subcategory === subcategory
-                                  );
-
-                                return (
-                                  <button
-                                    key={subcategory}
-                                    onClick={() => {
-                                      const newAssignment: ProjectCategoryAssignmentFormData =
-                                        {
-                                          mainCategory: category.name,
-                                          subcategory: subcategory,
-                                          contractors: [],
-                                        };
-                                      setProjectForm({
-                                        ...projectForm,
-                                        categoryAssignments: [
-                                          ...projectForm.categoryAssignments,
-                                          newAssignment,
-                                        ],
-                                      });
-                                    }}
-                                    className="w-full p-2 pr-8 text-right hover:bg-blue-50 border-b border-gray-100 text-sm transition-colors"
-                                  >
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-gray-700 arabic-spacing">
-                                        {subcategory}
-                                      </span>
-                                      <div className="flex items-center space-x-1 space-x-reverse">
-                                        {subcategoryContractors.length > 0 && (
-                                          <span className="bg-green-100 text-green-800 text-xs px-1.5 py-0.5 rounded">
-                                            {subcategoryContractors.length}
-                                          </span>
-                                        )}
-                                        <Plus className="h-3 w-3 text-blue-600 no-flip" />
-                                      </div>
-                                    </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Side - Contractor Assignments */}
-              <div className="lg:col-span-3">
-                <div className="bg-white border border-gray-200 rounded-xl h-full flex flex-col">
-                  <div className="p-4 bg-gray-50 border-b border-gray-200 flex-shrink-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2 space-x-reverse">
-                        <Users className="h-5 w-5 text-[#182C61] no-flip" />
-                        <h4 className="font-semibold text-gray-800 arabic-spacing">
-                          المقاولون المعينون
-                        </h4>
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div
+                          className={`h-3 rounded-full transition-all ${
+                            calculateTotalEstimated() >
+                            parseFloat(projectForm.budgetEstimate)
+                              ? "bg-red-500"
+                              : "bg-green-500"
+                          }`}
+                          style={{
+                            width: `${Math.min(
+                              (calculateTotalEstimated() /
+                                parseFloat(projectForm.budgetEstimate)) *
+                                100,
+                              100
+                            )}%`,
+                          }}
+                        ></div>
                       </div>
-                      <span className="text-sm text-gray-500 arabic-spacing">
-                        {projectForm.categoryAssignments.length} مهمة
-                      </span>
                     </div>
+                  )}
+                </div>
+
+                {/* Added Categories */}
+                <div className="p-6 bg-white border border-gray-200 rounded-xl">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-3 space-x-reverse">
+                      <Users className="h-6 w-6 text-[#182C61] no-flip" />
+                      <h3 className="text-lg font-bold text-gray-900 arabic-spacing">
+                        الفئات المضافة
+                      </h3>
+                    </div>
+                    <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                      {projectForm.categoryAssignments.length} فئة
+                    </span>
                   </div>
 
-                  <div className="flex-1 overflow-y-auto p-4">
+                  <div className="space-y-6 max-h-96 overflow-y-auto">
                     {projectForm.categoryAssignments.length === 0 ? (
-                      <div className="text-center py-12">
+                      <div className="text-center py-8">
                         <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                           <Users className="h-8 w-8 text-gray-400 no-flip" />
                         </div>
                         <h3 className="text-lg font-medium text-gray-900 mb-2 arabic-spacing">
-                          لم يتم تعيين مقاولين بعد
+                          لم يتم إضافة فئات بعد
                         </h3>
                         <p className="text-gray-500 arabic-spacing">
-                          اختر فئة من القائمة اليسرى لبدء تعيين المقاولين
+                          استخدم النموذج على اليسار لإضافة الفئات والمقاولين
                         </p>
                       </div>
                     ) : (
-                      <div className="space-y-3">
-                        {projectForm.categoryAssignments.map(
-                          (assignment, index) => (
+                      projectForm.categoryAssignments.map(
+                        (assignment, assignmentIndex) => {
+                          const isLocked = isCategoryLocked(assignment);
+
+                          return (
                             <div
-                              key={index}
-                              className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
+                              key={assignmentIndex}
+                              className={`rounded-xl p-4 ${
+                                isLocked
+                                  ? "bg-red-50 border-2 border-red-200"
+                                  : "bg-gray-50"
+                              }`}
                             >
-                              {/* Assignment Header */}
                               <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center space-x-2 space-x-reverse">
-                                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                                  <span className="font-medium text-gray-800 arabic-spacing text-sm">
-                                    {assignment.subcategory}
-                                  </span>
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    removeCategoryAssignment(index)
-                                  }
-                                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 border-red-300 hover:border-red-400"
-                                >
-                                  <Trash2 className="h-4 w-4 no-flip" />
-                                </Button>
-                              </div>
-
-                              {/* Category Badge */}
-                              <div className="mb-3">
-                                <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full arabic-spacing">
-                                  {assignment.mainCategory}
-                                </span>
-                              </div>
-
-                              {/* Compact Form */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {/* Contractor Selection */}
-                                <div className="space-y-1">
-                                  <label className="block text-xs font-medium text-gray-700 arabic-spacing">
-                                    المقاول *
-                                  </label>
-                                  <Select
-                                    value={
-                                      assignment.contractors[0].contractorId
-                                    }
-                                    onChange={(e) =>
-                                      updateCategoryAssignment(
-                                        index,
-                                        "contractors",
-                                        e.target.value
-                                      )
-                                    }
-                                    className="h-10 text-sm"
-                                  >
-                                    <option value="">اختر المقاول</option>
-                                    {contractors
-                                      .filter((c) => c.is_active)
-                                      .map((contractor) => (
-                                        <option
-                                          key={contractor.id}
-                                          value={contractor.id}
+                                <div>
+                                  <div className="flex items-center space-x-2 space-x-reverse mb-1">
+                                    <span
+                                      className={`inline-block text-xs px-2 py-1 rounded-full arabic-spacing ${
+                                        isLocked
+                                          ? "bg-red-100 text-red-800"
+                                          : "bg-blue-100 text-blue-800"
+                                      }`}
+                                    >
+                                      {assignment.mainCategory}
+                                    </span>
+                                    {isLocked && (
+                                      <div className="flex items-center space-x-1 space-x-reverse">
+                                        <svg
+                                          className="h-4 w-4 text-red-600 no-flip"
+                                          fill="currentColor"
+                                          viewBox="0 0 20 20"
                                         >
-                                          {contractor.full_name}
-                                        </option>
-                                      ))}
-                                  </Select>
-                                  {!assignment.contractors[0].contractorId && (
-                                    <Input
-                                      value={
-                                        assignment.contractors[0].contractorName
-                                      }
-                                      onChange={(e) =>
-                                        updateCategoryAssignment(
-                                          index,
-                                          "contractors",
-                                          e.target.value
-                                        )
-                                      }
-                                      className="h-10 text-sm mt-1"
-                                      placeholder="أو أدخل اسم المقاول"
-                                    />
-                                  )}
+                                          <path
+                                            fillRule="evenodd"
+                                            d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                                            clipRule="evenodd"
+                                          />
+                                        </svg>
+                                        <span className="text-xs text-red-600 arabic-spacing font-medium">
+                                          محمي - تم إنشاء فواتير
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  <h4
+                                    className={`font-semibold arabic-spacing ${
+                                      isLocked
+                                        ? "text-red-800"
+                                        : "text-gray-800"
+                                    }`}
+                                  >
+                                    {assignment.subcategory}
+                                  </h4>
                                 </div>
-
-                                {/* Estimated Amount */}
-                                <div className="space-y-1">
-                                  <label className="block text-xs font-medium text-gray-700 arabic-spacing">
-                                    المبلغ المقدر *
-                                  </label>
-                                  <Input
-                                    type="number"
-                                    step="1"
-                                    min="0"
-                                    value={
-                                      assignment.contractors[0].estimatedAmount
-                                    }
-                                    onChange={(e) =>
-                                      updateCategoryAssignment(
-                                        index,
-                                        "contractors",
-                                        e.target.value
-                                      )
-                                    }
-                                    className="h-10 text-sm"
-                                    placeholder="0"
-                                  />
-                                  {assignment.contractors[0]
-                                    .estimatedAmount && (
-                                    <p className="text-[#182C61] text-xs font-medium">
-                                      💰{" "}
-                                      {new Intl.NumberFormat("ar-IQ").format(
-                                        Number(
-                                          assignment.contractors[0]
-                                            .estimatedAmount
-                                        )
-                                      )}{" "}
-                                      د.ع
+                                {isLocked && (
+                                  <div className="mt-2 p-2 bg-red-100 border border-red-300 rounded-lg">
+                                    <p className="text-xs text-red-700 arabic-spacing">
+                                      🔒 لا يمكن تعديل أو حذف هذه الفئة لأنه تم
+                                      إنشاء فواتير لها مسبقاً
                                     </p>
-                                  )}
-                                </div>
+                                  </div>
+                                )}
                               </div>
 
-                              {/* Notes */}
-                              <div className="mt-3 space-y-1">
-                                <label className="block text-xs font-medium text-gray-700 arabic-spacing">
-                                  ملاحظات
-                                </label>
-                                <Input
-                                  value={assignment.contractors[0].notes || ""}
-                                  onChange={(e) =>
-                                    updateCategoryAssignment(
-                                      index,
-                                      "contractors",
-                                      e.target.value
-                                    )
-                                  }
-                                  className="h-8 text-sm arabic-spacing"
-                                  placeholder="ملاحظات إضافية..."
-                                />
+                              <div className="space-y-3">
+                                {assignment.contractors.map(
+                                  (contractor, contractorIndex) => (
+                                    <div
+                                      key={contractorIndex}
+                                      className={`flex items-center justify-between p-3 rounded-lg ${
+                                        isLocked ? "bg-red-100" : "bg-white"
+                                      }`}
+                                    >
+                                      <div className="flex-1">
+                                        <div className="flex items-center space-x-2 space-x-reverse">
+                                          <User
+                                            className={`h-4 w-4 no-flip ${
+                                              isLocked
+                                                ? "text-red-500"
+                                                : "text-gray-400"
+                                            }`}
+                                          />
+                                          <span
+                                            className={`font-medium arabic-spacing ${
+                                              isLocked
+                                                ? "text-red-800"
+                                                : "text-gray-800"
+                                            }`}
+                                          >
+                                            {contractor.contractorName}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center space-x-4 space-x-reverse mt-1">
+                                          <span
+                                            className={`text-sm arabic-spacing ${
+                                              isLocked
+                                                ? "text-red-700"
+                                                : "text-gray-600"
+                                            }`}
+                                          >
+                                            💰{" "}
+                                            {new Intl.NumberFormat(
+                                              "ar-IQ"
+                                            ).format(
+                                              Number(
+                                                contractor.estimatedAmount
+                                              ) || 0
+                                            )}{" "}
+                                            د.ع
+                                          </span>
+                                          {contractor.notes && (
+                                            <span
+                                              className={`text-xs arabic-spacing ${
+                                                isLocked
+                                                  ? "text-red-600"
+                                                  : "text-gray-500"
+                                              }`}
+                                            >
+                                              📝 {contractor.notes}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {!isLocked && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() =>
+                                            removeContractor(
+                                              assignmentIndex,
+                                              contractorIndex
+                                            )
+                                          }
+                                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 border-red-300 hover:border-red-400"
+                                        >
+                                          <Trash2 className="h-4 w-4 no-flip" />
+                                        </Button>
+                                      )}
+                                      {isLocked && (
+                                        <div className="flex items-center space-x-1 space-x-reverse text-red-600">
+                                          <svg
+                                            className="h-4 w-4 no-flip"
+                                            fill="currentColor"
+                                            viewBox="0 0 20 20"
+                                          >
+                                            <path
+                                              fillRule="evenodd"
+                                              d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                                              clipRule="evenodd"
+                                            />
+                                          </svg>
+                                          <span className="text-xs font-medium">
+                                            محمي
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )
+                                )}
                               </div>
                             </div>
-                          )
-                        )}
-                      </div>
+                          );
+                        }
+                      )
                     )}
                   </div>
                 </div>
@@ -863,10 +1116,32 @@ export default function EnhancedProjectModal({
         <div className="p-4 sm:p-6 lg:p-8 border-t border-gray-200 bg-gray-50 flex-shrink-0">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600 arabic-spacing">
-              <span className="font-medium">نصيحة:</span>
-              {currentStep === "basic"
-                ? "تأكد من دقة البيانات الأساسية قبل المتابعة"
-                : "يمكنك إضافة عدة مقاولين لنفس الفئة حسب الحاجة"}
+              {hasLockedCategories && currentStep === "categories" ? (
+                <div className="flex items-center space-x-2 space-x-reverse text-red-600">
+                  <svg
+                    className="h-4 w-4 no-flip"
+                    fill="currentColor"
+                    viewBox="0 0 20 20"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span className="font-medium">
+                    تحذير: بعض الفئات محمية ولا يمكن تعديلها لوجود فواتير مرتبطة
+                    بها
+                  </span>
+                </div>
+              ) : (
+                <div>
+                  <span className="font-medium">نصيحة:</span>
+                  {currentStep === "basic"
+                    ? " تأكد من دقة البيانات الأساسية قبل المتابعة"
+                    : " يجب اختيار جميع الخيارات من القوائم المنسدلة فقط"}
+                </div>
+              )}
             </div>
 
             <div className="flex space-x-3 space-x-reverse">
@@ -903,7 +1178,7 @@ export default function EnhancedProjectModal({
               ) : (
                 <Button
                   onClick={onSubmit}
-                  disabled={!isFormValid || loading}
+                  disabled={!canSaveProject || loading}
                   className="px-6 py-3 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (

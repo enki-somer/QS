@@ -176,43 +176,13 @@ export default function GeneralExpensesPage() {
       notes: expenseForm.notes,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      // Workflow tracking
-      status: isDataEntry() ? "pending_approval" : "approved",
+      // Workflow tracking - all expenses require approval for better control
+      status: "pending_approval",
       submittedBy: user?.fullName || user?.username || "مستخدم غير معروف",
     };
 
-    // Admin users: Process payment through SAFE immediately
-    if (hasPermission("canMakePayments") && !isDataEntry()) {
-      if (!hasBalance(expenseAmount)) {
-        addToast({
-          type: "error",
-          title: "رصيد الخزينة غير كافي",
-          message: `المصروف يتطلب ${formatCurrency(
-            expenseAmount
-          )} لكن الرصيد المتاح ${formatCurrency(safeState.currentBalance)}`,
-        });
-        return;
-      }
-
-      const paymentSuccess = deductForExpense(
-        expenseAmount,
-        expenseForm.description,
-        expenseForm.category
-      );
-
-      if (!paymentSuccess) {
-        addToast({
-          type: "error",
-          title: "فشل في دفع المصروف",
-          message: "حدث خطأ أثناء دفع المصروف، يرجى المحاولة مرة أخرى",
-        });
-        return;
-      }
-
-      newExpense.status = "paid";
-      newExpense.approvedBy = user?.fullName || user?.username || "المدير";
-      newExpense.approvedAt = new Date().toISOString();
-    }
+    // All expenses now go through approval workflow for better financial control
+    // Admins can approve them through the notifications/approval modal
 
     const updatedExpenses = [...expenses, newExpense];
     setExpenses(updatedExpenses);
