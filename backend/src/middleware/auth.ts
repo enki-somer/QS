@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { databaseUserService } from '../../database/services/userService';
 import { AuthenticatedUser, UserRole, ROLE_PERMISSIONS } from '../types';
+import { getRolePermissions } from './rolePermissions';
 
 // Extend Express Request type to include user
 declare global {
@@ -95,16 +96,21 @@ export const requirePermission = (permission: keyof typeof ROLE_PERMISSIONS.admi
       return;
     }
 
-    const userPermissions = ROLE_PERMISSIONS[req.user.role as UserRole];
+    const userPermissions = getRolePermissions(req.user.role as UserRole);
     
     if (!userPermissions[permission]) {
+      console.log(`🚫 Permission denied: ${req.user.username} (${req.user.role}) tried to access ${permission}`);
+      
       res.status(403).json({
         success: false,
         message: 'ليس لديك صلاحية لتنفيذ هذا الإجراء',
+        requiredPermission: permission,
+        userRole: req.user.role
       });
       return;
     }
 
+    console.log(`✅ Permission granted: ${req.user.username} (${req.user.role}) accessing ${permission}`);
     next();
   };
 };

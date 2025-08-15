@@ -1,10 +1,11 @@
 // Database entity types for PostgreSQL integration
 // نظام الإدارة المالية المتكامل لشركة قصر الشام
 
-export type UserRole = 'admin' | 'data_entry';
+export type UserRole = 'admin' | 'data_entry' | 'partners';
 export type ProjectStatus = 'planning' | 'active' | 'completed' | 'cancelled';
 export type InvoiceStatus = 'pending_approval' | 'approved' | 'paid' | 'rejected';
 export type ContractorCategory = 'main_contractor' | 'sub_contractor' | 'building_materials_supplier' | 'equipment_supplier' | 'transport_services' | 'engineering_consultant' | 'specialized_technical_services' | 'other';
+
 export type EmployeeStatus = 'active' | 'inactive';
 export type ExpenseStatus = 'pending_approval' | 'approved' | 'paid' | 'rejected';
 export type TransactionType = 'funding' | 'invoice_payment' | 'salary_payment' | 'general_expense';
@@ -45,6 +46,9 @@ export interface Project {
   location?: string;
   area?: number; // Project area in square meters (m²)
   budget_estimate: number;
+  allocated_budget?: number;  // Total budget allocated to contractor assignments
+  available_budget?: number;  // Remaining budget available for new assignments
+  spent_budget?: number;      // Total amount actually spent (approved invoices + expenses)
   client?: string;
   start_date?: Date;
   end_date?: Date;
@@ -53,6 +57,14 @@ export interface Project {
   created_by?: string;
   created_at: Date;
   updated_at: Date;
+  
+  // NEW FINANCIAL FIELDS
+  price_per_meter?: number;    // Price per square meter for construction calculation
+  owner_deal_price?: number;   // Total deal price agreed with project owner
+  owner_paid_amount?: number;  // Amount paid by owner so far (updated from safe transactions)
+  construction_cost?: number;  // Calculated: area * price_per_meter
+  profit_margin?: number;      // Calculated: (owner_deal_price - construction_cost) / owner_deal_price * 100
+  total_site_area?: number;    // Total area of the site (for comparison with construction area)
 }
 
 // Invoice entity
@@ -117,8 +129,8 @@ export interface InvoiceAttachment {
 export interface Contractor {
   id: string;
   full_name: string;
-  phone_number: string;
-  category: ContractorCategory;
+  phone_number?: string;
+  category?: string;
   notes?: string;
   is_active: boolean;
   created_by?: string;
@@ -138,6 +150,7 @@ export interface ProjectCategoryAssignment {
   actual_amount?: number;
   notes?: string;
   status: 'planned' | 'active' | 'completed' | 'cancelled';
+  assignment_type?: 'contractor' | 'purchasing';
   created_by?: string;
   created_at: Date;
   updated_at: Date;
@@ -147,10 +160,11 @@ export interface ProjectCategoryAssignment {
 export interface CreateProjectCategoryAssignmentData {
   main_category: string;
   subcategory: string;
-  contractor_id?: string; 
+  contractor_id?: string;
   contractor_name: string;
   estimated_amount: number;
   notes?: string;
+  assignment_type?: 'contractor' | 'purchasing';
 }
 
 // Project categories data structure
@@ -226,6 +240,15 @@ export interface SafeTransaction {
   // Metadata
   created_by?: string;
   created_at: Date;
+  
+  // Audit trail (for edited transactions)
+  is_edited?: boolean;
+  edit_reason?: string;
+  edited_by?: string;
+  edited_at?: Date;
+  
+  // Project linking and batch tracking
+  batch_number?: number;
 }
 
 // Safe state entity
@@ -347,12 +370,18 @@ export interface CreateProjectData {
   name: string;
   code: string;
   location?: string;
+  area?: number;
   budget_estimate: number;
   client?: string;
   start_date?: Date;
   end_date?: Date;
   status?: ProjectStatus;
   notes?: string;
+  
+  // NEW FINANCIAL FIELDS
+  price_per_meter?: number;
+  owner_deal_price?: number;
+  owner_paid_amount?: number;
 }
 
 export interface CreateInvoiceData {
@@ -372,8 +401,8 @@ export interface CreateInvoiceData {
 
 export interface CreateContractorData {
   full_name: string;
-  phone_number: string;
-  category: ContractorCategory;
+  phone_number?: string;
+  category?: string;
   notes?: string;
 }
 
@@ -412,4 +441,31 @@ export interface CreateSafeTransactionData {
   expense_id?: string;
   funding_source?: string;
   funding_notes?: string;
+  batch_number?: number;
+}
+
+// Data for editing safe transactions (admin only)
+export interface EditSafeTransactionData {
+  amount?: number;
+  description?: string;
+  funding_source?: string;
+  funding_notes?: string;
+  edit_reason: string; // Required for audit trail
+}
+
+// Funding source options for dynamic dropdown
+export interface FundingSource {
+  type: 'general' | 'rental' | 'factory' | 'contracts' | 'project';
+  label: string;
+  value: string;
+  projectId?: string;
+  projectCode?: string;
+  projectLocation?: string;
+  projectClient?: string;
+  projectStatus?: string;
+  batchNumber?: number;
+  remainingAmount?: number;
+  totalDealPrice?: number;
+  paidAmount?: number;
+  isAvailable?: boolean;
 } 

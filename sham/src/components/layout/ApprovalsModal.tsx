@@ -23,11 +23,17 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EnhancedInvoice, EnhancedGeneralExpense } from "@/types/shared";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import {
+  formatCurrency,
+  formatDate,
+  formatInvoiceNumber,
+  formatProjectId,
+} from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSafe } from "@/contexts/SafeContext";
 import { useToast } from "@/components/ui/Toast";
 import { apiRequest } from "@/lib/api";
+import InvoicePreviewModal from "./InvoicePreviewModal";
 
 interface ApprovalsModalProps {
   isOpen: boolean;
@@ -64,6 +70,9 @@ export default function ApprovalsModal({
       })
     | null
   >(null);
+  const [showInvoicePreview, setShowInvoicePreview] = useState(false);
+  const [selectedInvoiceForPreview, setSelectedInvoiceForPreview] =
+    useState<EnhancedInvoice | null>(null);
 
   // Helper function to get project name by ID
   const getProjectName = (projectId: string): string => {
@@ -135,28 +144,128 @@ export default function ApprovalsModal({
     setShowItemDetailModal(false);
   };
 
-  const loadPendingItems = async () => {
-    console.log("🔄 Loading pending items from localStorage and database...");
+  const openInvoicePreview = (invoice: EnhancedInvoice) => {
+    setSelectedInvoiceForPreview(invoice);
+    setShowInvoicePreview(true);
+  };
 
-    // Load pending invoices (localStorage)
-    const storedInvoices = localStorage.getItem("financial-invoices");
-    if (storedInvoices) {
-      try {
-        const invoices: EnhancedInvoice[] = JSON.parse(storedInvoices);
-        const pendingInvs = invoices.filter(
-          (inv) => inv.status === "pending_approval"
+  const closeInvoicePreview = () => {
+    setSelectedInvoiceForPreview(null);
+    setShowInvoicePreview(false);
+  };
+
+  const handlePreviewApprove = async (
+    invoice: EnhancedInvoice,
+    reason?: string
+  ) => {
+    await approveInvoice(invoice);
+    closeInvoicePreview();
+  };
+
+  const handlePreviewReject = async (
+    invoice: EnhancedInvoice,
+    reason: string
+  ) => {
+    try {
+      const response = await apiRequest(
+        `/category-invoices/${invoice.id}/reject`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            rejectionReason: reason,
+          }),
+        }
+      );
+
+      if (response.ok) {
+        console.log("✅ Database invoice rejected successfully");
+        setPendingInvoices((prev: any) =>
+          prev.filter((inv: any) => inv.id !== invoice.id)
         );
-        console.log(
-          `📋 Found ${invoices.length} total invoices, ${pendingInvs.length} pending`
-        );
-        setPendingInvoices(pendingInvs);
-      } catch (error) {
-        console.warn("Failed to load pending invoices:", error);
+
+        addToast({
+          type: "success",
+          title: "تم رفض الفاتورة",
+          message: `تم رفض فاتورة ${formatInvoiceNumber(
+            invoice.invoiceNumber
+          )} مع تسجيل السبب`,
+        });
+
+        // Reload pending items to refresh the list
+        await loadPendingItems();
+
+        // Trigger notification refresh
+        window.dispatchEvent(new CustomEvent("approvalStateChanged"));
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to reject invoice");
       }
-    } else {
-      console.log("📋 No invoices found in localStorage");
-      setPendingInvoices([]);
+    } catch (error: any) {
+      console.error("Error rejecting invoice:", error);
+      addToast({
+        type: "error",
+        title: "فشل في رفض الفاتورة",
+        message: error.message || "حدث خطأ أثناء رفض الفاتورة",
+      });
     }
+    closeInvoicePreview();
+  };
+
+  const loadPendingItems = async () => {
+    console.log("🔄 Loading pending items from database...");
+
+    let allPendingInvoices: EnhancedInvoice[] = [];
+
+    // Load pending category invoices from database (unified invoice storage)
+    try {
+      console.log("🔍 Calling /category-invoices/pending API...");
+      const response = await apiRequest("/category-invoices/pending");
+
+      if (response.ok) {
+        const data = await response.json();
+        const pendingCategoryInvoices = data.invoices || [];
+        console.log(
+          `📋 Found ${pendingCategoryInvoices.length} pending database category invoices`
+        );
+
+        if (pendingCategoryInvoices.length > 0) {
+          // Convert database invoices to EnhancedInvoice format
+          const formattedCategoryInvoices: EnhancedInvoice[] =
+            pendingCategoryInvoices.map((inv: any) => ({
+              id: inv.id,
+              projectId: inv.projectId,
+              invoiceNumber: inv.invoiceNumber,
+              amount: inv.amount,
+              date: inv.date,
+              notes: inv.notes || "",
+              status: inv.status,
+              submittedBy: inv.submittedByName || "Unknown",
+              createdAt: inv.createdAt,
+              updatedAt: inv.updatedAt,
+              // Additional fields for display
+              projectName: inv.projectName,
+              categoryName: inv.categoryName,
+              subcategoryName: inv.subcategoryName,
+              contractorName: inv.contractorName,
+              // Attachment fields for fraud prevention and comparison
+              customerInvoiceNumber: inv.customerInvoiceNumber,
+              attachmentData: inv.attachmentData,
+              attachmentFilename: inv.attachmentFilename,
+              attachmentSize: inv.attachmentSize,
+              attachmentType: inv.attachmentType,
+              // Mark as database invoice
+              isDatabaseInvoice: true,
+            }));
+
+          allPendingInvoices.push(...formattedCategoryInvoices);
+        }
+      }
+    } catch (error) {
+      console.warn("Error loading pending category invoices:", error);
+    }
+
+    console.log(`📋 Total pending invoices: ${allPendingInvoices.length}`);
+    setPendingInvoices(allPendingInvoices);
 
     // Load pending global expenses (localStorage)
     const storedExpenses = localStorage.getItem("financial-expenses");
@@ -240,71 +349,93 @@ export default function ApprovalsModal({
     }
 
     try {
-      // Call backend API to approve the invoice and lock the assignment
-      const response = await apiRequest(
-        `/category-invoices/${invoice.id}/approve`,
-        {
-          method: "POST",
-        }
+      console.log(
+        "💰 Attempting to approve invoice:",
+        invoice.id,
+        "Status:",
+        invoice.status
       );
 
-      if (!response.ok) {
-        const errorData = await response.json();
+      // Check if this invoice exists in the database by trying to approve it
+      // If the API call succeeds, it's a database invoice
+      // If it fails with 404, it's a frontend-only invoice
+      let isDatabaseInvoice = false;
 
-        // Handle specific case where assignment already has approved invoices
-        if (
-          errorData.error &&
-          errorData.error.includes(
-            "Cannot edit category assignment with approved invoices"
-          )
-        ) {
-          addToast({
-            type: "warning",
-            title: "التعيين محمي مسبقاً",
-            message: "هذا التعيين يحتوي على فواتير معتمدة مسبقاً",
-          });
-          // Still proceed with local approval since the assignment is already locked
-          const success = deductForInvoice(
-            invoice.amount,
-            invoice.projectId,
-            getProjectName(invoice.projectId),
-            invoice.invoiceNumber
-          );
-
-          if (success) {
-            updateInvoiceStatus(invoice.id, "paid");
-            addToast({
-              type: "success",
-              title: "تم اعتماد الفاتورة",
-              message: `تم اعتماد فاتورة ${
-                invoice.invoiceNumber
-              } ودفع ${formatCurrency(invoice.amount)}`,
-            });
+      try {
+        // Call backend API to approve the invoice and lock the assignment
+        const response = await apiRequest(
+          `/category-invoices/${invoice.id}/approve`,
+          {
+            method: "POST",
           }
-          return;
+        );
+
+        if (response.ok) {
+          isDatabaseInvoice = true;
+          console.log("✅ Database invoice approved successfully");
+        } else {
+          const errorData = await response.json();
+          if (response.status === 404) {
+            isDatabaseInvoice = false;
+            console.log(
+              "📄 Invoice not found in database - treating as frontend-only invoice"
+            );
+          } else {
+            console.error("Backend approval failed:", errorData);
+            throw new Error(
+              errorData.error || "Failed to approve invoice in database"
+            );
+          }
         }
-
-        throw new Error(errorData.error || "Failed to approve invoice");
+      } catch (error: any) {
+        if (error.message && error.message.includes("not found")) {
+          isDatabaseInvoice = false;
+          console.log(
+            "📄 Invoice not found in database - treating as frontend-only invoice"
+          );
+        } else {
+          throw error; // Re-throw other errors
+        }
       }
 
-      // Backend approval successful, now deduct from safe
-      const success = deductForInvoice(
-        invoice.amount,
-        invoice.projectId,
-        getProjectName(invoice.projectId),
-        invoice.invoiceNumber
-      );
+      // Only deduct from safe for frontend-only invoices
+      // Database invoices already handle deduction in the backend
+      if (!isDatabaseInvoice) {
+        const success = await deductForInvoice(
+          invoice.amount,
+          invoice.projectId,
+          getProjectName(invoice.projectId),
+          invoice.invoiceNumber,
+          invoice.id
+        );
 
-      if (success) {
-        updateInvoiceStatus(invoice.id, "paid");
-        addToast({
-          type: "success",
-          title: "تم اعتماد الفاتورة",
-          message: `تم اعتماد فاتورة ${
-            invoice.invoiceNumber
-          } ودفع ${formatCurrency(invoice.amount)}`,
-        });
+        if (!success) {
+          throw new Error("Failed to deduct from safe");
+        }
       }
+
+      // Update invoice status
+      updateInvoiceStatus(invoice.id, "paid");
+
+      addToast({
+        type: "success",
+        title: "تم اعتماد الفاتورة",
+        message: `تم اعتماد فاتورة ${formatInvoiceNumber(
+          invoice.invoiceNumber
+        )} ودفع ${formatCurrency(invoice.amount)}`,
+      });
+
+      // Reload pending items to reflect the change
+      await loadPendingItems();
+
+      // Trigger notification refresh
+      window.dispatchEvent(new CustomEvent("approvalStateChanged"));
+
+      // Trigger a page refresh to update assignment protection status
+      // This ensures the project detail page shows updated has_approved_invoice flags
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
     } catch (error: any) {
       console.error("Error approving invoice:", error);
       addToast({
@@ -349,8 +480,8 @@ export default function ApprovalsModal({
         }
 
         // Remove from pending list
-        setPendingExpenses((prev) =>
-          prev.filter((exp) => exp.id !== expense.id)
+        setPendingExpenses((prev: any) =>
+          prev.filter((exp: any) => exp.id !== expense.id)
         );
 
         // Refresh safe state to reflect the transaction
@@ -363,6 +494,18 @@ export default function ApprovalsModal({
             expense.description
           }" ودفع ${formatCurrency(expense.amount)} من الخزينة`,
         });
+
+        // Reload pending items to reflect the change
+        await loadPendingItems();
+
+        // Trigger notification refresh
+        window.dispatchEvent(new CustomEvent("approvalStateChanged"));
+
+        // Trigger a page refresh to update project expense status and budget calculations
+        // This ensures the project detail page shows updated expense status and spending
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
       } else {
         // Handle global expenses via localStorage (existing logic)
         if (!hasBalance(expense.amount)) {
@@ -391,6 +534,12 @@ export default function ApprovalsModal({
               expense.description
             } ودفع ${formatCurrency(expense.amount)}`,
           });
+
+          // Reload pending items to reflect the change
+          await loadPendingItems();
+
+          // Trigger notification refresh
+          window.dispatchEvent(new CustomEvent("approvalStateChanged"));
         }
       }
     } catch (error: any) {
@@ -425,7 +574,9 @@ export default function ApprovalsModal({
         "financial-invoices",
         JSON.stringify(updatedInvoices)
       );
-      setPendingInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
+      setPendingInvoices((prev: any) =>
+        prev.filter((inv: any) => inv.id !== invoiceId)
+      );
 
       // Trigger a storage event to update notification count in MainLayout
       window.dispatchEvent(new Event("storage"));
@@ -454,7 +605,9 @@ export default function ApprovalsModal({
         "financial-expenses",
         JSON.stringify(updatedExpenses)
       );
-      setPendingExpenses((prev) => prev.filter((exp) => exp.id !== expenseId));
+      setPendingExpenses((prev: any) =>
+        prev.filter((exp: any) => exp.id !== expenseId)
+      );
 
       // Trigger a storage event to update notification count in MainLayout
       window.dispatchEvent(new Event("storage"));
@@ -471,72 +624,97 @@ export default function ApprovalsModal({
     setShowRejectModal(true);
   };
 
-  const confirmReject = () => {
+  const confirmReject = async () => {
     if (!itemToReject) return;
 
     const reason =
       rejectionReason.trim() || "تم الرفض من المدير - يرجى مراجعة البيانات";
 
-    if (itemToReject.type === "invoice") {
-      // Update with rejection reason
-      const storedInvoices = localStorage.getItem("financial-invoices");
-      if (storedInvoices) {
-        const invoices: EnhancedInvoice[] = JSON.parse(storedInvoices);
-        const updatedInvoices = invoices.map((inv) =>
-          inv.id === itemToReject.id
-            ? {
-                ...inv,
-                status: "rejected" as const,
-                rejectionReason: reason,
-                approvedBy: user?.fullName || "المدير",
-                approvedAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              }
-            : inv
+    try {
+      if (itemToReject.type === "invoice") {
+        // All invoices are now in database - reject via backend API
+        console.log(
+          "🔍 Attempting to reject database invoice:",
+          itemToReject.id,
+          "with reason:",
+          reason
         );
-        localStorage.setItem(
-          "financial-invoices",
-          JSON.stringify(updatedInvoices)
+
+        const response = await apiRequest(
+          `/category-invoices/${itemToReject.id}/reject`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              rejectionReason: reason,
+            }),
+          }
         );
-        setPendingInvoices((prev) =>
-          prev.filter((inv) => inv.id !== itemToReject.id)
-        );
+
+        if (response.ok) {
+          console.log("✅ Database invoice rejected successfully");
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to reject invoice");
+        }
+
+        // Remove from pending invoices list
+        console.log("🔍 Removing invoice from pending list:", itemToReject.id);
+        setPendingInvoices((prev: any) => {
+          const filtered = prev.filter(
+            (inv: any) => inv.id !== itemToReject.id
+          );
+          console.log("🔍 Pending invoices after removal:", filtered.length);
+          return filtered;
+        });
+      } else {
+        // Handle expense rejection (existing logic)
+        const storedExpenses = localStorage.getItem("financial-expenses");
+        if (storedExpenses) {
+          const expenses: EnhancedGeneralExpense[] = JSON.parse(storedExpenses);
+          const updatedExpenses = expenses.map((exp) =>
+            exp.id === itemToReject.id
+              ? {
+                  ...exp,
+                  status: "rejected" as const,
+                  rejectionReason: reason,
+                  approvedBy: user?.fullName || "المدير",
+                  approvedAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                }
+              : exp
+          );
+          localStorage.setItem(
+            "financial-expenses",
+            JSON.stringify(updatedExpenses)
+          );
+          setPendingExpenses((prev: any) =>
+            prev.filter((exp: any) => exp.id !== itemToReject.id)
+          );
+        }
       }
-    } else {
-      // Update expense with rejection reason
-      const storedExpenses = localStorage.getItem("financial-expenses");
-      if (storedExpenses) {
-        const expenses: EnhancedGeneralExpense[] = JSON.parse(storedExpenses);
-        const updatedExpenses = expenses.map((exp) =>
-          exp.id === itemToReject.id
-            ? {
-                ...exp,
-                status: "rejected" as const,
-                rejectionReason: reason,
-                approvedBy: user?.fullName || "المدير",
-                approvedAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              }
-            : exp
-        );
-        localStorage.setItem(
-          "financial-expenses",
-          JSON.stringify(updatedExpenses)
-        );
-        setPendingExpenses((prev) =>
-          prev.filter((exp) => exp.id !== itemToReject.id)
-        );
-      }
+
+      // Trigger storage event for notification update
+      window.dispatchEvent(new Event("storage"));
+
+      addToast({
+        type: "success",
+        title: "تم رفض العنصر",
+        message: `تم رفض ${itemToReject.title} مع تسجيل السبب`,
+      });
+
+      // Reload pending items to refresh the list
+      await loadPendingItems();
+
+      // Trigger notification refresh
+      window.dispatchEvent(new CustomEvent("approvalStateChanged"));
+    } catch (error: any) {
+      console.error("Error rejecting item:", error);
+      addToast({
+        type: "error",
+        title: "فشل في رفض العنصر",
+        message: error.message || "حدث خطأ أثناء رفض العنصر",
+      });
     }
-
-    // Trigger storage event for notification update
-    window.dispatchEvent(new Event("storage"));
-
-    addToast({
-      type: "success",
-      title: "تم رفض العنصر",
-      message: `تم رفض ${itemToReject.title} مع تسجيل السبب`,
-    });
 
     setShowRejectModal(false);
     setItemToReject(null);
@@ -545,14 +723,20 @@ export default function ApprovalsModal({
 
   // Filter and combine items
   const allItems = [
-    ...pendingInvoices.map((inv) => ({ ...inv, itemType: "invoice" as const })),
-    ...pendingExpenses.map((exp) => ({ ...exp, itemType: "expense" as const })),
+    ...pendingInvoices.map((inv: any) => ({
+      ...inv,
+      itemType: "invoice" as const,
+    })),
+    ...pendingExpenses.map((exp: any) => ({
+      ...exp,
+      itemType: "expense" as const,
+    })),
   ];
 
   const filteredItems = allItems.filter((item) => {
     const matchesSearch =
       (item.itemType === "invoice" &&
-        (item.invoiceNumber
+        (formatInvoiceNumber(item.invoiceNumber)
           ?.toLowerCase()
           .includes(searchQuery.toLowerCase()) ||
           item.notes?.toLowerCase().includes(searchQuery.toLowerCase()))) ||
@@ -587,8 +771,7 @@ export default function ApprovalsModal({
                   اعتماد المعاملات المالية
                 </h2>
                 <p className="text-amber-100 arabic-spacing">
-                  {filteredItems.length} عنصر بانتظار موافقتك • الإجمالي:{" "}
-                  {formatCurrency(totalAmount)}
+                  {filteredItems.length} عنصر • {formatCurrency(totalAmount)}
                 </p>
               </div>
             </div>
@@ -666,19 +849,6 @@ export default function ApprovalsModal({
                   className="border-l-4 border-l-amber-400 shadow-sm hover:shadow-md transition-shadow relative"
                 >
                   <CardContent className="p-4">
-                    {/* Clickable area for details - positioned at top right */}
-                    <div className="absolute top-2 right-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => openItemDetailModal(item)}
-                        className="h-8 w-8 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
-                        title="عرض التفاصيل الكاملة"
-                      >
-                        <Eye className="h-4 w-4 no-flip" />
-                      </Button>
-                    </div>
-
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center space-x-3 space-x-reverse mb-2">
@@ -697,238 +867,114 @@ export default function ApprovalsModal({
                           </div>
 
                           <div className="flex-1">
-                            <div className="flex items-center space-x-2 space-x-reverse mb-2">
-                              <h4 className="font-semibold text-gray-900 arabic-spacing">
-                                {item.itemType === "invoice"
-                                  ? `فاتورة: ${
-                                      (item as EnhancedInvoice).invoiceNumber
-                                    }`
-                                  : (item as EnhancedGeneralExpense)
-                                      .description}
-                              </h4>
-                              <span
-                                className={`text-xs px-2 py-1 rounded-full arabic-spacing ${
-                                  item.itemType === "invoice"
-                                    ? "bg-blue-100 text-blue-700"
-                                    : "bg-orange-100 text-orange-700"
-                                }`}
-                              >
-                                {item.itemType === "invoice"
-                                  ? getProjectName(
-                                      (item as EnhancedInvoice).projectId
-                                    )
-                                  : (item as EnhancedGeneralExpense).category}
+                            {/* Clean Header */}
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-2 space-x-reverse">
+                                <h4 className="font-semibold text-gray-900 arabic-spacing">
+                                  {item.itemType === "invoice"
+                                    ? formatInvoiceNumber(
+                                        (item as EnhancedInvoice).invoiceNumber
+                                      )
+                                    : (item as EnhancedGeneralExpense)
+                                        .description}
+                                </h4>
+                                {/* Attachment Indicator */}
+                                {item.itemType === "invoice" &&
+                                  ((item as any).customerInvoiceNumber ||
+                                    (item as any).attachmentData) && (
+                                    <div className="flex items-center text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
+                                      <FileText className="h-3 w-3 ml-1" />
+                                    </div>
+                                  )}
+                              </div>
+                              <span className="text-lg font-bold text-green-600 arabic-spacing">
+                                {formatCurrency(item.amount)}
                               </span>
                             </div>
 
-                            {/* Detailed Information */}
-                            <div className="bg-gray-50 p-3 rounded-lg mb-3 space-y-2 text-sm">
-                              {item.itemType === "invoice" ? (
-                                // Invoice Details
-                                <div className="space-y-1">
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                      <span className="text-gray-600 arabic-spacing">
-                                        اسم المشروع:
-                                      </span>
-                                      <span className="font-medium mr-2 arabic-spacing bg-white text-gray-700">
-                                        {getProjectName(
+                            {/* Essential Info - Single Clean Line */}
+                            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                              <div className="flex items-center space-x-4 space-x-reverse">
+                                {item.itemType === "invoice" ? (
+                                  <>
+                                    <span className="arabic-spacing">
+                                      {(item as any).projectName ||
+                                        getProjectName(
                                           (item as EnhancedInvoice).projectId
                                         )}
+                                    </span>
+                                    {(item as any).contractorName && (
+                                      <span className="text-orange-700 arabic-spacing">
+                                        • {(item as any).contractorName}
                                       </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-gray-500 arabic-spacing">
-                                        تاريخ الاستحقاق:
-                                      </span>
-                                      <span className="font-medium mr-2 arabic-spacing text-gray-700">
-                                        {(item as EnhancedInvoice).dueDate
-                                          ? formatDate(
-                                              (item as EnhancedInvoice).dueDate!
-                                            )
-                                          : "غير محدد"}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  {(item as EnhancedInvoice).taxPercentage && (
-                                    <div>
-                                      <span className="text-gray-500 arabic-spacing">
-                                        نسبة الضريبة:
-                                      </span>
-                                      <span className="font-medium mr-2 arabic-nums">
-                                        {
-                                          (item as EnhancedInvoice)
-                                            .taxPercentage
-                                        }
-                                        %
-                                      </span>
-                                    </div>
-                                  )}
-
-                                  {(item as EnhancedInvoice).discountAmount && (
-                                    <div>
-                                      <span className="text-gray-500 arabic-spacing">
-                                        قيمة الخصم:
-                                      </span>
-                                      <span className="font-medium mr-2 arabic-nums">
-                                        {formatCurrency(
-                                          (item as EnhancedInvoice)
-                                            .discountAmount!
-                                        )}
-                                      </span>
-                                    </div>
-                                  )}
-
-                                  {(item as EnhancedInvoice).paymentTerms && (
-                                    <div>
-                                      <span className="text-gray-500 arabic-spacing">
-                                        شروط الدفع:
-                                      </span>
-                                      <span className="font-medium mr-2 arabic-spacing">
-                                        {(item as EnhancedInvoice).paymentTerms}
-                                      </span>
-                                    </div>
-                                  )}
-
-                                  {(item as EnhancedInvoice).notes && (
-                                    <div>
-                                      <span className="text-gray-500 arabic-spacing">
-                                        ملاحظات:
-                                      </span>
-                                      <span className="font-medium mr-2 arabic-spacing">
-                                        {(item as EnhancedInvoice).notes}
-                                      </span>
-                                    </div>
-                                  )}
-
-                                  {(item as EnhancedInvoice).customFields &&
-                                    (item as EnhancedInvoice).customFields!
-                                      .length > 0 && (
-                                      <div>
-                                        <span className="text-gray-500 arabic-spacing">
-                                          حقول إضافية:
-                                        </span>
-                                        <div className="mt-1 space-y-1">
-                                          {(
-                                            item as EnhancedInvoice
-                                          ).customFields!.map(
-                                            (field, index) => (
-                                              <div
-                                                key={index}
-                                                className="text-xs bg-white p-2 rounded border"
-                                              >
-                                                <span className="text-gray-600 arabic-spacing">
-                                                  {field.label}:
-                                                </span>
-                                                <span className="font-medium mr-2 arabic-spacing">
-                                                  {field.value}
-                                                </span>
-                                              </div>
-                                            )
-                                          )}
-                                        </div>
-                                      </div>
                                     )}
-                                </div>
-                              ) : (
-                                // Expense Details
-                                <div className="space-y-1">
-                                  <div>
-                                    <span className="text-gray-500 arabic-spacing">
-                                      الوصف التفصيلي:
-                                    </span>
-                                    <span className="font-medium mr-2 arabic-spacing">
-                                      {
-                                        (item as EnhancedGeneralExpense)
-                                          .description
-                                      }
-                                    </span>
-                                  </div>
-
-                                  <div>
-                                    <span className="text-gray-500 arabic-spacing">
-                                      الفئة:
-                                    </span>
-                                    <span className="font-medium mr-2 arabic-spacing">
-                                      {
-                                        (item as EnhancedGeneralExpense)
-                                          .category
-                                      }
-                                    </span>
-                                  </div>
-
-                                  {(item as EnhancedGeneralExpense).notes && (
-                                    <div>
-                                      <span className="text-gray-500 arabic-spacing">
-                                        ملاحظات إضافية:
-                                      </span>
-                                      <span className="font-medium mr-2 arabic-spacing">
-                                        {(item as EnhancedGeneralExpense).notes}
-                                      </span>
-                                    </div>
-                                  )}
-
-                                  {(item as EnhancedGeneralExpense)
-                                    .receiptImage && (
-                                    <div>
-                                      <span className="text-gray-500 arabic-spacing">
-                                        إيصال مرفق:
-                                      </span>
-                                      <span className="text-green-600 mr-2 arabic-spacing">
-                                        ✓ متوفر
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex items-center space-x-4 space-x-reverse text-xs text-gray-500">
-                              <div className="flex items-center space-x-1 space-x-reverse">
-                                <UserIcon className="h-3 w-3 no-flip" />
-                                <span className="arabic-spacing">
-                                  تم الإدخال بواسطة:{" "}
-                                  {getUserFriendlyName(item.submittedBy)}
-                                </span>
+                                  </>
+                                ) : (
+                                  <span className="arabic-spacing">
+                                    {(item as EnhancedGeneralExpense).category}
+                                  </span>
+                                )}
                               </div>
-                              <div className="flex items-center space-x-1 space-x-reverse">
-                                <Calendar className="h-3 w-3 no-flip" />
-                                <span className="arabic-spacing">
-                                  بتاريخ: {formatDate(item.date)}
-                                </span>
-                              </div>
+                              <span className="text-xs text-gray-500 arabic-spacing">
+                                {formatDate(item.date)}
+                              </span>
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center space-x-4 space-x-reverse">
-                        <div className="text-right">
-                          <div className="text-xl font-bold text-green-600 arabic-nums">
-                            {formatCurrency(item.amount)}
-                          </div>
-                          <div className="text-xs text-gray-500 arabic-spacing">
-                            {hasBalance(item.amount)
-                              ? "رصيد كافي"
-                              : "رصيد غير كافي"}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center space-x-2 space-x-reverse">
+                      <div className="flex items-center space-x-2 space-x-reverse">
+                        {/* Preview Button for Invoices - Primary Action */}
+                        {item.itemType === "invoice" && (
                           <Button
                             size="sm"
                             onClick={() =>
-                              item.itemType === "invoice"
-                                ? approveInvoice(item as EnhancedInvoice)
-                                : approveExpense(item as EnhancedGeneralExpense)
+                              openInvoicePreview(item as EnhancedInvoice)
                             }
-                            disabled={!hasBalance(item.amount)}
-                            className="bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300"
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            title="معاينة شاملة للفاتورة مع إمكانية الاعتماد"
                           >
-                            <CheckCircle className="h-4 w-4 ml-1 no-flip" />
-                            <span className="arabic-spacing">اعتماد ودفع</span>
+                            <Eye className="h-4 w-4 ml-1 no-flip" />
+                            <span className="arabic-spacing">
+                              معاينة واعتماد
+                            </span>
                           </Button>
+                        )}
+
+                        {/* Quick Actions for Expenses */}
+                        {item.itemType === "expense" && (
+                          <>
+                            <Button
+                              size="sm"
+                              onClick={() =>
+                                approveExpense(item as EnhancedGeneralExpense)
+                              }
+                              disabled={!hasBalance(item.amount)}
+                              className="bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300"
+                            >
+                              <CheckCircle className="h-4 w-4 ml-1 no-flip" />
+                              <span className="arabic-spacing">اعتماد</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                openRejectModal(
+                                  item.id,
+                                  item.itemType,
+                                  (item as EnhancedGeneralExpense).description
+                                )
+                              }
+                              className="border-red-300 text-red-600 hover:bg-red-50"
+                            >
+                              <XCircle className="h-4 w-4 ml-1 no-flip" />
+                              <span className="arabic-spacing">رفض</span>
+                            </Button>
+                          </>
+                        )}
+
+                        {/* Quick Reject for Invoices */}
+                        {item.itemType === "invoice" && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -936,19 +982,18 @@ export default function ApprovalsModal({
                               openRejectModal(
                                 item.id,
                                 item.itemType,
-                                item.itemType === "invoice"
-                                  ? `فاتورة ${
-                                      (item as EnhancedInvoice).invoiceNumber
-                                    }`
-                                  : (item as EnhancedGeneralExpense).description
+                                `فاتورة ${formatInvoiceNumber(
+                                  (item as EnhancedInvoice).invoiceNumber
+                                )}`
                               )
                             }
                             className="border-red-300 text-red-600 hover:bg-red-50"
+                            title="رفض سريع بدون معاينة"
                           >
                             <XCircle className="h-4 w-4 ml-1 no-flip" />
                             <span className="arabic-spacing">رفض</span>
                           </Button>
-                        </div>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -1006,7 +1051,7 @@ export default function ApprovalsModal({
                     تأكيد رفض العنصر
                   </h3>
                   <p className="text-sm text-gray-600 arabic-spacing">
-                    هل أنت متأكد من رفض {itemToReject.title}؟
+                    هل أنت متأكد من رفض {itemToReject?.title}؟
                   </p>
                 </div>
               </div>
@@ -1067,7 +1112,7 @@ export default function ApprovalsModal({
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3 space-x-reverse">
                   <div className="bg-white/20 p-2 rounded-lg">
-                    {selectedItem.itemType === "invoice" ? (
+                    {selectedItem?.itemType === "invoice" ? (
                       <Building2 className="h-6 w-6 no-flip" />
                     ) : (
                       <Receipt className="h-6 w-6 no-flip" />
@@ -1075,18 +1120,18 @@ export default function ApprovalsModal({
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold arabic-spacing">
-                      {selectedItem.itemType === "invoice"
-                        ? `تفاصيل الفاتورة: ${
+                      {selectedItem?.itemType === "invoice"
+                        ? `تفاصيل الفاتورة: ${formatInvoiceNumber(
                             (selectedItem as EnhancedInvoice).invoiceNumber
-                          }`
+                          )}`
                         : `تفاصيل المصروف: ${
                             (selectedItem as EnhancedGeneralExpense).description
                           }`}
                     </h2>
                     <p className="text-blue-100 arabic-spacing">
                       مُدخل بواسطة:{" "}
-                      {getUserFriendlyName(selectedItem.submittedBy)} •{" "}
-                      {formatDate(selectedItem.date)}
+                      {getUserFriendlyName(selectedItem?.submittedBy)} •{" "}
+                      {formatDate(selectedItem?.date)}
                     </p>
                   </div>
                 </div>
@@ -1103,7 +1148,7 @@ export default function ApprovalsModal({
 
             {/* Content */}
             <div className="p-6 max-h-[60vh] overflow-y-auto">
-              {selectedItem.itemType === "invoice" ? (
+              {selectedItem?.itemType === "invoice" ? (
                 // Invoice Details
                 <div className="space-y-6">
                   <div className="bg-blue-50 p-4 rounded-lg">
@@ -1116,7 +1161,9 @@ export default function ApprovalsModal({
                           رقم الفاتورة:
                         </span>
                         <span className="font-bold mr-2 text-blue-800 arabic-spacing">
-                          {(selectedItem as EnhancedInvoice).invoiceNumber}
+                          {formatInvoiceNumber(
+                            (selectedItem as EnhancedInvoice).invoiceNumber
+                          )}
                         </span>
                       </div>
                       <div>
@@ -1124,7 +1171,7 @@ export default function ApprovalsModal({
                           المبلغ الإجمالي:
                         </span>
                         <span className="font-bold mr-2 text-green-600 arabic-nums">
-                          {formatCurrency(selectedItem.amount)}
+                          {formatCurrency(selectedItem?.amount || 0)}
                         </span>
                       </div>
                       <div>
@@ -1142,7 +1189,7 @@ export default function ApprovalsModal({
                           تاريخ الإنشاء:
                         </span>
                         <span className="font-bold mr-2 arabic-spacing">
-                          {formatDate(selectedItem.date)}
+                          {formatDate(selectedItem?.date)}
                         </span>
                       </div>
                       {(selectedItem as EnhancedInvoice).dueDate && (
@@ -1266,7 +1313,7 @@ export default function ApprovalsModal({
                           المبلغ:
                         </span>
                         <span className="font-bold mr-2 text-green-600 arabic-nums">
-                          {formatCurrency(selectedItem.amount)}
+                          {formatCurrency(selectedItem?.amount || 0)}
                         </span>
                       </div>
                       <div>
@@ -1282,7 +1329,7 @@ export default function ApprovalsModal({
                           تاريخ الإنشاء:
                         </span>
                         <span className="font-bold mr-2 arabic-spacing">
-                          {formatDate(selectedItem.date)}
+                          {formatDate(selectedItem?.date)}
                         </span>
                       </div>
                     </div>
@@ -1328,14 +1375,14 @@ export default function ApprovalsModal({
                   </Button>
                   <Button
                     onClick={() => {
-                      if (selectedItem.itemType === "invoice") {
+                      if (selectedItem?.itemType === "invoice") {
                         approveInvoice(selectedItem as EnhancedInvoice);
                       } else {
                         approveExpense(selectedItem as EnhancedGeneralExpense);
                       }
                       closeItemDetailModal();
                     }}
-                    disabled={!hasBalance(selectedItem.amount)}
+                    disabled={!hasBalance(selectedItem?.amount || 0)}
                     className="bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300"
                   >
                     <CheckCircle className="h-4 w-4 ml-1 no-flip" />
@@ -1346,12 +1393,12 @@ export default function ApprovalsModal({
                     onClick={() => {
                       closeItemDetailModal();
                       openRejectModal(
-                        selectedItem.id,
-                        selectedItem.itemType,
-                        selectedItem.itemType === "invoice"
-                          ? `فاتورة ${
+                        selectedItem?.id || "",
+                        selectedItem?.itemType || "invoice",
+                        selectedItem?.itemType === "invoice"
+                          ? `فاتورة ${formatInvoiceNumber(
                               (selectedItem as EnhancedInvoice).invoiceNumber
-                            }`
+                            )}`
                           : (selectedItem as EnhancedGeneralExpense).description
                       );
                     }}
@@ -1365,6 +1412,16 @@ export default function ApprovalsModal({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Enhanced Invoice Preview Modal */}
+      {showInvoicePreview && selectedInvoiceForPreview && (
+        <InvoicePreviewModal
+          invoice={selectedInvoiceForPreview!}
+          onClose={closeInvoicePreview}
+          onApprove={handlePreviewApprove}
+          onReject={handlePreviewReject}
+        />
       )}
     </div>
   );

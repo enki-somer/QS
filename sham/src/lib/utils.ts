@@ -76,4 +76,35 @@ export function generateEmployeeId(): string {
 // Generate project-specific IDs
 export function generateProjectId(): string {
   return generateId('prj_');
+}
+
+// Format UUID to clean, readable format
+export function formatId(id: string | null | undefined, prefix: string = ''): string {
+  if (!id) return 'غير محدد';
+  
+  // If it's already a clean format (not UUID), return as is
+  if (!id.includes('-') || id.length < 30) {
+    return id;
+  }
+  
+  // Extract meaningful parts from UUID
+  const parts = id.split('-');
+  if (parts.length >= 2) {
+    // Use first 4 chars of first part + last 4 chars of last part
+    const shortId = `${parts[0].substring(0, 4)}${parts[parts.length - 1].substring(-4)}`.toUpperCase();
+    return prefix ? `${prefix}${shortId}` : shortId;
+  }
+  
+  // Fallback: just use first 8 characters
+  return (prefix + id.substring(0, 8)).toUpperCase();
+}
+
+// Format invoice number for display
+export function formatInvoiceNumber(invoiceNumber: string | null | undefined): string {
+  return formatId(invoiceNumber, 'INV-');
+}
+
+// Format project ID for display
+export function formatProjectId(projectId: string | null | undefined): string {
+  return formatId(projectId, 'PRJ-');
 } 

@@ -48,6 +48,11 @@ import {
   ChevronRight,
   Wallet,
   AlertTriangle,
+  ShoppingCart,
+  Calculator,
+  Clock,
+  CheckCircle,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -65,11 +70,16 @@ interface SimpleAssignmentFormData {
   contractorName: string;
   estimatedAmount: string;
   notes?: string;
+  isPurchasing?: boolean; // New field for purchasing assignments
 }
 import { PROJECT_CATEGORIES } from "@/constants/projectCategories";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSafe } from "@/contexts/SafeContext";
+import { useUIPermissions } from "@/hooks/useUIPermissions";
+import { FinancialDisplay } from "@/components/ui/FinancialDisplay";
+import { PermissionButton } from "@/components/ui/PermissionButton";
+import RoleBasedNavigation from "@/components/ui/RoleBasedNavigation";
 import EnhancedCategoryInvoiceModal from "@/components/projects/EnhancedCategoryInvoiceModal";
 import CategoryAssignmentsTable from "@/components/projects/CategoryAssignmentsTable";
 import CategoryAssignmentModal from "@/components/projects/CategoryAssignmentModal";
@@ -280,6 +290,7 @@ export default function ProjectDetailClient() {
   const { addToast } = useToast();
   const { user, isAdmin, isAuthenticated } = useAuth();
   const { safeState } = useSafe();
+  const permissions = useUIPermissions();
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -312,11 +323,9 @@ export default function ProjectDetailClient() {
   >("all");
   const [newExpense, setNewExpense] = useState({
     expense_name: "",
-    category: "",
     cost: "",
     details: "",
     expense_date: new Date().toISOString().split("T")[0],
-    receipt_url: "",
   });
 
   // Tab System State
@@ -330,20 +339,27 @@ export default function ProjectDetailClient() {
 
   const projectId = params.id as string;
 
-  // Check if category is completed (has approved/paid invoices)
-  const isCategoryCompleted = (categoryId: string) => {
+  // Check if category assignment can be edited (has approved/paid invoices)
+  const isCategoryAssignmentEditable = (categoryId: string) => {
     const categoryAssignments = groupedAssignments[categoryId] || [];
     // Check if any assignment in this category has approved invoices
-    return categoryAssignments.some(
+    return !categoryAssignments.some(
       (assignment: any) => assignment.has_approved_invoice === true
     );
+  };
+
+  // Check if category allows new invoices (always true - multiple invoices allowed)
+  const canCreateCategoryInvoice = (categoryId: string) => {
+    const categoryAssignments = groupedAssignments[categoryId] || [];
+    // Allow invoice creation as long as there are assignments and budget remaining
+    return categoryAssignments.length > 0;
   };
 
   // Handle creating category-specific invoice
   const handleCreateCategoryInvoice = (category: any) => {
     const categoryAssignments = groupedAssignments[category.id] || [];
 
-    if (categoryAssignments.length === 0) {
+    if (!canCreateCategoryInvoice(category.id)) {
       setTimeout(
         () =>
           addToast({
@@ -356,6 +372,8 @@ export default function ProjectDetailClient() {
       return;
     }
 
+    // Allow invoice creation regardless of approval status
+    // Multiple invoices per assignment are allowed for progressive billing
     setCategoryInvoiceModal({
       isOpen: true,
       category,
@@ -363,14 +381,14 @@ export default function ProjectDetailClient() {
     });
   };
 
-  // Handle editing category
+  // Handle editing category assignment
   const handleEditCategory = (category: any) => {
-    if (isCategoryCompleted(category.id)) {
+    if (!isCategoryAssignmentEditable(category.id)) {
       setTimeout(
         () =>
           addToast({
             title: "تحذير",
-            message: "لا يمكن تعديل فئة مكتملة مالياً",
+            message: "لا يمكن تعديل تعيينات فئة لها فواتير مُعتمدة",
             type: "error",
           }),
         0
@@ -422,9 +440,13 @@ export default function ProjectDetailClient() {
       return;
     }
 
-    // Show confirmation dialog and proceed with deletion
+    // Show enhanced confirmation dialog with details
     const confirmDelete = window.confirm(
-      `حذف تعيين ${assignment.contractor_name}؟`
+      `هل أنت متأكد من حذف التعيين؟\n\nالفئة: ${
+        assignment.main_category
+      }\nالتفاصيل: ${assignment.subcategory}\nالمقاول: ${
+        assignment.contractor_name
+      }\nالمبلغ: ${assignment.estimated_amount.toLocaleString()} د.ع\n\nهذا الإجراء لا يمكن التراجع عنه.`
     );
 
     if (!confirmDelete) {
@@ -432,27 +454,20 @@ export default function ProjectDetailClient() {
     }
 
     try {
-      setLoading(true);
-
-      // Create updated assignments list without the deleted assignment
-      const updatedAssignments = transformedAssignments
-        .filter((a: any) => a.id !== assignmentId)
-        .map((a: any) => ({
-          main_category: a.main_category,
-          subcategory: a.subcategory,
-          contractor_id: a.contractor_id || a.contractorId,
-          contractor_name: a.contractor_name,
-          estimated_amount: a.estimated_amount,
-          notes: a.notes,
-        }));
-
-      // Update project with remaining assignments
-      const response = await apiRequest(`/projects/${projectId}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          categoryAssignments: updatedAssignments,
-        }),
+      // Show loading state
+      addToast({
+        title: "جاري الحذف...",
+        message: "يتم حذف التعيين",
+        type: "info",
       });
+
+      // Use the proper delete assignment endpoint
+      const response = await apiRequest(
+        `/projects/${projectId}/assignments/${assignmentId}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -461,7 +476,25 @@ export default function ProjectDetailClient() {
         );
       }
 
-      // Reload project data
+      // Update local state immediately (optimistic update)
+      if (project && project.categoryAssignments) {
+        const updatedProject = {
+          ...project,
+          categoryAssignments: project.categoryAssignments.filter(
+            (a: any) => a.id !== assignmentId
+          ),
+        };
+        setProject(updatedProject);
+      }
+
+      // Show success message
+      addToast({
+        title: "تم الحذف بنجاح",
+        message: `تم حذف تعيين ${assignment.contractor_name} بنجاح`,
+        type: "success",
+      });
+
+      // Reload project data to ensure consistency with database
       const projectResponse = await apiRequest(`/projects/${projectId}`);
       if (projectResponse.ok) {
         const projectData = await projectResponse.json();
@@ -479,47 +512,251 @@ export default function ProjectDetailClient() {
           createdAt: projectData.created_at,
           updatedAt: projectData.updated_at,
           categoryAssignments: projectData.categoryAssignments || [],
+          // NEW FINANCIAL FIELDS
+          pricePerMeter: projectData.price_per_meter,
+          ownerDealPrice: projectData.owner_deal_price,
+          ownerPaidAmount: projectData.owner_paid_amount,
+          constructionCost: projectData.construction_cost,
+          profitMargin: projectData.profit_margin,
+          totalSiteArea: projectData.total_site_area,
         };
         setProject(formattedProject);
       }
+    } catch (error: any) {
+      console.error("❌ Error deleting assignment:", error);
 
       addToast({
-        title: "تم الحذف",
-        type: "success",
-      });
-    } catch (error: any) {
-      console.error("Error deleting assignment:", error);
-      addToast({
-        title: "فشل الحذف",
-        message: error.message || "حدث خطأ",
+        title: "فشل في الحذف",
+        message: error.message || "حدث خطأ أثناء حذف التعيين",
         type: "error",
       });
-    } finally {
-      setLoading(false);
+    }
+  };
+
+  // Handle freeze assignment
+  const handleFreezeAssignment = async (
+    assignmentId: string,
+    reason: string
+  ) => {
+    try {
+      console.log(
+        `🧊 Freezing assignment ${assignmentId} with reason: ${reason}`
+      );
+
+      const response = await apiRequest(
+        `/projects/${projectId}/assignments/${assignmentId}/freeze`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ reason }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("✅ Assignment frozen successfully");
+        addToast({
+          title: "تم التجميد بنجاح",
+          message: "تم تجميد التعيين وإرجاع الرصيد غير المستخدم",
+          type: "success",
+        });
+
+        // Reload project data
+        const projectResponse = await apiRequest(`/projects/${projectId}`);
+        if (projectResponse.ok) {
+          const projectData = await projectResponse.json();
+          const formattedProject: Project = {
+            id: projectData.id,
+            name: projectData.name,
+            code: projectData.code,
+            location: projectData.location,
+            area: projectData.area,
+            budgetEstimate: projectData.budget_estimate,
+            client: projectData.client,
+            startDate: projectData.start_date?.split("T")[0] || "",
+            endDate: projectData.end_date?.split("T")[0] || "",
+            status: projectData.status,
+            createdAt: projectData.created_at,
+            updatedAt: projectData.updated_at,
+            categoryAssignments: projectData.categoryAssignments || [],
+            pricePerMeter: projectData.price_per_meter,
+            ownerDealPrice: projectData.owner_deal_price,
+            ownerPaidAmount: projectData.owner_paid_amount,
+            constructionCost: projectData.construction_cost,
+            estimatedProfit: projectData.estimated_profit,
+            profitMargin: projectData.profit_margin,
+            totalSiteArea: projectData.total_site_area,
+          };
+          setProject(formattedProject);
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.userMessage || "Failed to freeze assignment");
+      }
+    } catch (error: any) {
+      console.error("❌ Error freezing assignment:", error);
+      addToast({
+        title: "فشل في التجميد",
+        message: error.message || "حدث خطأ أثناء تجميد التعيين",
+        type: "error",
+      });
+    }
+  };
+
+  // Handle unfreeze assignment
+  const handleUnfreezeAssignment = async (assignmentId: string) => {
+    try {
+      console.log(`🔓 Unfreezing assignment ${assignmentId}`);
+
+      const response = await apiRequest(
+        `/projects/${projectId}/assignments/${assignmentId}/unfreeze`,
+        {
+          method: "PUT",
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("✅ Assignment unfrozen successfully");
+        addToast({
+          title: "تم إلغاء التجميد بنجاح",
+          message: "تم إلغاء تجميد التعيين بنجاح",
+          type: "success",
+        });
+
+        // Reload project data
+        const projectResponse = await apiRequest(`/projects/${projectId}`);
+        if (projectResponse.ok) {
+          const projectData = await projectResponse.json();
+          const formattedProject: Project = {
+            id: projectData.id,
+            name: projectData.name,
+            code: projectData.code,
+            location: projectData.location,
+            area: projectData.area,
+            budgetEstimate: projectData.budget_estimate,
+            client: projectData.client,
+            startDate: projectData.start_date?.split("T")[0] || "",
+            endDate: projectData.end_date?.split("T")[0] || "",
+            status: projectData.status,
+            createdAt: projectData.created_at,
+            updatedAt: projectData.updated_at,
+            categoryAssignments: projectData.categoryAssignments || [],
+            pricePerMeter: projectData.price_per_meter,
+            ownerDealPrice: projectData.owner_deal_price,
+            ownerPaidAmount: projectData.owner_paid_amount,
+            constructionCost: projectData.construction_cost,
+            estimatedProfit: projectData.estimated_profit,
+            profitMargin: projectData.profit_margin,
+            totalSiteArea: projectData.total_site_area,
+          };
+          setProject(formattedProject);
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.userMessage || "Failed to unfreeze assignment"
+        );
+      }
+    } catch (error: any) {
+      console.error("❌ Error unfreezing assignment:", error);
+      addToast({
+        title: "فشل في إلغاء التجميد",
+        message: error.message || "حدث خطأ أثناء إلغاء تجميد التعيين",
+        type: "error",
+      });
+    }
+  };
+
+  // Handle edit assignment amount
+  const handleEditAssignmentAmount = async (
+    assignmentId: string,
+    newAmount: number,
+    reason?: string
+  ) => {
+    try {
+      console.log(
+        `✏️ Editing assignment ${assignmentId} amount to ${newAmount}`
+      );
+
+      const response = await apiRequest(
+        `/projects/${projectId}/assignments/${assignmentId}/amount`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ newAmount, reason }),
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log("✅ Assignment amount updated successfully");
+        addToast({
+          title: "تم التحديث بنجاح",
+          message: "تم تحديث مبلغ التعيين بنجاح",
+          type: "success",
+        });
+
+        // Reload project data
+        const projectResponse = await apiRequest(`/projects/${projectId}`);
+        if (projectResponse.ok) {
+          const projectData = await projectResponse.json();
+          const formattedProject: Project = {
+            id: projectData.id,
+            name: projectData.name,
+            code: projectData.code,
+            location: projectData.location,
+            area: projectData.area,
+            budgetEstimate: projectData.budget_estimate,
+            client: projectData.client,
+            startDate: projectData.start_date?.split("T")[0] || "",
+            endDate: projectData.end_date?.split("T")[0] || "",
+            status: projectData.status,
+            createdAt: projectData.created_at,
+            updatedAt: projectData.updated_at,
+            categoryAssignments: projectData.categoryAssignments || [],
+            pricePerMeter: projectData.price_per_meter,
+            ownerDealPrice: projectData.owner_deal_price,
+            ownerPaidAmount: projectData.owner_paid_amount,
+            constructionCost: projectData.construction_cost,
+            estimatedProfit: projectData.estimated_profit,
+            profitMargin: projectData.profit_margin,
+            totalSiteArea: projectData.total_site_area,
+          };
+          setProject(formattedProject);
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(
+          errorData.userMessage || "Failed to update assignment amount"
+        );
+      }
+    } catch (error: any) {
+      console.error("❌ Error updating assignment amount:", error);
+      addToast({
+        title: "فشل في التحديث",
+        message: error.message || "حدث خطأ أثناء تحديث مبلغ التعيين",
+        type: "error",
+      });
     }
   };
 
   const handleAddAssignment = () => {
     // Pass all current assignments to check for duplicates
-    // Only include assignments with valid contractor IDs
-    const allCurrentAssignments = transformedAssignments
-      .filter((a: any) => {
-        const contractorId = a.contractor_id || a.contractorId;
-        return contractorId && contractorId.trim() !== "";
-      })
-      .map((a: any) => ({
-        id: a.id,
-        categoryId: a.category_id || a.categoryId || "",
-        mainCategory: a.main_category || a.mainCategory || "",
-        subcategory: a.subcategory || "",
-        contractorId: a.contractor_id || a.contractorId,
-        contractorName: a.contractor_name || a.contractorName || "",
-        estimatedAmount:
-          a.estimated_amount?.toString() ||
-          a.estimatedAmount?.toString() ||
-          "0",
-        notes: a.notes || "",
-      }));
+    // Include both contractor and purchasing assignments
+    const allCurrentAssignments = transformedAssignments.map((a: any) => ({
+      id: a.id,
+      categoryId: a.category_id || a.categoryId || "",
+      mainCategory: a.main_category || a.mainCategory || "",
+      subcategory: a.subcategory || "",
+      contractorId: a.contractor_id || a.contractorId || "",
+      contractorName: a.contractor_name || a.contractorName || "مشتريات",
+      estimatedAmount:
+        a.estimated_amount?.toString() || a.estimatedAmount?.toString() || "0",
+      notes: a.notes || "",
+      isPurchasing: a.assignment_type === "purchasing",
+      status: a.status || "active", // Include status for budget calculation
+      actual_amount: a.actual_amount || 0, // Include spent amount for frozen assignment calculation
+      spentAmount: a.actual_amount || 0, // Alternative field name
+    }));
 
     setExistingAssignments(allCurrentAssignments);
     setEditingAssignmentId(null); // Clear editing ID for new assignment
@@ -532,11 +769,61 @@ export default function ProjectDetailClient() {
     try {
       setLoading(true);
 
+      // Budget validation for new assignments
+      if (project) {
+        const totalBudget =
+          typeof project.budgetEstimate === "string"
+            ? parseFloat(project.budgetEstimate) || 0
+            : project.budgetEstimate || 0;
+        const spentBudget =
+          typeof project.spentBudget === "string"
+            ? parseFloat(project.spentBudget) || 0
+            : project.spentBudget || 0;
+
+        // Calculate approved project expenses total
+        const approvedExpensesTotal = projectExpenses
+          .filter((expense) => expense.status === "approved")
+          .reduce((sum, expense) => {
+            const cost =
+              typeof expense.cost === "string"
+                ? parseFloat(expense.cost) || 0
+                : expense.cost || 0;
+            return sum + cost;
+          }, 0);
+
+        // Calculate total project spending (category spending + project expenses)
+        const totalProjectSpending = spentBudget + approvedExpensesTotal;
+
+        // Calculate remaining budget (what's left for new assignments)
+        const remainingBudget = totalBudget - totalProjectSpending;
+
+        // Calculate total of new assignments
+        const newAssignmentsTotal = assignments.reduce((total, assignment) => {
+          return total + (parseFloat(assignment.estimatedAmount) || 0);
+        }, 0);
+
+        // Check if new assignments exceed remaining project budget
+        if (newAssignmentsTotal > remainingBudget) {
+          return {
+            success: false,
+            error: `إجمالي التعيينات الجديدة (${formatCurrency(
+              newAssignmentsTotal
+            )}) يتجاوز الميزانية المتبقية للمشروع (${formatCurrency(
+              remainingBudget
+            )}). الميزانية المنفقة حالياً: ${formatCurrency(
+              totalProjectSpending
+            )}`,
+          };
+        }
+      }
+
       // Transform assignments to API format
       const apiAssignments = assignments.map((assignment) => {
-        // Validate contractor_id is not empty
-        const contractorId = assignment.contractorId?.trim();
-        if (!contractorId) {
+        // Validate contractor_id is not empty (only for non-purchasing assignments)
+        const contractorId = assignment.isPurchasing
+          ? null
+          : assignment.contractorId?.trim();
+        if (!assignment.isPurchasing && !contractorId) {
           throw new Error(
             `تعيين غير صالح: لا يوجد معرف مقاول للفئة "${assignment.mainCategory} - ${assignment.subcategory}"`
           );
@@ -549,6 +836,9 @@ export default function ProjectDetailClient() {
           contractor_name: assignment.contractorName,
           estimated_amount: Number(assignment.estimatedAmount),
           notes: assignment.notes || null,
+          assignment_type: assignment.isPurchasing
+            ? "purchasing"
+            : "contractor",
         };
       });
 
@@ -600,6 +890,13 @@ export default function ProjectDetailClient() {
           createdAt: projectData.created_at,
           updatedAt: projectData.updated_at,
           categoryAssignments: projectData.categoryAssignments || [],
+          // NEW FINANCIAL FIELDS
+          pricePerMeter: projectData.price_per_meter,
+          ownerDealPrice: projectData.owner_deal_price,
+          ownerPaidAmount: projectData.owner_paid_amount,
+          constructionCost: projectData.construction_cost,
+          profitMargin: projectData.profit_margin,
+          totalSiteArea: projectData.total_site_area,
         };
         setProject(formattedProject);
       }
@@ -668,7 +965,12 @@ export default function ProjectDetailClient() {
         assignment.main_category || assignment.mainCategory || "غير محدد",
       subcategory: assignment.subcategory || "غير محدد",
       contractor_name:
-        assignment.contractor_name || assignment.contractorName || "غير محدد",
+        assignment.contractor_name ||
+        assignment.contractorName ||
+        (assignment.assignment_type === "purchasing" ||
+        !assignment.contractor_id
+          ? "مشتريات"
+          : "غير محدد"),
       estimated_amount: Number(
         assignment.estimated_amount || assignment.estimatedAmount || 0
       ),
@@ -683,6 +985,9 @@ export default function ProjectDetailClient() {
       pending_invoices: Number(assignment.pending_invoices || 0),
       approved_invoices: Number(assignment.approved_invoices || 0),
       paid_invoices: Number(assignment.paid_invoices || 0),
+      assignment_type:
+        assignment.assignment_type ||
+        (assignment.contractor_id ? "contractor" : "purchasing"),
     }));
   }, [project?.categoryAssignments]);
 
@@ -712,6 +1017,10 @@ export default function ProjectDetailClient() {
           location: projectData.location,
           area: projectData.area,
           budgetEstimate: projectData.budget_estimate,
+          // Map the new budget fields from backend
+          allocatedBudget: projectData.allocated_budget,
+          availableBudget: projectData.available_budget,
+          spentBudget: projectData.spent_budget,
           client: projectData.client,
           startDate: projectData.start_date?.split("T")[0] || "",
           endDate: projectData.end_date?.split("T")[0] || "",
@@ -719,6 +1028,13 @@ export default function ProjectDetailClient() {
           createdAt: projectData.created_at,
           updatedAt: projectData.updated_at,
           categoryAssignments: projectData.categoryAssignments || [],
+          // NEW FINANCIAL FIELDS
+          pricePerMeter: projectData.price_per_meter,
+          ownerDealPrice: projectData.owner_deal_price,
+          ownerPaidAmount: projectData.owner_paid_amount,
+          constructionCost: projectData.construction_cost,
+          profitMargin: projectData.profit_margin,
+          totalSiteArea: projectData.total_site_area,
         };
 
         console.log("Formatted project with assignments:", formattedProject);
@@ -866,23 +1182,53 @@ export default function ProjectDetailClient() {
 
   // Project Expenses Functions (unstructured expenses for this project)
   const addProjectExpense = async () => {
-    if (
-      !newExpense.expense_name.trim() ||
-      !newExpense.category.trim() ||
-      !newExpense.cost
-    )
-      return;
+    if (!newExpense.expense_name.trim() || !newExpense.cost) return;
+
+    // Budget validation for project expenses
+    if (project) {
+      const totalBudget =
+        typeof project.budgetEstimate === "string"
+          ? parseFloat(project.budgetEstimate) || 0
+          : project.budgetEstimate || 0;
+      const spentBudget =
+        typeof project.spentBudget === "string"
+          ? parseFloat(project.spentBudget) || 0
+          : project.spentBudget || 0;
+      const approvedExpensesTotal = projectExpenses
+        .filter((expense) => expense.status === "approved")
+        .reduce((sum, expense) => {
+          const cost =
+            typeof expense.cost === "string"
+              ? parseFloat(expense.cost) || 0
+              : expense.cost || 0;
+          return sum + cost;
+        }, 0);
+
+      const totalProjectSpending = spentBudget + approvedExpensesTotal;
+      const remainingBudget = totalBudget - totalProjectSpending;
+      const expenseCost = parseFloat(newExpense.cost);
+
+      if (expenseCost > remainingBudget) {
+        addToast({
+          type: "error",
+          title: "تجاوز الميزانية",
+          message: `مبلغ المصروف (${formatCurrency(
+            expenseCost
+          )}) يتجاوز الميزانية المتبقية (${formatCurrency(remainingBudget)})`,
+        });
+        return;
+      }
+    }
 
     setExpensesLoading(true);
     try {
       const expenseData = {
         project_id: projectId,
         expense_name: newExpense.expense_name.trim(),
-        category: newExpense.category.trim(),
+        category: "Project Expense", // Simple fixed category
         cost: parseFloat(newExpense.cost),
         details: newExpense.details.trim() || undefined,
         expense_date: newExpense.expense_date,
-        receipt_url: newExpense.receipt_url.trim() || undefined,
       };
 
       console.log("Creating general expense:", expenseData);
@@ -908,11 +1254,9 @@ export default function ProjectDetailClient() {
       // Reset the form
       setNewExpense({
         expense_name: "",
-        category: "",
         cost: "",
         details: "",
         expense_date: new Date().toISOString().split("T")[0],
-        receipt_url: "",
       });
       setShowExpenseModal(false);
 
@@ -1077,12 +1421,17 @@ export default function ProjectDetailClient() {
     return matchesSearch && matchesStatus;
   });
 
-  // Calculate total expenses
-  const totalExpenses = projectExpenses.reduce(
-    (sum, expense) =>
-      expense.status === "approved" ? sum + expense.cost : sum,
-    0
-  );
+  // Calculate total expenses with NaN protection
+  const totalExpenses = projectExpenses.reduce((sum, expense) => {
+    if (expense.status === "approved") {
+      const cost =
+        typeof expense.cost === "number"
+          ? expense.cost
+          : parseFloat(expense.cost) || 0;
+      return sum + (isNaN(cost) ? 0 : cost);
+    }
+    return sum;
+  }, 0);
 
   if (loading) {
     return (
@@ -1109,7 +1458,7 @@ export default function ProjectDetailClient() {
             onClick={() => router.push("/projects")}
             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
           >
-            <ArrowLeft className="h-5 w-5 ml-2 no-flip" />
+            <ArrowLeft className="h-5 w-5 mr-2 no-flip" />
             العودة للمشاريع
           </Button>
         </div>
@@ -1119,23 +1468,27 @@ export default function ProjectDetailClient() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50">
-      {/* Return Button - Fixed Position */}
-      <div className="fixed top-4 sm:top-6 left-4 sm:left-6 z-30">
-        <Button
-          onClick={() => router.push("/projects")}
-          className="bg-white/90 hover:bg-white text-gray-700 border border-gray-300 shadow-xl px-3 sm:px-4 py-2 rounded-xl flex items-center space-x-2 space-x-reverse transform transition-all duration-300 hover:scale-105 hover:shadow-2xl backdrop-blur-lg"
-        >
-          <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 no-flip" />
-          <span className="arabic-spacing text-sm sm:text-base font-medium">
-            العودة للمشاريع
-          </span>
-        </Button>
-      </div>
+      {/* Role-Based Navigation */}
+      <RoleBasedNavigation />
 
       {/* Main Content Container */}
-      <div className="px-4 sm:px-6 py-6 sm:py-8 pt-16 sm:pt-20">
-        {/* Modern Tab Navigation */}
+      <div className="px-4 sm:px-6 py-6 sm:py-8">
+        {/* Header with Return Button and Tab Navigation */}
         <div className="max-w-7xl mx-auto mb-8">
+          {/* Return Button positioned above tabs */}
+          <div className="flex justify-start mb-4">
+            <Button
+              onClick={() => router.push("/projects")}
+              className="bg-white/90 hover:bg-white text-gray-700 border border-gray-300 shadow-xl px-3 sm:px-4 py-2 rounded-xl flex items-center space-x-2 space-x-reverse transform transition-all duration-300 hover:scale-105 hover:shadow-2xl backdrop-blur-lg"
+            >
+              <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5 no-flip" />
+              <span className="arabic-spacing text-sm sm:text-base font-medium">
+                العودة للمشاريع
+              </span>
+            </Button>
+          </div>
+
+          {/* Modern Tab Navigation */}
           <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
             <div className="flex flex-col sm:flex-row">
               <button
@@ -1261,7 +1614,7 @@ export default function ProjectDetailClient() {
                         {project.area && (
                           <div>
                             <p className="text-sm text-gray-600 arabic-spacing">
-                              المساحة
+                              مساحة البناء الفعلية
                             </p>
                             <p className="font-medium text-gray-800 arabic-spacing">
                               {new Intl.NumberFormat("ar-IQ").format(
@@ -1269,6 +1622,30 @@ export default function ProjectDetailClient() {
                               )}{" "}
                               متر مربع
                             </p>
+                          </div>
+                        )}
+                        {project.totalSiteArea && (
+                          <div>
+                            <p className="text-sm text-gray-600 arabic-spacing">
+                              المساحة الكلية للموقع
+                            </p>
+                            <p className="font-medium text-gray-800 arabic-spacing">
+                              {new Intl.NumberFormat("ar-IQ").format(
+                                Number(project.totalSiteArea)
+                              )}{" "}
+                              متر مربع
+                            </p>
+                            {project.area && (
+                              <p className="text-xs text-purple-600 arabic-spacing mt-1">
+                                📊 نسبة البناء:{" "}
+                                {(
+                                  (Number(project.area) /
+                                    Number(project.totalSiteArea)) *
+                                  100
+                                ).toFixed(1)}
+                                %
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1317,17 +1694,108 @@ export default function ProjectDetailClient() {
                         المعلومات المالية
                       </h3>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       <div className="bg-white/60 rounded-xl p-4 backdrop-blur-sm">
                         <p className="text-sm text-gray-600 arabic-spacing mb-2">
                           الميزانية المقدرة
                         </p>
                         <p className="text-2xl font-bold text-amber-600 arabic-spacing">
-                          {formatCurrency(
-                            project.budgetEstimate || project.budget_estimate
-                          )}
+                          <FinancialDisplay
+                            value={
+                              project.budgetEstimate || project.budget_estimate
+                            }
+                          />
                         </p>
                       </div>
+
+                      {/* NEW FINANCIAL FIELDS */}
+                      {(project.pricePerMeter || project.price_per_meter) && (
+                        <div className="bg-white/60 rounded-xl p-4 backdrop-blur-sm">
+                          <p className="text-sm text-gray-600 arabic-spacing mb-2">
+                            سعر المتر المربع
+                          </p>
+                          <p className="text-xl font-bold text-blue-600 arabic-spacing">
+                            <FinancialDisplay
+                              value={
+                                project.pricePerMeter || project.price_per_meter
+                              }
+                            />{" "}
+                            / م²
+                          </p>
+                        </div>
+                      )}
+
+                      {(project.ownerDealPrice || project.owner_deal_price) && (
+                        <div className="bg-white/60 rounded-xl p-4 backdrop-blur-sm">
+                          <p className="text-sm text-gray-600 arabic-spacing mb-2">
+                            سعر الصفقة مع المالك
+                          </p>
+                          <p className="text-xl font-bold text-purple-600 arabic-spacing">
+                            <FinancialDisplay
+                              value={
+                                project.ownerDealPrice ||
+                                project.owner_deal_price
+                              }
+                            />
+                          </p>
+                        </div>
+                      )}
+
+                      {(project.ownerPaidAmount ||
+                        project.owner_paid_amount) && (
+                        <div className="bg-white/60 rounded-xl p-4 backdrop-blur-sm">
+                          <p className="text-sm text-gray-600 arabic-spacing mb-2">
+                            المبلغ المدفوع من المالك
+                          </p>
+                          <p className="text-xl font-bold text-green-600 arabic-spacing">
+                            <FinancialDisplay
+                              value={
+                                project.ownerPaidAmount ||
+                                project.owner_paid_amount
+                              }
+                            />
+                          </p>
+                        </div>
+                      )}
+
+                      {(project.constructionCost ||
+                        project.construction_cost) && (
+                        <div className="bg-white/60 rounded-xl p-4 backdrop-blur-sm">
+                          <p className="text-sm text-gray-600 arabic-spacing mb-2">
+                            تكلفة الإنشاء المحسوبة
+                          </p>
+                          <p className="text-xl font-bold text-indigo-600 arabic-spacing">
+                            <FinancialDisplay
+                              value={
+                                project.constructionCost ||
+                                project.construction_cost
+                              }
+                            />
+                          </p>
+                        </div>
+                      )}
+
+                      {(project.profitMargin || project.profit_margin) && (
+                        <div className="bg-white/60 rounded-xl p-4 backdrop-blur-sm">
+                          <p className="text-sm text-gray-600 arabic-spacing mb-2">
+                            هامش الربح
+                          </p>
+                          <p className="text-xl font-bold text-emerald-600 arabic-spacing">
+                            {(project.profitMargin || project.profit_margin) &&
+                            !isNaN(
+                              Number(
+                                project.profitMargin || project.profit_margin
+                              )
+                            )
+                              ? Number(
+                                  project.profitMargin || project.profit_margin
+                                ).toFixed(2)
+                              : "0.00"}
+                            %
+                          </p>
+                        </div>
+                      )}
+
                       <div className="bg-white/60 rounded-xl p-4 backdrop-blur-sm">
                         <p className="text-sm text-gray-600 arabic-spacing mb-2">
                           حالة المشروع
@@ -1343,42 +1811,297 @@ export default function ProjectDetailClient() {
                     </div>
                   </div>
 
-                  {/* Enhanced Financial Overview with General Expenses */}
-                  {(() => {
-                    // Calculate category assignments total
-                    const categoryTotal = project.categoryAssignments
-                      ? project.categoryAssignments.reduce(
-                          (sum: number, assignment: any) =>
-                            sum + (assignment.actual_amount || 0),
-                          0
-                        )
-                      : 0;
+                  {/* NEW COMPREHENSIVE FINANCIAL OVERVIEW */}
+                  {(project.pricePerMeter ||
+                    project.ownerDealPrice ||
+                    project.constructionCost) && (
+                    <div className="mt-8 bg-gradient-to-br from-emerald-50 to-teal-100 rounded-2xl p-6 border border-emerald-200">
+                      <div className="flex items-center space-x-3 space-x-reverse mb-6">
+                        <div className="bg-emerald-500 p-3 rounded-lg">
+                          <TrendingUp className="h-6 w-6 text-white no-flip" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-gray-800 arabic-spacing">
+                          التحليل المالي المتقدم
+                        </h3>
+                      </div>
 
-                    // Calculate approved project expenses total
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* Construction Cost */}
+                        {project.constructionCost && (
+                          <div className="bg-white/70 rounded-xl p-4 backdrop-blur-sm border border-emerald-200">
+                            <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                              <Building2 className="h-4 w-4 text-blue-600 no-flip" />
+                              <p className="text-sm text-gray-600 arabic-spacing">
+                                تكلفة الإنشاء
+                              </p>
+                            </div>
+                            <p className="text-xl font-bold text-blue-600 arabic-spacing">
+                              <FinancialDisplay
+                                value={project.constructionCost}
+                              />
+                            </p>
+                            {project.area && project.pricePerMeter && (
+                              <p className="text-xs text-gray-500 arabic-spacing mt-1">
+                                {Number(project.area).toLocaleString()} م² ×{" "}
+                                <FinancialDisplay
+                                  value={project.pricePerMeter}
+                                />
+                                /م²
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Owner Deal Value */}
+                        {project.ownerDealPrice && (
+                          <div className="bg-white/70 rounded-xl p-4 backdrop-blur-sm border border-emerald-200">
+                            <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                              <User className="h-4 w-4 text-purple-600 no-flip" />
+                              <p className="text-sm text-gray-600 arabic-spacing">
+                                قيمة الصفقة
+                              </p>
+                            </div>
+                            <p className="text-xl font-bold text-purple-600 arabic-spacing">
+                              <FinancialDisplay
+                                value={project.ownerDealPrice}
+                              />
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Expected Profit */}
+                        {project.ownerDealPrice && project.constructionCost && (
+                          <div className="bg-white/70 rounded-xl p-4 backdrop-blur-sm border border-emerald-200">
+                            <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                              <TrendingUp className="h-4 w-4 text-green-600 no-flip" />
+                              <p className="text-sm text-gray-600 arabic-spacing">
+                                الربح المتوقع
+                              </p>
+                            </div>
+                            <p className="text-xl font-bold text-green-600 arabic-spacing">
+                              {project.ownerDealPrice &&
+                              project.constructionCost ? (
+                                <FinancialDisplay
+                                  value={
+                                    Number(project.ownerDealPrice) -
+                                    Number(project.constructionCost)
+                                  }
+                                />
+                              ) : (
+                                <FinancialDisplay value={0} />
+                              )}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Profit Margin */}
+                        {project.profitMargin !== undefined &&
+                          project.profitMargin !== null && (
+                            <div className="bg-white/70 rounded-xl p-4 backdrop-blur-sm border border-emerald-200">
+                              <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                                <TrendingUp className="h-4 w-4 text-emerald-600 no-flip" />
+                                <p className="text-sm text-gray-600 arabic-spacing">
+                                  هامش الربح
+                                </p>
+                              </div>
+                              <p className="text-xl font-bold text-emerald-600 arabic-spacing">
+                                {project.profitMargin &&
+                                !isNaN(Number(project.profitMargin))
+                                  ? Number(project.profitMargin).toFixed(2)
+                                  : "0.00"}
+                                %
+                              </p>
+                            </div>
+                          )}
+                      </div>
+
+                      {/* Owner Payment Tracking */}
+                      {project.ownerPaidAmount && project.ownerDealPrice && (
+                        <div className="mt-6 bg-white/70 rounded-xl p-4 backdrop-blur-sm border border-emerald-200">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center space-x-2 space-x-reverse">
+                              <Wallet className="h-5 w-5 text-green-600 no-flip" />
+                              <h4 className="font-semibold text-gray-800 arabic-spacing">
+                                حالة دفعات المالك
+                              </h4>
+                            </div>
+                            <div className="text-sm text-gray-600 arabic-spacing">
+                              {project.ownerPaidAmount &&
+                              project.ownerDealPrice &&
+                              Number(project.ownerDealPrice) > 0
+                                ? (
+                                    (Number(project.ownerPaidAmount) /
+                                      Number(project.ownerDealPrice)) *
+                                    100
+                                  ).toFixed(1)
+                                : "0.0"}
+                              % مدفوع
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="text-center">
+                              <p className="text-sm text-gray-600 arabic-spacing mb-1">
+                                المبلغ المدفوع
+                              </p>
+                              <p className="text-lg font-bold text-green-600 arabic-spacing">
+                                <FinancialDisplay
+                                  value={project.ownerPaidAmount}
+                                />
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-sm text-gray-600 arabic-spacing mb-1">
+                                المتبقي
+                              </p>
+                              <p className="text-lg font-bold text-orange-600 arabic-spacing">
+                                {project.ownerDealPrice &&
+                                project.ownerPaidAmount ? (
+                                  <FinancialDisplay
+                                    value={
+                                      Number(project.ownerDealPrice) -
+                                      Number(project.ownerPaidAmount)
+                                    }
+                                  />
+                                ) : (
+                                  <FinancialDisplay
+                                    value={project.ownerDealPrice || 0}
+                                  />
+                                )}
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-sm text-gray-600 arabic-spacing mb-1">
+                                إجمالي الصفقة
+                              </p>
+                              <p className="text-lg font-bold text-purple-600 arabic-spacing">
+                                <FinancialDisplay
+                                  value={project.ownerDealPrice}
+                                />
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div className="mt-4">
+                            <div className="w-full bg-gray-200 rounded-full h-3">
+                              <div
+                                className="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full transition-all duration-500"
+                                style={{
+                                  width: `${
+                                    project.ownerPaidAmount &&
+                                    project.ownerDealPrice &&
+                                    Number(project.ownerDealPrice) > 0
+                                      ? Math.min(
+                                          100,
+                                          (Number(project.ownerPaidAmount) /
+                                            Number(project.ownerDealPrice)) *
+                                            100
+                                        )
+                                      : 0
+                                  }%`,
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Safe Funding Integration Placeholder */}
+                      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-center space-x-2 space-x-reverse">
+                          <AlertCircle className="h-5 w-5 text-blue-600 no-flip" />
+                          <p className="text-sm text-blue-800 font-medium arabic-spacing">
+                            ربط تمويل الخزنة (قادم قريباً)
+                          </p>
+                        </div>
+                        <p className="text-xs text-blue-600 arabic-spacing mt-2">
+                          سيتم ربط هذا القسم مع نظام تمويل الخزنة لعرض تفاصيل
+                          الدفعات والتحويلات من وإلى المشروع
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Enhanced Financial Overview with Corrected Budget Calculations */}
+                  {(() => {
+                    // Use the corrected budget tracking from backend
+                    // Parse all budget values as numbers to avoid calculation errors
+                    const totalBudget =
+                      typeof project.budgetEstimate === "string"
+                        ? parseFloat(project.budgetEstimate) || 0
+                        : project.budgetEstimate || 0;
+                    const allocatedBudget =
+                      typeof project.allocatedBudget === "string"
+                        ? parseFloat(project.allocatedBudget) || 0
+                        : project.allocatedBudget || 0;
+                    const availableBudget =
+                      typeof project.availableBudget === "string"
+                        ? parseFloat(project.availableBudget) || 0
+                        : project.availableBudget || 0;
+                    const spentBudget =
+                      typeof project.spentBudget === "string"
+                        ? parseFloat(project.spentBudget) || 0
+                        : project.spentBudget || 0;
+
+                    // Parse all values as numbers to avoid string concatenation and NaN errors
+                    const parsedSpentBudget =
+                      typeof spentBudget === "string"
+                        ? parseFloat(spentBudget) || 0
+                        : spentBudget || 0;
+
+                    // Calculate approved project expenses total (for display) - ensure proper number parsing
                     const approvedExpensesTotal = projectExpenses
                       .filter((expense) => expense.status === "approved")
-                      .reduce((sum, expense) => sum + expense.cost, 0);
+                      .reduce((sum, expense) => {
+                        const cost =
+                          typeof expense.cost === "string"
+                            ? parseFloat(expense.cost) || 0
+                            : expense.cost || 0;
+                        return sum + cost;
+                      }, 0);
 
-                    // Calculate total project spending (category + approved expenses)
+                    // Enhanced calculation with contractor vs purchasing breakdown
+                    const contractorSpending = transformedAssignments
+                      .filter((a: any) => a.assignment_type !== "purchasing")
+                      .reduce(
+                        (sum: number, a: any) => sum + (a.actual_amount || 0),
+                        0
+                      );
+
+                    const purchasingSpending = transformedAssignments
+                      .filter((a: any) => a.assignment_type === "purchasing")
+                      .reduce(
+                        (sum: number, a: any) => sum + (a.actual_amount || 0),
+                        0
+                      );
+
+                    // CORRECT CALCULATION:
+                    // spentBudget (from backend) = category assignments actual spending only
+                    // totalProjectSpending = category spending + project expenses
                     const totalProjectSpending =
-                      categoryTotal + approvedExpensesTotal;
+                      parsedSpentBudget + approvedExpensesTotal;
 
-                    // Get safe transactions for this project (for additional tracking)
-                    const projectTransactions = safeState.transactions.filter(
-                      (transaction) => transaction.projectId === project.id
-                    );
-                    const projectTotalSpent = projectTransactions.reduce(
-                      (sum, transaction) => sum + Math.abs(transaction.amount),
-                      0
-                    );
+                    // For display breakdown: category spending is the spentBudget from backend
+                    const categoryActualSpending = parsedSpentBudget;
 
-                    const totalBudget =
-                      project.budgetEstimate || project.budget_estimate || 0;
+                    // Validate all values to prevent NaN
+                    const safeTotal = isNaN(totalBudget) ? 0 : totalBudget;
+                    const safeSpending = isNaN(totalProjectSpending)
+                      ? 0
+                      : totalProjectSpending;
+
+                    // Calculate completion percentage based on total spending vs total budget
                     const completionPercentage =
-                      totalBudget > 0
-                        ? Math.round((totalProjectSpending / totalBudget) * 100)
+                      safeTotal > 0
+                        ? Math.round((safeSpending / safeTotal) * 100)
                         : 0;
-                    const remainingBudget = totalBudget - totalProjectSpending;
+
+                    // Remaining budget is what's left after actual spending
+                    const remainingBudget = Math.max(
+                      0,
+                      safeTotal - safeSpending
+                    );
 
                     return (
                       <div className="mt-8 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl p-6 border border-blue-200">
@@ -1387,32 +2110,66 @@ export default function ProjectDetailClient() {
                           الملخص المالي للمشروع
                         </h4>
 
-                        {/* Key Financial Metrics - Single Row */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        {/* Key Financial Metrics - Enhanced with Budget Allocation */}
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                           <div className="bg-white rounded-xl p-4 text-center shadow-sm">
                             <div className="text-2xl font-bold text-blue-600 mb-1">
-                              {formatCurrency(
-                                project.budgetEstimate ||
-                                  project.budget_estimate
-                              )}
+                              <FinancialDisplay value={safeTotal} />
                             </div>
                             <div className="text-sm text-gray-600 arabic-spacing">
-                              الميزانية المعتمدة
+                              الميزانية الإجمالية
+                            </div>
+                          </div>
+
+                          <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                            <div className="text-2xl font-bold text-purple-600 mb-1">
+                              <FinancialDisplay value={allocatedBudget} />
+                            </div>
+                            <div className="text-sm text-gray-600 arabic-spacing">
+                              المخصص للمقاولين
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {safeTotal > 0 && !isNaN(allocatedBudget)
+                                ? Math.round(
+                                    (allocatedBudget / safeTotal) * 100
+                                  )
+                                : 0}
+                              % من الميزانية
                             </div>
                           </div>
 
                           <div className="bg-white rounded-xl p-4 text-center shadow-sm">
                             <div className="text-2xl font-bold text-green-600 mb-1">
-                              {formatCurrency(totalProjectSpending)}
+                              <FinancialDisplay value={safeSpending} />
                             </div>
                             <div className="text-sm text-gray-600 arabic-spacing">
                               إجمالي المصروفات
                             </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              مقاولات: {formatCurrency(categoryTotal)}
+                            <div className="text-xs text-blue-600 mt-1 flex items-center justify-center">
+                              <User className="h-3 w-3 ml-1 no-flip" />
+                              مقاولات:{" "}
+                              <FinancialDisplay value={contractorSpending} />
+                            </div>
+                            <div className="text-xs text-green-600 flex items-center justify-center">
+                              <ShoppingCart className="h-3 w-3 ml-1 no-flip" />
+                              مشتريات:{" "}
+                              <FinancialDisplay value={purchasingSpending} />
                             </div>
                             <div className="text-xs text-gray-500">
-                              عامة: {formatCurrency(approvedExpensesTotal)}
+                              عامة:{" "}
+                              <FinancialDisplay value={approvedExpensesTotal} />
+                            </div>
+                          </div>
+
+                          <div className="bg-white rounded-xl p-4 text-center shadow-sm">
+                            <div className="text-2xl font-bold text-orange-600 mb-1">
+                              <FinancialDisplay value={availableBudget} />
+                            </div>
+                            <div className="text-sm text-gray-600 arabic-spacing">
+                              متاح للتخصيص
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              للمقاولين الجدد
                             </div>
                           </div>
 
@@ -1420,15 +2177,15 @@ export default function ProjectDetailClient() {
                             <div
                               className={`text-2xl font-bold mb-1 ${
                                 remainingBudget >= 0
-                                  ? "text-orange-600"
+                                  ? "text-indigo-600"
                                   : "text-red-600"
                               }`}
                             >
-                              {formatCurrency(remainingBudget)}
+                              <FinancialDisplay value={remainingBudget} />
                             </div>
                             <div className="text-sm text-gray-600 arabic-spacing">
                               {remainingBudget >= 0
-                                ? "المتبقي"
+                                ? "المتبقي الفعلي"
                                 : "تجاوز الميزانية"}
                             </div>
                             {remainingBudget < 0 && (
@@ -1440,7 +2197,7 @@ export default function ProjectDetailClient() {
 
                           <div className="bg-white rounded-xl p-4 text-center shadow-sm">
                             <div className="text-2xl font-bold text-purple-600 mb-1">
-                              {completionPercentage}%
+                              {completionPercentage || 0}%
                             </div>
                             <div className="text-sm text-gray-600 arabic-spacing">
                               نسبة الإنجاز
@@ -1448,65 +2205,505 @@ export default function ProjectDetailClient() {
                           </div>
                         </div>
 
-                        {/* Project Expenses Summary */}
-                        {projectExpenses.length > 0 && (
-                          <div className="bg-white rounded-xl p-4 shadow-sm mb-4">
-                            <h5 className="font-semibold text-gray-800 mb-3 flex items-center">
-                              <Receipt className="h-4 w-4 ml-2 text-gray-600" />
-                              ملخص مصروفات المشروع
+                        {/* Enhanced Assignment Breakdown - Contractor vs Purchasing */}
+                        {transformedAssignments.length > 0 && (
+                          <div className="bg-white rounded-xl p-6 shadow-sm mb-4 border border-gray-100">
+                            <h5 className="font-semibold text-gray-800 mb-4 flex items-center">
+                              <Calculator className="h-5 w-5 ml-2 text-gray-600 no-flip" />
+                              تفصيل التعيينات والمصروفات
                             </h5>
-                            <div className="grid grid-cols-3 gap-4 text-center">
-                              <div className="bg-yellow-50 rounded-lg p-3">
-                                <div className="text-lg font-bold text-yellow-600">
-                                  {
-                                    projectExpenses.filter(
-                                      (e) => e.status === "pending"
-                                    ).length
-                                  }
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                              {/* Contractor Assignments */}
+                              <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h6 className="font-semibold text-blue-800 flex items-center">
+                                    <User className="h-4 w-4 ml-2 no-flip" />
+                                    تعيينات المقاولين
+                                  </h6>
+                                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-lg text-sm font-medium">
+                                    {
+                                      transformedAssignments.filter(
+                                        (a: any) =>
+                                          a.assignment_type !== "purchasing"
+                                      ).length
+                                    }
+                                  </span>
                                 </div>
-                                <div className="text-xs text-gray-600">
-                                  في الانتظار
-                                </div>
-                                <div className="text-xs text-yellow-600 font-medium">
-                                  {formatCurrency(
-                                    projectExpenses
-                                      .filter((e) => e.status === "pending")
-                                      .reduce((sum, e) => sum + e.cost, 0)
-                                  )}
+
+                                <div className="space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      المبلغ المقدر:
+                                    </span>
+                                    <span className="font-medium text-blue-700">
+                                      <FinancialDisplay
+                                        value={transformedAssignments
+                                          .filter(
+                                            (a: any) =>
+                                              a.assignment_type !== "purchasing"
+                                          )
+                                          .reduce(
+                                            (sum: number, a: any) =>
+                                              sum + (a.estimated_amount || 0),
+                                            0
+                                          )}
+                                      />
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      المبلغ الفعلي:
+                                    </span>
+                                    <span className="font-medium text-green-700">
+                                      <FinancialDisplay
+                                        value={contractorSpending}
+                                      />
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      عدد الفواتير:
+                                    </span>
+                                    <span className="font-medium text-gray-800">
+                                      {transformedAssignments
+                                        .filter(
+                                          (a: any) =>
+                                            a.assignment_type !== "purchasing"
+                                        )
+                                        .reduce(
+                                          (sum: number, a: any) =>
+                                            sum + (a.total_invoices || 0),
+                                          0
+                                        )}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="bg-green-50 rounded-lg p-3">
-                                <div className="text-lg font-bold text-green-600">
-                                  {
-                                    projectExpenses.filter(
-                                      (e) => e.status === "approved"
-                                    ).length
-                                  }
+
+                              {/* Purchasing Assignments */}
+                              <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h6 className="font-semibold text-green-800 flex items-center">
+                                    <ShoppingCart className="h-4 w-4 ml-2 no-flip" />
+                                    تعيينات المشتريات
+                                  </h6>
+                                  <span className="bg-green-100 text-green-800 px-2 py-1 rounded-lg text-sm font-medium">
+                                    {
+                                      transformedAssignments.filter(
+                                        (a: any) =>
+                                          a.assignment_type === "purchasing"
+                                      ).length
+                                    }
+                                  </span>
                                 </div>
-                                <div className="text-xs text-gray-600">
-                                  معتمد ومدفوع
-                                </div>
-                                <div className="text-xs text-green-600 font-medium">
-                                  {formatCurrency(approvedExpensesTotal)}
+
+                                <div className="space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      المبلغ المقدر:
+                                    </span>
+                                    <span className="font-medium text-green-700">
+                                      <FinancialDisplay
+                                        value={transformedAssignments
+                                          .filter(
+                                            (a: any) =>
+                                              a.assignment_type === "purchasing"
+                                          )
+                                          .reduce(
+                                            (sum: number, a: any) =>
+                                              sum + (a.estimated_amount || 0),
+                                            0
+                                          )}
+                                      />
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      المبلغ الفعلي:
+                                    </span>
+                                    <span className="font-medium text-green-700">
+                                      <FinancialDisplay
+                                        value={purchasingSpending}
+                                      />
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      عدد الفواتير:
+                                    </span>
+                                    <span className="font-medium text-gray-800">
+                                      {transformedAssignments
+                                        .filter(
+                                          (a: any) =>
+                                            a.assignment_type === "purchasing"
+                                        )
+                                        .reduce(
+                                          (sum: number, a: any) =>
+                                            sum + (a.total_invoices || 0),
+                                          0
+                                        )}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="bg-red-50 rounded-lg p-3">
-                                <div className="text-lg font-bold text-red-600">
-                                  {
-                                    projectExpenses.filter(
-                                      (e) => e.status === "rejected"
-                                    ).length
-                                  }
+                            </div>
+
+                            {/* Quick Stats */}
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                  <div className="text-lg font-bold text-gray-800">
+                                    {transformedAssignments.length}
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    إجمالي التعيينات
+                                  </div>
                                 </div>
-                                <div className="text-xs text-gray-600">
-                                  مرفوض
+                                <div className="bg-blue-50 rounded-lg p-3">
+                                  <div className="text-lg font-bold text-blue-600">
+                                    {
+                                      transformedAssignments.filter(
+                                        (a: any) => a.has_approved_invoice
+                                      ).length
+                                    }
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    لها فواتير معتمدة
+                                  </div>
                                 </div>
-                                <div className="text-xs text-red-600 font-medium">
-                                  {formatCurrency(
-                                    projectExpenses
-                                      .filter((e) => e.status === "rejected")
-                                      .reduce((sum, e) => sum + e.cost, 0)
-                                  )}
+                                <div className="bg-yellow-50 rounded-lg p-3">
+                                  <div className="text-lg font-bold text-yellow-600">
+                                    {
+                                      transformedAssignments.filter(
+                                        (a: any) => a.budget_exhausted
+                                      ).length
+                                    }
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    ميزانية مستنفدة
+                                  </div>
+                                </div>
+                                <div className="bg-green-50 rounded-lg p-3">
+                                  <div className="text-lg font-bold text-green-600">
+                                    {Math.round(
+                                      transformedAssignments.length > 0
+                                        ? (transformedAssignments.reduce(
+                                            (sum: number, a: any) =>
+                                              sum + (a.actual_amount || 0),
+                                            0
+                                          ) /
+                                            transformedAssignments.reduce(
+                                              (sum: number, a: any) =>
+                                                sum + (a.estimated_amount || 0),
+                                              0
+                                            )) *
+                                            100
+                                        : 0
+                                    )}
+                                    %
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    نسبة الإنفاق
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Enhanced Project Expenses Summary */}
+                        {projectExpenses.length > 0 && (
+                          <div className="bg-white rounded-xl p-6 shadow-sm mb-4 border border-gray-100">
+                            <h5 className="font-semibold text-gray-800 mb-4 flex items-center">
+                              <Receipt className="h-5 w-5 ml-2 text-gray-600 no-flip" />
+                              المصروفات الخاصة بالمشروع
+                            </h5>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                              {/* Pending Expenses */}
+                              <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-200">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h6 className="font-semibold text-yellow-800 flex items-center">
+                                    <Clock className="h-4 w-4 ml-2 no-flip" />
+                                    في الانتظار
+                                  </h6>
+                                  <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded-lg text-sm font-medium">
+                                    {
+                                      projectExpenses.filter(
+                                        (e) => e.status === "pending"
+                                      ).length
+                                    }
+                                  </span>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      إجمالي المبلغ:
+                                    </span>
+                                    <span className="font-medium text-yellow-700">
+                                      {formatCurrency(
+                                        projectExpenses
+                                          .filter((e) => e.status === "pending")
+                                          .reduce((sum, e) => {
+                                            const cost =
+                                              typeof e.cost === "number"
+                                                ? e.cost
+                                                : parseFloat(e.cost) || 0;
+                                            return (
+                                              sum + (isNaN(cost) ? 0 : cost)
+                                            );
+                                          }, 0)
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      متوسط المصروف:
+                                    </span>
+                                    <span className="font-medium text-gray-800">
+                                      {(() => {
+                                        const pendingExpenses =
+                                          projectExpenses.filter(
+                                            (e) => e.status === "pending"
+                                          );
+                                        const total = pendingExpenses.reduce(
+                                          (sum, e) => {
+                                            const cost =
+                                              typeof e.cost === "number"
+                                                ? e.cost
+                                                : parseFloat(e.cost) || 0;
+                                            return (
+                                              sum + (isNaN(cost) ? 0 : cost)
+                                            );
+                                          },
+                                          0
+                                        );
+                                        return formatCurrency(
+                                          pendingExpenses.length > 0
+                                            ? total / pendingExpenses.length
+                                            : 0
+                                        );
+                                      })()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Approved Expenses */}
+                              <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h6 className="font-semibold text-green-800 flex items-center">
+                                    <CheckCircle className="h-4 w-4 ml-2 no-flip" />
+                                    معتمد ومدفوع
+                                  </h6>
+                                  <span className="bg-green-100 text-green-800 px-2 py-1 rounded-lg text-sm font-medium">
+                                    {
+                                      projectExpenses.filter(
+                                        (e) => e.status === "approved"
+                                      ).length
+                                    }
+                                  </span>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      إجمالي المبلغ:
+                                    </span>
+                                    <span className="font-medium text-green-700">
+                                      {formatCurrency(
+                                        isNaN(totalExpenses) ? 0 : totalExpenses
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      متوسط المصروف:
+                                    </span>
+                                    <span className="font-medium text-gray-800">
+                                      {(() => {
+                                        const approvedExpenses =
+                                          projectExpenses.filter(
+                                            (e) => e.status === "approved"
+                                          );
+                                        const safeTotalExpenses = isNaN(
+                                          totalExpenses
+                                        )
+                                          ? 0
+                                          : totalExpenses;
+                                        return formatCurrency(
+                                          approvedExpenses.length > 0
+                                            ? safeTotalExpenses /
+                                                approvedExpenses.length
+                                            : 0
+                                        );
+                                      })()}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      من الميزانية:
+                                    </span>
+                                    <span className="font-medium text-green-700">
+                                      {(() => {
+                                        const budget =
+                                          project?.budgetEstimate ||
+                                          project?.budget_estimate ||
+                                          0;
+                                        if (budget === 0) return "N/A";
+                                        const safeTotalExpenses = isNaN(
+                                          totalExpenses
+                                        )
+                                          ? 0
+                                          : totalExpenses;
+                                        const percentage =
+                                          (safeTotalExpenses / budget) * 100;
+                                        return isNaN(percentage)
+                                          ? "0%"
+                                          : `${percentage.toFixed(1)}%`;
+                                      })()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Rejected Expenses */}
+                              <div className="bg-red-50 rounded-xl p-4 border border-red-200">
+                                <div className="flex items-center justify-between mb-3">
+                                  <h6 className="font-semibold text-red-800 flex items-center">
+                                    <XCircle className="h-4 w-4 ml-2 no-flip" />
+                                    مرفوض
+                                  </h6>
+                                  <span className="bg-red-100 text-red-800 px-2 py-1 rounded-lg text-sm font-medium">
+                                    {
+                                      projectExpenses.filter(
+                                        (e) => e.status === "rejected"
+                                      ).length
+                                    }
+                                  </span>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      إجمالي المبلغ:
+                                    </span>
+                                    <span className="font-medium text-red-700">
+                                      {formatCurrency(
+                                        projectExpenses
+                                          .filter(
+                                            (e) => e.status === "rejected"
+                                          )
+                                          .reduce((sum, e) => {
+                                            const cost =
+                                              typeof e.cost === "number"
+                                                ? e.cost
+                                                : parseFloat(e.cost) || 0;
+                                            return (
+                                              sum + (isNaN(cost) ? 0 : cost)
+                                            );
+                                          }, 0)
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">
+                                      متوسط المصروف:
+                                    </span>
+                                    <span className="font-medium text-gray-800">
+                                      {(() => {
+                                        const rejectedExpenses =
+                                          projectExpenses.filter(
+                                            (e) => e.status === "rejected"
+                                          );
+                                        const total = rejectedExpenses.reduce(
+                                          (sum, e) => {
+                                            const cost =
+                                              typeof e.cost === "number"
+                                                ? e.cost
+                                                : parseFloat(e.cost) || 0;
+                                            return (
+                                              sum + (isNaN(cost) ? 0 : cost)
+                                            );
+                                          },
+                                          0
+                                        );
+                                        return formatCurrency(
+                                          rejectedExpenses.length > 0
+                                            ? total / rejectedExpenses.length
+                                            : 0
+                                        );
+                                      })()}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Project Expenses Quick Stats */}
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                <div className="bg-gray-50 rounded-lg p-3">
+                                  <div className="text-lg font-bold text-gray-800">
+                                    {projectExpenses.length}
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    إجمالي المصروفات
+                                  </div>
+                                </div>
+                                <div className="bg-orange-50 rounded-lg p-3">
+                                  <div className="text-lg font-bold text-orange-600">
+                                    {formatCurrency(
+                                      projectExpenses.reduce((sum, e) => {
+                                        const cost =
+                                          typeof e.cost === "number"
+                                            ? e.cost
+                                            : parseFloat(e.cost) || 0;
+                                        return sum + (isNaN(cost) ? 0 : cost);
+                                      }, 0)
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    إجمالي القيمة
+                                  </div>
+                                </div>
+                                <div className="bg-blue-50 rounded-lg p-3">
+                                  <div className="text-lg font-bold text-blue-600">
+                                    {(() => {
+                                      const categoryCounts =
+                                        projectExpenses.reduce((acc, e) => {
+                                          acc[e.category] =
+                                            (acc[e.category] || 0) + 1;
+                                          return acc;
+                                        }, {} as Record<string, number>);
+                                      return Object.keys(categoryCounts).length;
+                                    })()}
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    فئات مختلفة
+                                  </div>
+                                </div>
+                                <div className="bg-purple-50 rounded-lg p-3">
+                                  <div className="text-lg font-bold text-purple-600">
+                                    {(() => {
+                                      const approvedCount =
+                                        projectExpenses.filter(
+                                          (e) => e.status === "approved"
+                                        ).length;
+                                      const totalCount = projectExpenses.length;
+                                      return totalCount > 0
+                                        ? Math.round(
+                                            (approvedCount / totalCount) * 100
+                                          )
+                                        : 0;
+                                    })()}
+                                    %
+                                  </div>
+                                  <div className="text-xs text-gray-600">
+                                    نسبة الاعتماد
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -1520,7 +2717,7 @@ export default function ProjectDetailClient() {
                               تقدم المشروع
                             </span>
                             <span className="text-sm font-medium text-gray-700">
-                              {completionPercentage}%
+                              {completionPercentage || 0}%
                             </span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-3">
@@ -1528,7 +2725,7 @@ export default function ProjectDetailClient() {
                               className="bg-gradient-to-r from-blue-500 to-green-500 h-3 rounded-full transition-all duration-500"
                               style={{
                                 width: `${Math.min(
-                                  completionPercentage,
+                                  Math.max(completionPercentage || 0, 0),
                                   100
                                 )}%`,
                               }}
@@ -1549,7 +2746,7 @@ export default function ProjectDetailClient() {
                                   المنصرف من الخزينة:
                                 </span>
                                 <span className="font-bold text-emerald-700">
-                                  {formatCurrency(projectTotalSpent)}
+                                  <FinancialDisplay value={safeSpending} />
                                 </span>
                               </div>
                               <div className="flex items-center justify-between">
@@ -1557,7 +2754,9 @@ export default function ProjectDetailClient() {
                                   رصيد الخزينة الحالي:
                                 </span>
                                 <span className="font-bold text-blue-600">
-                                  {formatCurrency(safeState.currentBalance)}
+                                  <FinancialDisplay
+                                    value={safeState.currentBalance}
+                                  />
                                 </span>
                               </div>
                             </div>
@@ -1639,7 +2838,9 @@ export default function ProjectDetailClient() {
                                 }`}
                               >
                                 {isOverBudget ? "-" : "+"}
-                                {formatCurrency(Math.abs(budgetDifference))}
+                                <FinancialDisplay
+                                  value={Math.abs(budgetDifference)}
+                                />
                               </span>
                             </div>
                           );
@@ -1677,6 +2878,9 @@ export default function ProjectDetailClient() {
               onDeleteAssignment={handleDeleteAssignment}
               onViewInvoices={handleViewAssignmentInvoices}
               onAddAssignment={handleAddAssignment}
+              onFreezeAssignment={handleFreezeAssignment}
+              onUnfreezeAssignment={handleUnfreezeAssignment}
+              onEditAssignmentAmount={handleEditAssignmentAmount}
             />
           ) : (
             /* General Expenses Tab */
@@ -1708,13 +2912,15 @@ export default function ProjectDetailClient() {
                         </p>
                       </div>
                     </div>
-                    <Button
+                    <PermissionButton
+                      permission="canCreateInvoices"
                       onClick={() => setShowExpenseModal(true)}
                       className="bg-white/20 hover:bg-white/30 text-white border-white/30 px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                      viewOnlyTooltip="غير متاح - وضع العرض فقط"
                     >
                       <Plus className="h-5 w-5 ml-2 no-flip" />
                       <span className="arabic-spacing">إضافة مصروف جديد</span>
-                    </Button>
+                    </PermissionButton>
                   </div>
                 </div>
 
@@ -1738,7 +2944,11 @@ export default function ProjectDetailClient() {
                         <DollarSign className="h-6 w-6 text-green-600 no-flip" />
                       </div>
                       <div className="text-3xl font-bold text-green-600 mb-2">
-                        {new Intl.NumberFormat("ar-IQ").format(totalExpenses)}
+                        {isNaN(totalExpenses)
+                          ? "0"
+                          : new Intl.NumberFormat("en-US").format(
+                              totalExpenses
+                            )}
                       </div>
                       <div className="text-sm text-gray-600 arabic-spacing font-medium">
                         المعتمد (د.ع)
@@ -1761,14 +2971,20 @@ export default function ProjectDetailClient() {
                             : "text-gray-400"
                         }`}
                       >
-                        {project?.budgetEstimate || project?.budget_estimate
-                          ? `${(
-                              (totalExpenses /
-                                (project?.budgetEstimate ||
-                                  project?.budget_estimate)) *
-                              100
-                            ).toFixed(1)}%`
-                          : "N/A"}
+                        {(() => {
+                          const budget =
+                            project?.budgetEstimate || project?.budget_estimate;
+                          if (!budget || budget === 0) return "N/A";
+
+                          const safeTotalExpenses = isNaN(totalExpenses)
+                            ? 0
+                            : totalExpenses;
+                          const percentage = (safeTotalExpenses / budget) * 100;
+
+                          return isNaN(percentage)
+                            ? "0%"
+                            : `${percentage.toFixed(1)}%`;
+                        })()}
                       </div>
                       <div className="text-sm text-gray-600 arabic-spacing font-medium">
                         من إجمالي الميزانية
@@ -1982,79 +3198,34 @@ export default function ProjectDetailClient() {
                     className="arabic-spacing"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    فئة المصروف *
-                  </label>
-                  <Select
-                    value={newExpense.category}
-                    onChange={(e) =>
-                      setNewExpense({
-                        ...newExpense,
-                        category: e.target.value,
-                      })
-                    }
-                    className="arabic-spacing"
-                  >
-                    <option value="">اختر الفئة</option>
-                    <option value="Office Equipment">معدات مكتبية</option>
-                    <option value="Transportation">مواصلات</option>
-                    <option value="Materials">مواد خام</option>
-                    <option value="Tools">أدوات</option>
-                    <option value="Fuel">وقود</option>
-                    <option value="Maintenance">صيانة</option>
-                    <option value="Communication">اتصالات</option>
-                    <option value="Utilities">مرافق</option>
-                    <option value="Other">أخرى</option>
-                  </Select>
-                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    المبلغ (دينار عراقي) *
-                  </label>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={newExpense.cost}
-                    onChange={(e) =>
-                      setNewExpense({
-                        ...newExpense,
-                        cost: e.target.value,
-                      })
-                    }
-                    placeholder="0"
-                  />
-                  {newExpense.cost && (
-                    <p className="text-orange-600 text-sm font-medium">
-                      💰{" "}
-                      {new Intl.NumberFormat("ar-IQ").format(
-                        Number(newExpense.cost)
-                      )}{" "}
-                      دينار عراقي
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    رابط الإيصال (اختياري)
-                  </label>
-                  <Input
-                    type="url"
-                    value={newExpense.receipt_url}
-                    onChange={(e) =>
-                      setNewExpense({
-                        ...newExpense,
-                        receipt_url: e.target.value,
-                      })
-                    }
-                    placeholder="https://example.com/receipt.pdf"
-                    className="arabic-spacing"
-                  />
-                </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                  المبلغ (دينار عراقي) *
+                </label>
+                <Input
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={newExpense.cost}
+                  onChange={(e) =>
+                    setNewExpense({
+                      ...newExpense,
+                      cost: e.target.value,
+                    })
+                  }
+                  placeholder="0"
+                />
+                {newExpense.cost && (
+                  <p className="text-orange-600 text-sm font-medium">
+                    💰{" "}
+                    {new Intl.NumberFormat("ar-IQ").format(
+                      Number(newExpense.cost)
+                    )}{" "}
+                    دينار عراقي
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -2108,7 +3279,6 @@ export default function ProjectDetailClient() {
                   onClick={addProjectExpense}
                   disabled={
                     !newExpense.expense_name.trim() ||
-                    !newExpense.category.trim() ||
                     !newExpense.cost ||
                     expensesLoading
                   }
@@ -2157,7 +3327,19 @@ export default function ProjectDetailClient() {
                 const errorData = await response.json();
                 console.error("Invoice creation failed:", errorData);
 
-                // Show user-friendly error messages
+                // Handle specific error types with toast messages
+                if (errorData.error === "DUPLICATE_CUSTOMER_INVOICE") {
+                  addToast({
+                    type: "error",
+                    title: "رقم فاتورة مكرر",
+                    message:
+                      errorData.userMessage ||
+                      "رقم فاتورة العميل مستخدم مسبقاً",
+                  });
+                  return; // Don't close modal, let user fix the issue
+                }
+
+                // Show user-friendly error messages for other errors
                 const userMessage =
                   errorData.userMessage ||
                   errorData.error ||
@@ -2184,47 +3366,11 @@ export default function ProjectDetailClient() {
                 return userId;
               };
 
-              // Add invoice to localStorage for approval system
-              const invoiceForApproval = {
-                id: result.invoice.id,
-                invoiceNumber: result.invoice.invoice_number,
-                projectId: project?.id,
-                projectName: project?.name,
-                category: result.invoice.category_name,
-                subcategory: result.invoice.subcategory_name,
-                amount: result.invoice.amount,
-                date: result.invoice.date,
-                notes: result.invoice.notes || "",
-                status: "pending_approval",
-                submittedBy: getUserFriendlyName(result.invoice.submitted_by),
-                createdAt: result.invoice.created_at,
-                updatedAt: result.invoice.updated_at,
-              };
-
-              // Get existing invoices from localStorage
-              const existingInvoices =
-                localStorage.getItem("financial-invoices");
-              let invoices = [];
-              if (existingInvoices) {
-                try {
-                  invoices = JSON.parse(existingInvoices);
-                } catch (error) {
-                  console.warn("Failed to parse existing invoices:", error);
-                  invoices = [];
-                }
-              }
-
-              // Add new invoice to the array
-              invoices.push(invoiceForApproval);
-
-              // Save back to localStorage
-              localStorage.setItem(
-                "financial-invoices",
-                JSON.stringify(invoices)
+              // Invoice is now stored in database, no need for localStorage
+              console.log(
+                "✅ Category invoice created in database:",
+                result.invoice.id
               );
-
-              // Trigger storage event to update notification count
-              window.dispatchEvent(new Event("storage"));
 
               closeCategoryInvoiceModal();
 
@@ -2288,6 +3434,22 @@ export default function ProjectDetailClient() {
         onSave={handleSaveAssignments}
         existingAssignments={existingAssignments}
         editingAssignmentId={editingAssignmentId || undefined}
+        projectBudget={
+          typeof project?.budgetEstimate === "string"
+            ? parseFloat(project.budgetEstimate) || 0
+            : project?.budgetEstimate || 0
+        }
+        currentAllocatedBudget={
+          typeof project?.allocatedBudget === "string"
+            ? parseFloat(project.allocatedBudget) || 0
+            : project?.allocatedBudget || 0
+        }
+        spentBudget={
+          typeof project?.spentBudget === "string"
+            ? parseFloat(project.spentBudget) || 0
+            : project?.spentBudget || 0
+        }
+        projectName={project?.name}
       />
 
       {/* Simple Edit Assignment Modal */}

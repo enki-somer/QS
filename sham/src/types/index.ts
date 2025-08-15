@@ -8,12 +8,23 @@ export interface Project {
   location: string;
   area?: number; // Project area in square meters (m²)
   budgetEstimate: number;
+  allocatedBudget?: number;  // Total budget allocated to contractor assignments
+  availableBudget?: number;  // Remaining budget available for new assignments  
+  spentBudget?: number;      // Total amount actually spent (approved invoices + expenses)
   client: string;
   startDate: string; // ISO date string
   endDate: string; // ISO date string
   status: 'planning' | 'active' | 'completed' | 'cancelled';
   createdAt: string; // ISO timestamp
   updatedAt: string; // ISO timestamp
+  
+  // NEW FINANCIAL FIELDS
+  pricePerMeter?: number;    // Price per square meter for construction calculation
+  ownerDealPrice?: number;   // Total deal price agreed with project owner
+  ownerPaidAmount?: number;  // Amount paid by owner so far (updated from safe transactions)
+  constructionCost?: number; // Calculated: area * pricePerMeter
+  profitMargin?: number;     // Calculated: (ownerDealPrice - constructionCost) / ownerDealPrice * 100
+  totalSiteArea?: number;    // Total area of the site (for comparison with construction area)
 }
 
 export interface Invoice {
@@ -178,6 +189,7 @@ export interface ProjectCategoryAssignment {
   actualAmount?: number;
   notes?: string;
   status: 'planned' | 'active' | 'completed' | 'cancelled';
+  assignment_type?: 'contractor' | 'purchasing';
   createdAt: string;
   updatedAt: string;
 }
@@ -204,6 +216,12 @@ export interface EnhancedProjectFormData {
   endDate: string;
   status: 'planning' | 'active' | 'completed' | 'cancelled';
   categoryAssignments: ProjectCategoryAssignmentFormData[];
+  
+  // NEW FINANCIAL FIELDS
+  pricePerMeter: string;
+  ownerDealPrice: string;
+  ownerPaidAmount: string;
+  totalSiteArea: string;
 }
 
 export interface EmployeeFormData {

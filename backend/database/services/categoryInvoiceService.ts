@@ -14,6 +14,12 @@ export interface CategoryInvoiceData {
   description: string;
   notes?: string;
   projectId: string;
+  // New fields for attachments and fraud prevention
+  customerInvoiceNumber?: string;
+  attachmentData?: string;
+  attachmentFilename?: string;
+  attachmentSize?: number;
+  attachmentType?: string;
 }
 
 export interface CategoryInvoiceResponse extends Invoice {
@@ -24,6 +30,50 @@ export interface CategoryInvoiceResponse extends Invoice {
 }
 
 class CategoryInvoiceService {
+  
+  /**
+   * Check for duplicate customer invoice numbers
+   * Returns the duplicate invoice details if found, null otherwise
+   */
+  async checkDuplicateCustomerInvoiceNumber(customerInvoiceNumber: string): Promise<any | null> {
+    const client = await getPool().connect();
+    
+    try {
+      const duplicateQuery = `
+        SELECT 
+          i.customer_invoice_number,
+          i.invoice_number,
+          p.name as project_name,
+          p.code as project_code,
+          COALESCE(c.full_name, 'غير محدد') as contractor_name,
+          i.status,
+          i.created_at
+        FROM invoices i
+        LEFT JOIN projects p ON i.project_id = p.id
+        LEFT JOIN project_category_assignments pca ON i.category_assignment_id = pca.id
+        LEFT JOIN contractors c ON pca.contractor_id = c.id
+        WHERE i.customer_invoice_number = $1
+        AND i.customer_invoice_number IS NOT NULL
+        AND i.customer_invoice_number != ''
+        ORDER BY i.created_at DESC
+        LIMIT 1
+      `;
+      
+      const result = await client.query(duplicateQuery, [customerInvoiceNumber.trim()]);
+      
+      if (result.rows.length > 0) {
+        return result.rows[0];
+      }
+      
+      return null;
+      
+    } catch (error) {
+      console.error('Error checking duplicate customer invoice number:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
   
   /**
    * Create a category-specific invoice
@@ -64,8 +114,10 @@ class CategoryInvoiceService {
       const invoiceQuery = `
         INSERT INTO invoices (
           project_id, category_assignment_id, category_name, subcategory_name,
-          invoice_number, amount, subtotal, date, notes, status, submitted_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          invoice_number, amount, subtotal, date, notes, status, submitted_by,
+          customer_invoice_number, attachment_data, attachment_filename, 
+          attachment_size, attachment_type
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *
       `;
 
@@ -80,7 +132,12 @@ class CategoryInvoiceService {
         data.date,
         data.notes,
         'pending_approval',
-        createdBy
+        createdBy,
+        data.customerInvoiceNumber || null,
+        data.attachmentData || null,
+        data.attachmentFilename || null,
+        data.attachmentSize || null,
+        data.attachmentType || null
       ];
 
       console.log('🔍 CategoryInvoiceService DEBUG: Executing invoice insert query...');
@@ -122,13 +179,19 @@ class CategoryInvoiceService {
 
       await client.query('COMMIT');
 
-      // Return the enhanced invoice with category details
+      // Return the enhanced invoice with category details and attachment info
       return {
         ...invoice,
         categoryAssignmentId: data.categoryAssignmentId,
         categoryName: data.categoryName,
         subcategoryName: data.subcategoryName,
-        assignmentDetails: assignment
+        assignmentDetails: assignment,
+        // Explicitly include customer invoice and attachment fields for printing
+        customerInvoiceNumber: invoice.customer_invoice_number,
+        attachmentData: invoice.attachment_data,
+        attachmentFilename: invoice.attachment_filename,
+        attachmentSize: invoice.attachment_size,
+        attachmentType: invoice.attachment_type
       };
 
     } catch (error: any) {
@@ -168,6 +231,12 @@ class CategoryInvoiceService {
       categoryAssignmentId: row.category_assignment_id,
       categoryName: row.category_name,
       subcategoryName: row.subcategory_name,
+      // Customer invoice and attachment fields for printing
+      customerInvoiceNumber: row.customer_invoice_number,
+      attachmentData: row.attachment_data,
+      attachmentFilename: row.attachment_filename,
+      attachmentSize: row.attachment_size,
+      attachmentType: row.attachment_type,
       assignmentDetails: {
         id: categoryAssignmentId,
         main_category: row.category_name,
@@ -230,7 +299,13 @@ class CategoryInvoiceService {
         approved_at: row.approved_at,
         rejection_reason: row.rejection_reason,
         created_at: row.created_at,
-        updated_at: row.updated_at
+        updated_at: row.updated_at,
+        // Customer invoice and attachment fields for printing and reports
+        customerInvoiceNumber: row.customer_invoice_number,
+        attachmentData: row.attachment_data,
+        attachmentFilename: row.attachment_filename,
+        attachmentSize: row.attachment_size,
+        attachmentType: row.attachment_type
       }));
     } catch (error) {
       console.error('Error fetching invoices by project and category:', error);
@@ -319,6 +394,85 @@ class CategoryInvoiceService {
   }
 
   /**
+   * Get all pending category invoices across all projects (for approval modal)
+   */
+  async getAllPendingCategoryInvoices(): Promise<any[]> {
+    const query = `
+      SELECT 
+        i.*,
+        pca.main_category as category_name,
+        pca.subcategory as subcategory_name,
+        pca.contractor_name,
+        pca.estimated_amount,
+        pca.has_approved_invoice,
+        p.name as project_name,
+        creator.full_name as submitted_by_name,
+        approver.full_name as approved_by_name
+      FROM invoices i
+      JOIN project_category_assignments pca ON i.category_assignment_id = pca.id
+      JOIN projects p ON i.project_id = p.id
+      LEFT JOIN users creator ON i.submitted_by = creator.id
+      LEFT JOIN users approver ON i.approved_by = approver.id
+      WHERE i.status = 'pending_approval'
+      ORDER BY i.created_at DESC
+    `;
+
+    const result = await getPool().query(query);
+    
+    const mappedRows = result.rows.map((row: any) => {
+      const mappedRow = {
+        id: row.id,
+        projectId: row.project_id,
+        categoryAssignmentId: row.category_assignment_id,
+        categoryName: row.category_name,
+        subcategoryName: row.subcategory_name,
+        contractorName: row.contractor_name,
+        invoiceNumber: row.invoice_number,
+        amount: parseFloat(row.amount),
+        subtotal: parseFloat(row.subtotal),
+        date: row.date,
+        dueDate: row.due_date,
+        notes: row.notes,
+        status: row.status,
+        submittedBy: row.submitted_by,
+        approvedBy: row.approved_by,
+        approvedAt: row.approved_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        // Additional fields for approval modal
+        projectName: row.project_name,
+        submittedByName: row.submitted_by_name,
+        approvedByName: row.approved_by_name,
+        estimatedAmount: parseFloat(row.estimated_amount || 0),
+        hasApprovedInvoice: row.has_approved_invoice,
+        // Customer invoice and attachment fields for printing and preview
+        customerInvoiceNumber: row.customer_invoice_number,
+        attachmentData: row.attachment_data,
+        attachmentFilename: row.attachment_filename,
+        attachmentSize: row.attachment_size,
+        attachmentType: row.attachment_type
+      };
+      
+      // Debug log to see what attachment data is being returned
+      if (row.customer_invoice_number || row.attachment_data) {
+        console.log('🔍 Backend Debug - Invoice with attachment:', {
+          invoiceId: row.id,
+          invoiceNumber: row.invoice_number,
+          customerInvoiceNumber: row.customer_invoice_number,
+          hasAttachmentData: !!row.attachment_data,
+          attachmentType: row.attachment_type,
+          attachmentSize: row.attachment_size
+        });
+      }
+      
+      return mappedRow;
+    });
+    
+    console.log(`📋 getAllPendingCategoryInvoices returning ${mappedRows.length} invoices`);
+    return mappedRows;
+  }
+
+  /**
    * Check if a category assignment can be edited (financial protection)
    */
   async canEditCategoryAssignment(assignmentId: string): Promise<boolean> {
@@ -346,6 +500,22 @@ class CategoryInvoiceService {
     try {
       await client.query('BEGIN');
 
+      // First get the invoice details including project information
+      const invoiceQuery = `
+        SELECT i.*, p.name as project_name 
+        FROM invoices i
+        JOIN projects p ON i.project_id = p.id
+        WHERE i.id = $1 AND i.status = 'pending_approval'
+      `;
+      
+      const invoiceDetails = await client.query(invoiceQuery, [invoiceId]);
+      
+      if (invoiceDetails.rows.length === 0) {
+        throw new Error('Invoice not found or not in pending status');
+      }
+
+      const invoice = invoiceDetails.rows[0];
+
       // Update invoice status
       const updateInvoiceQuery = `
         UPDATE invoices 
@@ -354,21 +524,80 @@ class CategoryInvoiceService {
           approved_by = $1,
           approved_at = CURRENT_TIMESTAMP,
           updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING *
+      `;
+      
+      const invoiceResult = await client.query(updateInvoiceQuery, [approvedBy, invoiceId]);
+
+      // The database trigger will automatically update the category assignment
+      // when the invoice status changes to 'approved' - no manual update needed
+      // This prevents conflicts with the prevent_approved_category_edit trigger
+
+      // Now handle the safe deduction using the database function
+      console.log(`💰 Deducting ${invoice.amount} from safe for invoice ${invoice.invoice_number}`);
+      
+      const deductionResult = await client.query(`
+        SELECT deduct_from_safe_for_invoice($1, $2, $3, $4, $5, $6) as success
+      `, [
+        invoice.amount,
+        invoice.project_id,
+        invoice.project_name,
+        invoice.id,
+        invoice.invoice_number,
+        approvedBy
+      ]);
+
+      if (!deductionResult.rows[0]?.success) {
+        throw new Error('Failed to deduct from safe - insufficient balance or system error');
+      }
+
+      console.log(`✅ Safe deduction successful for invoice ${invoice.invoice_number}`);
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error in approveCategoryInvoice:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * Reject a category invoice
+   */
+  async rejectCategoryInvoice(invoiceId: string, rejectedBy: string, rejectionReason?: string): Promise<void> {
+    const client = await getPool().connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // Update invoice status to rejected
+      const updateInvoiceQuery = `
+        UPDATE invoices 
+        SET 
+          status = 'rejected',
+          approved_by = $1,
+          approved_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP,
+          notes = CASE 
+            WHEN notes IS NULL OR notes = '' THEN $3
+            ELSE notes || E'\n\n' || 'سبب الرفض: ' || $3
+          END
         WHERE id = $2 AND status = 'pending_approval'
         RETURNING category_assignment_id, amount
       `;
       
-      const invoiceResult = await client.query(updateInvoiceQuery, [approvedBy, invoiceId]);
+      const defaultReason = rejectionReason || 'تم الرفض من المدير - يرجى مراجعة البيانات';
+      const invoiceResult = await client.query(updateInvoiceQuery, [rejectedBy, invoiceId, defaultReason]);
       
       if (invoiceResult.rows.length === 0) {
         throw new Error('Invoice not found or not in pending status');
       }
 
-      const { category_assignment_id, amount } = invoiceResult.rows[0];
-
-      // The database trigger will automatically update the category assignment
-      // when the invoice status changes to 'approved' - no manual update needed
-      // This prevents conflicts with the prevent_approved_category_edit trigger
+      // No need to update category assignment for rejection
+      // The invoice is simply marked as rejected and doesn't affect financial calculations
 
       await client.query('COMMIT');
     } catch (error) {

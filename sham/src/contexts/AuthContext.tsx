@@ -18,7 +18,7 @@ import {
 } from "@/lib/api";
 
 // Types from backend (keep in sync)
-export type UserRole = "admin" | "data_entry";
+export type UserRole = "admin" | "data_entry" | "partners";
 
 export interface AuthUser {
   id: string;

@@ -56,7 +56,7 @@ export const removeAuthUser = () => {
   }
 };
 
-// API request wrapper with auth headers
+// API request wrapper with auth headers and CORS handling
 export const apiRequest = async (endpoint: string, options: RequestInit = {}) => {
   const token = getAuthToken();
   const url = `${API_BASE_URL}${endpoint}`;
@@ -71,12 +71,28 @@ export const apiRequest = async (endpoint: string, options: RequestInit = {}) =>
   
   const config: RequestInit = {
     ...options,
+    mode: 'cors', // Explicitly set CORS mode
+    credentials: 'include', // Include credentials for CORS
     headers: {
       ...defaultHeaders,
       ...options.headers,
     },
   };
   
-  const response = await fetch(url, config);
-  return response;
+  try {
+    const response = await fetch(url, config);
+    
+    // If response is not ok and it's a CORS/network error, log for debugging
+    if (!response.ok && response.status === 0) {
+      console.error('CORS/Network error for:', url);
+      console.error('Request config:', config);
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('API Request failed:', error);
+    console.error('URL:', url);
+    console.error('Config:', config);
+    throw error;
+  }
 }; 

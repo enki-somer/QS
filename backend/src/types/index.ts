@@ -10,7 +10,7 @@ export interface User {
   lastLogin?: string;
 }
 
-export type UserRole = 'admin' | 'data_entry';
+export type UserRole = 'admin' | 'data_entry' | 'partners';
 
 export interface LoginRequest {
   username: string;
@@ -81,5 +81,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canViewReports: true, // Can generate reports
     canExportReports: true, // Can export reports
     canManageExpenses: true, // Can enter general expenses
+  },
+  partners: {
+    canViewSafe: true, // Partners can see safe balance and transactions
+    canEditSafe: false, // But cannot edit or add funding
+    canDeleteRecords: false, // Cannot delete anything
+    canMakePayments: false, // Cannot make payments
+    canManageProjects: false, // Cannot create/edit projects (view-only)
+    canManageEmployees: false, // Cannot manage employees
+    canViewReports: true, // Can view all reports
+    canExportReports: true, // Can export reports for analysis
+    canManageExpenses: false, // Cannot create/edit expenses (view-only)
   },
 }; 

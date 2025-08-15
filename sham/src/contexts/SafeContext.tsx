@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { generateTransactionId } from "@/lib/utils";
 import { apiRequest } from "@/lib/api";
+import { useAuth } from "./AuthContext";
 
 interface SafeTransaction {
   id: string;
@@ -16,6 +17,24 @@ interface SafeTransaction {
   previousBalance: number;
   newBalance: number;
   createdAt: string;
+
+  // Audit trail fields
+  is_edited?: boolean;
+  edit_reason?: string;
+  edited_by?: string;
+  edited_at?: string;
+
+  // Project linking and batch tracking
+  batch_number?: number;
+}
+
+interface FundingSource {
+  type: "general" | "rental" | "factory" | "contracts" | "project";
+  label: string;
+  value: string;
+  projectId?: string;
+  batchNumber?: number;
+  remainingAmount?: number;
 }
 
 interface SafeState {
@@ -28,13 +47,14 @@ interface SafeState {
 interface SafeContextType {
   safeState: SafeState;
   refreshSafeState: () => Promise<void>;
-  addFunding: (amount: number, description: string) => void;
+  addFunding: (amount: number, description: string) => Promise<void>;
   deductForInvoice: (
     amount: number,
     projectId: string,
     projectName: string,
-    invoiceNumber: string
-  ) => boolean;
+    invoiceNumber: string,
+    invoiceId?: string
+  ) => Promise<boolean>;
   deductForSalary: (amount: number, employeeName: string) => boolean;
   deductForExpense: (
     amount: number,
@@ -50,6 +70,8 @@ const SafeContext = createContext<SafeContextType | undefined>(undefined);
 export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
+  const { user, isLoading: authLoading } = useAuth();
+
   // Initialize with empty state - no hardcoded data
   const [safeState, setSafeState] = useState<SafeState>({
     currentBalance: 0,
@@ -58,63 +80,79 @@ export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
     totalSpent: 0,
   });
 
-  // Load safe state from database API
+  // Load safe state from database API ONLY when user is authenticated AND has safe access
   useEffect(() => {
+    // Don't load if auth is still loading or user is not authenticated
+    if (authLoading || !user) {
+      console.log("⏳ Waiting for authentication before loading safe state...");
+      return;
+    }
+
+    // Don't load safe state for data_entry users - they don't have permission
+    if (user.role === "data_entry") {
+      console.log("🚫 Data entry user - skipping safe state loading");
+      return;
+    }
+
     const loadSafeState = async () => {
       try {
-        // Load safe state and transactions from database
+        console.log(
+          "🔄 Loading safe state from database for authenticated user..."
+        );
         const response = await apiRequest("/safe/state");
         if (response.ok) {
           const data = await response.json();
           setSafeState({
-            currentBalance: data.current_balance || 0,
-            totalFunded: data.total_funded || 0,
-            totalSpent: data.total_spent || 0,
+            currentBalance: parseFloat(data.current_balance || 0),
+            totalFunded: parseFloat(data.total_funded || 0),
+            totalSpent: parseFloat(data.total_spent || 0),
             transactions: data.transactions || [],
           });
           console.log("✅ Safe state loaded from database:", data);
+          console.log("🔍 Loaded SafeState details:", {
+            currentBalance: data.current_balance,
+            totalFunded: data.total_funded,
+            totalSpent: data.total_spent,
+            transactionsCount: data.transactions?.length || 0,
+          });
         } else {
-          console.warn(
-            "Failed to load safe state from API, using localStorage fallback"
-          );
-          // Fallback to localStorage if API fails
-          const stored = localStorage.getItem("financial-safe-state");
-          if (stored) {
-            const parsedState = JSON.parse(stored);
-            setSafeState(parsedState);
+          console.error("❌ Failed to load safe state from database API");
+          if (response.status === 401) {
+            console.error("❌ User not authenticated for safe access");
           }
+          throw new Error("Database API connection failed");
         }
       } catch (error) {
-        console.warn("Error loading safe state from API:", error);
-        // Fallback to localStorage
-        const stored = localStorage.getItem("financial-safe-state");
-        if (stored) {
-          try {
-            const parsedState = JSON.parse(stored);
-            setSafeState(parsedState);
-          } catch (localError) {
-            console.warn(
-              "Failed to load SAFE state from localStorage:",
-              localError
-            );
-          }
-        }
+        console.error("❌ Error loading safe state from database:", error);
+        // Keep the empty initial state - do not use localStorage
+        setSafeState({
+          currentBalance: 0,
+          transactions: [],
+          totalFunded: 0,
+          totalSpent: 0,
+        });
       }
     };
 
     loadSafeState();
-  }, []);
+  }, [user, authLoading]); // Depend on user and authLoading state
 
   // Method to refresh safe state (for use after transactions)
   const refreshSafeState = async () => {
+    // Don't refresh if user is not authenticated
+    if (!user) {
+      console.warn("❌ Cannot refresh safe state - user not authenticated");
+      return;
+    }
+
     try {
       const response = await apiRequest("/safe/state");
       if (response.ok) {
         const data = await response.json();
         setSafeState({
-          currentBalance: data.current_balance || 0,
-          totalFunded: data.total_funded || 0,
-          totalSpent: data.total_spent || 0,
+          currentBalance: parseFloat(data.current_balance || 0),
+          totalFunded: parseFloat(data.total_funded || 0),
+          totalSpent: parseFloat(data.total_spent || 0),
           transactions: data.transactions || [],
         });
         console.log("✅ Safe state refreshed from database");
@@ -124,63 +162,112 @@ export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  // Save to localStorage whenever state changes
-  useEffect(() => {
-    localStorage.setItem("financial-safe-state", JSON.stringify(safeState));
-  }, [safeState]);
+  // Database-only mode - no localStorage saving
 
-  const addFunding = (amount: number, description: string) => {
-    const transaction: SafeTransaction = {
-      id: generateTransactionId(),
-      type: "funding",
-      amount,
-      description,
-      date: new Date().toISOString().split("T")[0],
-      previousBalance: safeState.currentBalance,
-      newBalance: safeState.currentBalance + amount,
-      createdAt: new Date().toISOString(),
-    };
+  const addFunding = async (amount: number, description: string) => {
+    if (!user) {
+      throw new Error("User not authenticated");
+    }
 
-    setSafeState((prev) => ({
-      currentBalance: prev.currentBalance + amount,
-      transactions: [transaction, ...prev.transactions],
-      totalFunded: prev.totalFunded + amount,
-      totalSpent: prev.totalSpent,
-    }));
+    try {
+      console.log("💰 Adding funding to database:", { amount, description });
+      const response = await apiRequest("/safe/funding", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          description,
+          funding_source: "manual",
+          funding_notes: description,
+        }),
+      });
+
+      if (response.ok) {
+        console.log("✅ Funding added successfully");
+        // Refresh the safe state from database
+        await refreshSafeState();
+      } else {
+        console.error("❌ Failed to add funding");
+        throw new Error("Failed to add funding to database");
+      }
+    } catch (error) {
+      console.error("❌ Error adding funding:", error);
+      throw error;
+    }
   };
 
-  const deductForInvoice = (
+  const deductForInvoice = async (
     amount: number,
     projectId: string,
     projectName: string,
-    invoiceNumber: string
-  ): boolean => {
-    if (safeState.currentBalance < amount) {
-      return false; // Insufficient funds
+    invoiceNumber: string,
+    invoiceId?: string
+  ): Promise<boolean> => {
+    if (!user) {
+      console.error("❌ User not authenticated for invoice deduction");
+      return false;
     }
 
-    const transaction: SafeTransaction = {
-      id: generateTransactionId(),
-      type: "invoice_payment",
-      amount: -amount,
-      description: `دفعة فاتورة للمشروع: ${projectName}`,
-      date: new Date().toISOString().split("T")[0],
-      projectId,
-      projectName,
-      invoiceNumber,
-      previousBalance: safeState.currentBalance,
-      newBalance: safeState.currentBalance - amount,
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      // Check if sufficient funds first
+      if (safeState.currentBalance < amount) {
+        console.warn("❌ Insufficient funds for invoice payment");
+        return false;
+      }
 
-    setSafeState((prev) => ({
-      currentBalance: prev.currentBalance - amount,
-      transactions: [transaction, ...prev.transactions],
-      totalFunded: prev.totalFunded,
-      totalSpent: prev.totalSpent + amount,
-    }));
+      const finalInvoiceId =
+        invoiceId || `invoice-${invoiceNumber}-${Date.now()}`;
 
-    return true;
+      console.log("💸 Deducting for invoice from database:", {
+        amount,
+        projectId,
+        projectName,
+        invoiceNumber,
+        invoiceId: finalInvoiceId,
+      });
+
+      const response = await apiRequest("/safe/deduct/invoice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount,
+          projectId,
+          projectName,
+          invoiceNumber,
+          invoiceId: finalInvoiceId,
+        }),
+      });
+
+      if (response.ok) {
+        console.log("✅ Invoice payment deducted successfully");
+        // Refresh the safe state from database
+        await refreshSafeState();
+        return true;
+      } else {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = await response.text();
+        }
+        console.error("❌ Failed to deduct for invoice:", {
+          status: response.status,
+          statusText: response.statusText,
+          errorData,
+          requestBody: {
+            amount,
+            projectId,
+            projectName,
+            invoiceNumber,
+            invoiceId: invoiceId || `invoice-${invoiceNumber}-${Date.now()}`,
+          },
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error("❌ Error deducting for invoice:", error);
+      return false;
+    }
   };
 
   const deductForSalary = (amount: number, employeeName: string): boolean => {
@@ -244,7 +331,16 @@ export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const hasBalance = (amount: number): boolean => {
-    return safeState.currentBalance >= amount;
+    // Ensure both values are numbers for proper comparison
+    const currentBalance =
+      typeof safeState.currentBalance === "number"
+        ? safeState.currentBalance
+        : parseFloat(safeState.currentBalance);
+    const requiredAmount =
+      typeof amount === "number" ? amount : parseFloat(amount);
+    const hasEnough = currentBalance >= requiredAmount;
+
+    return hasEnough;
   };
 
   const contextValue: SafeContextType = {

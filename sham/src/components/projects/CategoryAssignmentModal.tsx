@@ -12,6 +12,11 @@ import {
   Briefcase,
   DollarSign,
   AlertCircle,
+  TrendingUp,
+  Calculator,
+  Wallet,
+  Target,
+  ShoppingCart,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -29,6 +34,10 @@ interface SimpleAssignmentFormData {
   contractorName: string;
   estimatedAmount: string;
   notes?: string;
+  isPurchasing?: boolean; // New field for purchasing assignments
+  status?: string; // Assignment status (active, frozen, cancelled)
+  actual_amount?: number; // Spent amount for frozen assignment calculation
+  spentAmount?: number; // Alternative field name for spent amount
 }
 import { PROJECT_CATEGORIES } from "@/constants/projectCategories";
 import { useContractors } from "@/contexts/ContractorContext";
@@ -43,6 +52,11 @@ interface CategoryAssignmentModalProps {
   ) => Promise<{ success: boolean; error?: string }>;
   existingAssignments?: SimpleAssignmentFormData[];
   editingAssignmentId?: string;
+  // Budget tracking props
+  projectBudget: number;
+  currentAllocatedBudget: number;
+  spentBudget: number;
+  projectName?: string;
 }
 
 const categoryIcons = {
@@ -59,6 +73,10 @@ export default function CategoryAssignmentModal({
   onSave,
   existingAssignments = [],
   editingAssignmentId,
+  projectBudget,
+  currentAllocatedBudget,
+  spentBudget,
+  projectName,
 }: CategoryAssignmentModalProps) {
   const { contractors } = useContractors();
   const { addToast } = useToast();
@@ -74,7 +92,114 @@ export default function CategoryAssignmentModal({
     contractorName: "",
     estimatedAmount: "",
     notes: "",
+    isPurchasing: false, // New field for purchasing option
   });
+
+  // CRITICAL: Comprehensive Budget Tracking with Cumulative Control
+  const calculateBudgetStatus = () => {
+    // 1. Calculate existing assignments total (already saved in database)
+    // CRITICAL: For frozen assignments, only count the SPENT portion, not the full estimated amount
+    // The unused portion has been returned to the project budget pool
+    const existingAssignmentsTotal = existingAssignments.reduce(
+      (sum, assignment) => {
+        const isActive =
+          !assignment.id || // New assignments are considered active
+          (assignment as any).status === "active" ||
+          !(assignment as any).status; // Default to active if no status
+
+        if (isActive) {
+          // Active assignments: count full estimated amount
+          const amount = parseFloat(assignment.estimatedAmount) || 0;
+          return sum + amount;
+        } else {
+          // Frozen/cancelled assignments: only count the SPENT portion
+          // The unused portion (estimated - spent) has been returned to project budget
+          const estimatedAmount = parseFloat(assignment.estimatedAmount) || 0;
+          const spentAmount = parseFloat(
+            (assignment as any).actual_amount ||
+              (assignment as any).spentAmount ||
+              0
+          );
+          const consumedBudget = spentAmount; // Only the spent amount is still "locked"
+
+          console.log("🔍 Frozen assignment - counting only spent portion:", {
+            contractor: assignment.contractorName,
+            estimated: estimatedAmount,
+            spent: spentAmount,
+            consumedBudget: consumedBudget,
+            returned: estimatedAmount - spentAmount,
+            status: (assignment as any).status,
+          });
+
+          return sum + consumedBudget;
+        }
+      },
+      0
+    );
+
+    // 2. Calculate new assignments total (being added in this modal)
+    const newAssignmentsTotal = assignments.reduce((sum, assignment) => {
+      const amount = parseFloat(assignment.estimatedAmount) || 0;
+      return sum + amount;
+    }, 0);
+
+    // 3. Calculate quick category amount if being added
+    const quickCategoryAmount = parseFloat(quickCategory.estimatedAmount) || 0;
+
+    // 4. CRITICAL: Calculate TOTAL CUMULATIVE ALLOCATIONS
+    // This includes: existing assignments + new assignments + quick category
+    const totalCumulativeAllocations =
+      existingAssignmentsTotal + newAssignmentsTotal + quickCategoryAmount;
+
+    // 5. Calculate what's actually available for new assignments
+    // IMPORTANT: Don't subtract spentBudget separately - it's already counted in existingAssignmentsTotal
+    const actuallyAvailable = projectBudget - existingAssignmentsTotal;
+
+    // 6. Calculate remaining budget after ALL allocations (existing + new)
+    // IMPORTANT: Only subtract allocations, not spent budget (to avoid double counting)
+    const remainingBudget = projectBudget - totalCumulativeAllocations;
+
+    // 7. Budget utilization percentage based on TOTAL allocations
+    // IMPORTANT: Don't add spentBudget + totalCumulativeAllocations (double counting)
+    const utilizationPercentage =
+      projectBudget > 0
+        ? Math.round((totalCumulativeAllocations / projectBudget) * 100)
+        : 0;
+
+    // 8. CRITICAL STATUS CHECKS
+    const isOverBudget = remainingBudget < 0; // Total exceeds budget
+    const isNearLimit =
+      remainingBudget > 0 && remainingBudget < projectBudget * 0.1; // Less than 10% remaining
+    const isHealthy = remainingBudget >= projectBudget * 0.1;
+
+    // 9. Quick category validation - check if adding it would exceed budget
+    // IMPORTANT: Don't subtract spentBudget separately (already in existingAssignmentsTotal)
+    const wouldQuickCategoryExceedBudget =
+      quickCategoryAmount > 0 &&
+      projectBudget -
+        existingAssignmentsTotal -
+        newAssignmentsTotal -
+        quickCategoryAmount <
+        0;
+
+    return {
+      projectBudget,
+      spentBudget,
+      existingAssignmentsTotal,
+      newAssignmentsTotal,
+      totalCumulativeAllocations,
+      actuallyAvailable,
+      remainingBudget,
+      utilizationPercentage,
+      isOverBudget,
+      isNearLimit,
+      isHealthy,
+      wouldQuickCategoryExceedBudget,
+      assignmentsCount: assignments.length + (quickCategoryAmount > 0 ? 1 : 0),
+    };
+  };
+
+  const budgetStatus = calculateBudgetStatus();
 
   // Initialize assignments from existing data
   useEffect(() => {
@@ -90,13 +215,14 @@ export default function CategoryAssignmentModal({
     }
   }, [existingAssignments]);
 
-  // Quick category form validation
+  // CRITICAL: Enhanced Quick category form validation with budget control
   const isQuickCategoryValid =
     quickCategory.mainCategory.trim() &&
     quickCategory.subcategory.trim() &&
-    quickCategory.contractorId.trim() &&
+    (quickCategory.isPurchasing || quickCategory.contractorId.trim()) && // Either purchasing or contractor selected
     quickCategory.estimatedAmount.trim() &&
-    Number(quickCategory.estimatedAmount) > 0;
+    Number(quickCategory.estimatedAmount) > 0 &&
+    !budgetStatus.wouldQuickCategoryExceedBudget; // PREVENT if would exceed budget
 
   // Calculate total estimated amount
   const calculateTotalEstimated = () => {
@@ -106,8 +232,26 @@ export default function CategoryAssignmentModal({
     }, 0);
   };
 
-  // Add category assignment
+  // Add category assignment with CRITICAL budget validation
   const addCategoryAssignment = () => {
+    // CRITICAL: Check if this assignment would exceed the total budget
+    if (budgetStatus.wouldQuickCategoryExceedBudget) {
+      const exceededAmount = Math.abs(
+        budgetStatus.projectBudget -
+          budgetStatus.spentBudget -
+          budgetStatus.existingAssignmentsTotal -
+          budgetStatus.newAssignmentsTotal -
+          parseFloat(quickCategory.estimatedAmount)
+      );
+
+      addToast({
+        title: "تجاوز الميزانية!",
+        message: `هذا التعيين سيتجاوز الميزانية بمقدار ${exceededAmount.toLocaleString()} د.ع. المتاح فقط: ${budgetStatus.actuallyAvailable.toLocaleString()} د.ع`,
+        type: "error",
+      });
+      return;
+    }
+
     if (!isQuickCategoryValid) {
       addToast({
         title: "بيانات ناقصة",
@@ -116,16 +260,19 @@ export default function CategoryAssignmentModal({
       return;
     }
 
-    // Check if contractor exists in the list
-    const selectedContractor = contractors.find(
-      (c) => c.id === quickCategory.contractorId
-    );
-    if (!selectedContractor) {
-      addToast({
-        title: "مقاول غير صالح",
-        type: "error",
-      });
-      return;
+    // Check if contractor exists in the list (only if not purchasing)
+    let selectedContractor = null;
+    if (!quickCategory.isPurchasing) {
+      selectedContractor = contractors.find(
+        (c) => c.id === quickCategory.contractorId
+      );
+      if (!selectedContractor) {
+        addToast({
+          title: "مقاول غير صالح",
+          type: "error",
+        });
+        return;
+      }
     }
 
     // Check if category exists
@@ -161,44 +308,62 @@ export default function CategoryAssignmentModal({
       return;
     }
 
-    // Check for duplicate assignment (same category + subcategory + contractor)
+    // Check for duplicate assignment (same category + subcategory + contractor/purchasing)
     // This prevents money calculation crashes by ensuring one contractor per subcategory
     const isDuplicateInModal = assignments.some(
       (assignment) =>
         assignment.mainCategory === quickCategory.mainCategory &&
         assignment.subcategory === quickCategory.subcategory &&
-        assignment.contractorId === quickCategory.contractorId
+        ((quickCategory.isPurchasing && assignment.isPurchasing) ||
+          (!quickCategory.isPurchasing &&
+            !assignment.isPurchasing &&
+            assignment.contractorId === quickCategory.contractorId))
     );
 
     if (isDuplicateInModal) {
+      const duplicateMessage = quickCategory.isPurchasing
+        ? "تعيين مشتريات موجود مسبقاً"
+        : `${selectedContractor?.full_name} مُعيّن مسبقاً`;
       addToast({
         title: "تعيين مكرر",
-        message: `${selectedContractor.full_name} مُعيّن مسبقاً`,
+        message: duplicateMessage,
         type: "warning",
       });
       return;
     }
 
     // Also check against existing assignments from database
-    const isDuplicateInDatabase = existingAssignments.some(
-      (existing) =>
+    // FIXED: Allow both contractor AND purchasing assignments for same category/subcategory
+    const isDuplicateInDatabase = existingAssignments.some((existing) => {
+      const sameCategory =
         existing.mainCategory === quickCategory.mainCategory &&
-        existing.subcategory === quickCategory.subcategory &&
-        existing.contractorId === quickCategory.contractorId
-    );
+        existing.subcategory === quickCategory.subcategory;
+      const sameType = existing.isPurchasing === quickCategory.isPurchasing;
+      const sameContractor =
+        quickCategory.isPurchasing ||
+        existing.contractorId === quickCategory.contractorId;
+
+      return sameCategory && sameType && sameContractor;
+    });
 
     if (isDuplicateInDatabase) {
+      const message = quickCategory.isPurchasing
+        ? "تعيين مشتريات موجود مسبقاً لهذه الفئة. استخدم زر التعديل لتحديث التعيين الموجود."
+        : `المقاول ${selectedContractor?.full_name} مُعيّن مسبقاً لهذه الفئة. استخدم زر التعديل لتحديث التعيين الموجود.`;
+
       addToast({
-        title: "تعيين موجود",
-        message: "استخدم زر التعديل",
+        title: "تعيين مكرر",
+        message: message,
         type: "error",
       });
       return;
     }
 
-    // Ensure contractor ID is properly set (never empty string)
-    const contractorId = quickCategory.contractorId?.trim();
-    if (!contractorId) {
+    // Ensure contractor ID is properly set (never empty string) - only for non-purchasing
+    const contractorId = quickCategory.isPurchasing
+      ? ""
+      : quickCategory.contractorId?.trim();
+    if (!quickCategory.isPurchasing && !contractorId) {
       addToast({
         title: "اختر مقاول",
         type: "error",
@@ -211,17 +376,24 @@ export default function CategoryAssignmentModal({
       mainCategory: quickCategory.mainCategory,
       subcategory: quickCategory.subcategory,
       contractorId: contractorId,
-      contractorName: selectedContractor.full_name,
+      contractorName: quickCategory.isPurchasing
+        ? "مشتريات"
+        : selectedContractor?.full_name || "",
       estimatedAmount: quickCategory.estimatedAmount,
       notes: quickCategory.notes.trim() || undefined,
+      isPurchasing: quickCategory.isPurchasing,
     };
 
     setAssignments([...assignments, newAssignment]);
 
     // Show success message
+    const successMessage = quickCategory.isPurchasing
+      ? `تم إضافة تعيين مشتريات ${quickCategory.mainCategory} - ${quickCategory.subcategory}`
+      : `تم إضافة تعيين ${quickCategory.mainCategory} - ${quickCategory.subcategory} للمقاول ${selectedContractor?.full_name}`;
+
     addToast({
       title: "",
-      message: `تم إضافة تعيين ${quickCategory.mainCategory} - ${quickCategory.subcategory} للمقاول ${selectedContractor.full_name}`,
+      message: successMessage,
       type: "success",
     });
 
@@ -233,6 +405,7 @@ export default function CategoryAssignmentModal({
       contractorName: "",
       estimatedAmount: "",
       notes: "",
+      isPurchasing: false,
     });
   };
 
@@ -253,14 +426,27 @@ export default function CategoryAssignmentModal({
 
   // Handle save
   const handleSave = async () => {
-    // Validate all assignments have contractor IDs
+    // Validate assignments - contractor assignments need contractor ID, purchasing assignments don't
     const invalidAssignments = assignments.filter(
-      (a) => !a.contractorId || a.contractorId.trim() === ""
+      (a) =>
+        !a.isPurchasing && (!a.contractorId || a.contractorId.trim() === "")
     );
     if (invalidAssignments.length > 0) {
       addToast({
         title: "بيانات غير صالحة",
-        message: "يوجد تعيينات بدون معرف مقاول صالح. يرجى المراجعة.",
+        message: "يوجد تعيينات مقاولين بدون معرف مقاول صالح. يرجى المراجعة.",
+        type: "error",
+      });
+      return;
+    }
+
+    // Budget validation - prevent saving if over budget
+    if (budgetStatus.isOverBudget) {
+      addToast({
+        title: "تجاوز الميزانية",
+        message: `لا يمكن حفظ التعيينات. التخصيصات تتجاوز الميزانية بمقدار ${Math.abs(
+          budgetStatus.remainingBudget
+        ).toLocaleString()} د.ع`,
         type: "error",
       });
       return;
@@ -308,25 +494,37 @@ export default function CategoryAssignmentModal({
         console.log("➕ ADD MODE: Creating new assignments only");
 
         // Check for duplicates against existing assignments (frontend validation)
+        // FIXED: Allow both contractor AND purchasing assignments for same category/subcategory
         for (const newAssignment of assignments) {
           const isDuplicate = existingAssignments.some(
             (existing) =>
               existing.mainCategory === newAssignment.mainCategory &&
               existing.subcategory === newAssignment.subcategory &&
-              existing.contractorId === newAssignment.contractorId
+              existing.isPurchasing === newAssignment.isPurchasing &&
+              // Only check contractor match for contractor assignments
+              (newAssignment.isPurchasing ||
+                existing.contractorId === newAssignment.contractorId)
           );
 
           if (isDuplicate) {
-            const selectedContractor = contractors.find(
-              (c) => c.id === newAssignment.contractorId
-            );
-            addToast({
-              title: "تعيين مكرر",
-              message: `${
-                selectedContractor?.full_name || newAssignment.contractorName
-              } مُعيّن مسبقاً`,
-              type: "error",
-            });
+            if (newAssignment.isPurchasing) {
+              addToast({
+                title: "تعيين مكرر",
+                message: "تعيين مشتريات موجود مسبقاً لهذه الفئة",
+                type: "error",
+              });
+            } else {
+              const selectedContractor = contractors.find(
+                (c) => c.id === newAssignment.contractorId
+              );
+              addToast({
+                title: "تعيين مكرر",
+                message: `${
+                  selectedContractor?.full_name || newAssignment.contractorName
+                } مُعيّن مسبقاً`,
+                type: "error",
+              });
+            }
             return;
           }
         }
@@ -421,6 +619,244 @@ export default function CategoryAssignmentModal({
           </div>
         </div>
 
+        {/* Budget Tracking Dashboard */}
+        <div className="px-8 pt-6 pb-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-blue-50">
+          <div className="flex items-center space-x-3 space-x-reverse mb-4">
+            <div className="bg-blue-100 p-2 rounded-lg">
+              <Calculator className="h-5 w-5 text-blue-600 no-flip" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-800 arabic-spacing">
+              متتبع الميزانية المباشر
+            </h3>
+            {projectName && (
+              <span className="text-sm text-gray-600 arabic-spacing">
+                - {projectName}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+            {/* Total Budget */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-blue-100">
+              <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                <Target className="h-4 w-4 text-blue-600 no-flip" />
+                <span className="text-sm font-medium text-gray-600 arabic-spacing">
+                  الميزانية الإجمالية
+                </span>
+              </div>
+              <div className="text-xl font-bold text-blue-600">
+                {budgetStatus.projectBudget.toLocaleString()} د.ع
+              </div>
+            </div>
+
+            {/* Spent Budget */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-red-100">
+              <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                <TrendingUp className="h-4 w-4 text-red-600 no-flip" />
+                <span className="text-sm font-medium text-gray-600 arabic-spacing">
+                  المنفق فعلياً
+                </span>
+              </div>
+              <div className="text-xl font-bold text-red-600">
+                {budgetStatus.spentBudget.toLocaleString()} د.ع
+              </div>
+            </div>
+
+            {/* Existing Allocations */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-purple-100">
+              <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                <Package className="h-4 w-4 text-purple-600 no-flip" />
+                <span className="text-sm font-medium text-gray-600 arabic-spacing">
+                  التخصيصات الحالية
+                </span>
+              </div>
+              <div className="text-xl font-bold text-purple-600">
+                {budgetStatus.existingAssignmentsTotal.toLocaleString()} د.ع
+              </div>
+              <div className="text-xs text-gray-500 mt-1">محفوظة مسبقاً</div>
+            </div>
+
+            {/* New Allocations */}
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-amber-100">
+              <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                <Plus className="h-4 w-4 text-amber-600 no-flip" />
+                <span className="text-sm font-medium text-gray-600 arabic-spacing">
+                  التخصيصات الجديدة
+                </span>
+              </div>
+              <div className="text-xl font-bold text-amber-600">
+                {budgetStatus.newAssignmentsTotal.toLocaleString()} د.ع
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                {budgetStatus.assignmentsCount} تعيين جديد
+              </div>
+            </div>
+
+            {/* Remaining Budget */}
+            <div
+              className={`bg-white rounded-xl p-4 shadow-sm border ${
+                budgetStatus.isOverBudget
+                  ? "border-red-200 bg-red-50"
+                  : budgetStatus.isNearLimit
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-green-200 bg-green-50"
+              }`}
+            >
+              <div className="flex items-center space-x-2 space-x-reverse mb-2">
+                <Wallet
+                  className={`h-4 w-4 no-flip ${
+                    budgetStatus.isOverBudget
+                      ? "text-red-600"
+                      : budgetStatus.isNearLimit
+                      ? "text-amber-600"
+                      : "text-green-600"
+                  }`}
+                />
+                <span className="text-sm font-medium text-gray-600 arabic-spacing">
+                  المتبقي
+                </span>
+              </div>
+              <div
+                className={`text-xl font-bold ${
+                  budgetStatus.isOverBudget
+                    ? "text-red-600"
+                    : budgetStatus.isNearLimit
+                    ? "text-amber-600"
+                    : "text-green-600"
+                }`}
+              >
+                {budgetStatus.remainingBudget.toLocaleString()} د.ع
+              </div>
+              {budgetStatus.isOverBudget && (
+                <div className="text-xs text-red-600 mt-1 font-medium">
+                  تجاوز الميزانية!
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Budget Progress Bar */}
+          <div className="bg-white rounded-lg p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700 arabic-spacing">
+                استخدام الميزانية
+              </span>
+              <span
+                className={`text-sm font-bold ${
+                  budgetStatus.utilizationPercentage > 100
+                    ? "text-red-600"
+                    : budgetStatus.utilizationPercentage > 90
+                    ? "text-amber-600"
+                    : "text-green-600"
+                }`}
+              >
+                {budgetStatus.utilizationPercentage}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+              <div
+                className={`h-3 rounded-full transition-all duration-500 ${
+                  budgetStatus.utilizationPercentage > 100
+                    ? "bg-gradient-to-r from-red-500 to-red-600"
+                    : budgetStatus.utilizationPercentage > 90
+                    ? "bg-gradient-to-r from-amber-500 to-amber-600"
+                    : "bg-gradient-to-r from-green-500 to-green-600"
+                }`}
+                style={{
+                  width: `${Math.min(
+                    budgetStatus.utilizationPercentage,
+                    100
+                  )}%`,
+                }}
+              />
+              {budgetStatus.utilizationPercentage > 100 && (
+                <div
+                  className="h-3 bg-red-600 opacity-30 animate-pulse"
+                  style={{
+                    width: `${budgetStatus.utilizationPercentage - 100}%`,
+                    marginTop: "-12px",
+                  }}
+                />
+              )}
+            </div>
+            <div className="flex justify-between text-xs text-gray-500 mt-2">
+              <span>
+                منفق:{" "}
+                {(
+                  (budgetStatus.spentBudget / budgetStatus.projectBudget) *
+                  100
+                ).toFixed(1)}
+                %
+              </span>
+              <span>
+                مخصص حالي:{" "}
+                {(
+                  (budgetStatus.existingAssignmentsTotal /
+                    budgetStatus.projectBudget) *
+                  100
+                ).toFixed(1)}
+                %
+              </span>
+              <span>
+                مخصص جديد:{" "}
+                {(
+                  (budgetStatus.newAssignmentsTotal /
+                    budgetStatus.projectBudget) *
+                  100
+                ).toFixed(1)}
+                %
+              </span>
+            </div>
+          </div>
+
+          {/* Budget Alerts */}
+          {(budgetStatus.isOverBudget || budgetStatus.isNearLimit) && (
+            <div
+              className={`mt-4 p-4 rounded-lg border-l-4 ${
+                budgetStatus.isOverBudget
+                  ? "bg-red-50 border-red-500"
+                  : "bg-amber-50 border-amber-500"
+              }`}
+            >
+              <div className="flex items-center space-x-2 space-x-reverse">
+                <AlertCircle
+                  className={`h-5 w-5 no-flip ${
+                    budgetStatus.isOverBudget
+                      ? "text-red-600"
+                      : "text-amber-600"
+                  }`}
+                />
+                <div>
+                  <h4
+                    className={`font-bold arabic-spacing ${
+                      budgetStatus.isOverBudget
+                        ? "text-red-800"
+                        : "text-amber-800"
+                    }`}
+                  >
+                    {budgetStatus.isOverBudget
+                      ? "تحذير: تجاوز الميزانية"
+                      : "تنبيه: اقتراب من حد الميزانية"}
+                  </h4>
+                  <p
+                    className={`text-sm arabic-spacing ${
+                      budgetStatus.isOverBudget
+                        ? "text-red-700"
+                        : "text-amber-700"
+                    }`}
+                  >
+                    {budgetStatus.isOverBudget
+                      ? `التخصيصات الحالية تتجاوز الميزانية بمقدار ${Math.abs(
+                          budgetStatus.remainingBudget
+                        ).toLocaleString()} د.ع`
+                      : `متبقي فقط ${budgetStatus.remainingBudget.toLocaleString()} د.ع من الميزانية`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="p-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Left Side - Quick Add Form */}
@@ -487,38 +923,136 @@ export default function CategoryAssignmentModal({
                   </Select>
                 </div>
 
-                {/* Contractor */}
+                {/* Assignment Type Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-2">
-                    المقاول *
+                  <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-3">
+                    نوع التعيين *
                   </label>
-                  <Select
-                    value={quickCategory.contractorId}
-                    onChange={(e) => {
-                      const selectedContractor = contractors.find(
-                        (c) => c.id === e.target.value
-                      );
-                      setQuickCategory({
-                        ...quickCategory,
-                        contractorId: e.target.value,
-                        contractorName: selectedContractor?.full_name || "",
-                      });
-                    }}
-                    className="h-12"
-                  >
-                    <option value="">اختر المقاول</option>
-                    {contractors.map((contractor) => (
-                      <option key={contractor.id} value={contractor.id}>
-                        {contractor.full_name}
-                      </option>
-                    ))}
-                  </Select>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Contractor Option */}
+                    <div
+                      onClick={() => {
+                        setQuickCategory({
+                          ...quickCategory,
+                          isPurchasing: false,
+                          contractorId: "",
+                          contractorName: "",
+                        });
+                      }}
+                      className={`cursor-pointer p-4 rounded-lg border-2 transition-all ${
+                        !quickCategory.isPurchasing
+                          ? "border-blue-500 bg-blue-50 text-blue-700"
+                          : "border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3 space-x-reverse">
+                        <div
+                          className={`p-2 rounded-lg ${
+                            !quickCategory.isPurchasing
+                              ? "bg-blue-100"
+                              : "bg-gray-100"
+                          }`}
+                        >
+                          <Users
+                            className={`h-5 w-5 no-flip ${
+                              !quickCategory.isPurchasing
+                                ? "text-blue-600"
+                                : "text-gray-500"
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold arabic-spacing">
+                            مقاول
+                          </h4>
+                          <p className="text-sm opacity-75">
+                            تعيين مقاول للعمل
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Purchasing Option */}
+                    <div
+                      onClick={() => {
+                        setQuickCategory({
+                          ...quickCategory,
+                          isPurchasing: true,
+                          contractorId: "",
+                          contractorName: "",
+                        });
+                      }}
+                      className={`cursor-pointer p-4 rounded-lg border-2 transition-all ${
+                        quickCategory.isPurchasing
+                          ? "border-green-500 bg-green-50 text-green-700"
+                          : "border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3 space-x-reverse">
+                        <div
+                          className={`p-2 rounded-lg ${
+                            quickCategory.isPurchasing
+                              ? "bg-green-100"
+                              : "bg-gray-100"
+                          }`}
+                        >
+                          <ShoppingCart
+                            className={`h-5 w-5 no-flip ${
+                              quickCategory.isPurchasing
+                                ? "text-green-600"
+                                : "text-gray-500"
+                            }`}
+                          />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold arabic-spacing">
+                            مشتريات
+                          </h4>
+                          <p className="text-sm opacity-75">
+                            شراء مواد أو معدات
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+
+                {/* Contractor Selection - Only shown when not purchasing */}
+                {!quickCategory.isPurchasing && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-2">
+                      المقاول *
+                    </label>
+                    <Select
+                      value={quickCategory.contractorId}
+                      onChange={(e) => {
+                        const selectedContractor = contractors.find(
+                          (c) => c.id === e.target.value
+                        );
+                        setQuickCategory({
+                          ...quickCategory,
+                          contractorId: e.target.value,
+                          contractorName: selectedContractor?.full_name || "",
+                        });
+                      }}
+                      className="h-12"
+                    >
+                      <option value="">اختر المقاول</option>
+                      {contractors.map((contractor) => (
+                        <option key={contractor.id} value={contractor.id}>
+                          {contractor.full_name}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
 
                 {/* Estimated Amount */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-2">
-                    المبلغ المقدر (دينار عراقي) *
+                    {quickCategory.isPurchasing
+                      ? "مبلغ المشتريات (دينار عراقي) *"
+                      : "المبلغ المقدر (دينار عراقي) *"}
                   </label>
                   <Input
                     type="number"
@@ -531,7 +1065,11 @@ export default function CategoryAssignmentModal({
                         estimatedAmount: e.target.value,
                       })
                     }
-                    placeholder="المبلغ المقدر"
+                    placeholder={
+                      quickCategory.isPurchasing
+                        ? "مبلغ المشتريات"
+                        : "المبلغ المقدر"
+                    }
                     className="h-12"
                   />
                   {quickCategory.estimatedAmount && (
@@ -564,15 +1102,63 @@ export default function CategoryAssignmentModal({
                   />
                 </div>
 
-                {/* Add Button */}
-                <Button
-                  onClick={addCategoryAssignment}
-                  disabled={!isQuickCategoryValid}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 h-12"
-                >
-                  <Plus className="h-4 w-4 ml-2 no-flip" />
-                  <span className="arabic-spacing">إضافة الفئة</span>
-                </Button>
+                {/* CRITICAL: Enhanced Add Button with Budget Warning */}
+                <div className="space-y-2">
+                  {/* Budget Warning for Quick Category */}
+                  {budgetStatus.wouldQuickCategoryExceedBudget &&
+                    quickCategory.estimatedAmount && (
+                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="flex items-center space-x-2 space-x-reverse">
+                          <AlertCircle className="h-4 w-4 text-red-600 no-flip" />
+                          <div className="text-sm text-red-700 arabic-spacing">
+                            <div className="font-semibold">
+                              تحذير: تجاوز الميزانية!
+                            </div>
+                            <div className="text-xs mt-1">
+                              المبلغ المطلوب:{" "}
+                              {parseFloat(
+                                quickCategory.estimatedAmount
+                              ).toLocaleString()}{" "}
+                              د.ع
+                              <br />
+                              المتاح فقط:{" "}
+                              {Math.max(
+                                0,
+                                budgetStatus.actuallyAvailable -
+                                  budgetStatus.newAssignmentsTotal
+                              ).toLocaleString()}{" "}
+                              د.ع
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  <Button
+                    onClick={addCategoryAssignment}
+                    disabled={
+                      !isQuickCategoryValid ||
+                      budgetStatus.wouldQuickCategoryExceedBudget
+                    }
+                    className={`w-full h-12 ${
+                      budgetStatus.wouldQuickCategoryExceedBudget
+                        ? "bg-red-400 cursor-not-allowed"
+                        : "bg-green-600 hover:bg-green-700"
+                    } disabled:opacity-50`}
+                  >
+                    {budgetStatus.wouldQuickCategoryExceedBudget ? (
+                      <>
+                        <AlertCircle className="h-4 w-4 ml-2 no-flip" />
+                        <span className="arabic-spacing">يتجاوز الميزانية</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 ml-2 no-flip" />
+                        <span className="arabic-spacing">إضافة الفئة</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </Card>
 
@@ -592,20 +1178,45 @@ export default function CategoryAssignmentModal({
                 <div className="space-y-3">
                   <div className="flex justify-between items-center py-2 border-b border-blue-200">
                     <span className="text-gray-600 arabic-spacing">
-                      إجمالي التعيينات:
+                      إجمالي كامل التخصيصات:
                     </span>
-                    <span className="font-semibold text-green-600">
-                      {calculateTotalEstimated().toLocaleString("ar-IQ")} د.ع
+                    <span
+                      className={`font-semibold ${
+                        budgetStatus.isOverBudget
+                          ? "text-red-600"
+                          : "text-green-600"
+                      }`}
+                    >
+                      {budgetStatus.totalCumulativeAllocations.toLocaleString(
+                        "ar-IQ"
+                      )}{" "}
+                      د.ع
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-blue-200">
+                    <span className="text-gray-600 arabic-spacing">
+                      التعيينات الجديدة:
+                    </span>
+                    <span className="font-semibold text-amber-600">
+                      {budgetStatus.newAssignmentsTotal.toLocaleString("ar-IQ")}{" "}
+                      د.ع
                     </span>
                   </div>
                   <div className="flex justify-between items-center py-2">
                     <span className="text-gray-600 arabic-spacing">
-                      عدد التعيينات:
+                      عدد التعيينات الجديدة:
                     </span>
                     <span className="font-semibold text-blue-600">
                       {assignments.length} تعيين
                     </span>
                   </div>
+                  {budgetStatus.isOverBudget && (
+                    <div className="p-2 bg-red-50 border border-red-200 rounded-lg">
+                      <div className="text-xs text-red-700 arabic-spacing font-semibold">
+                        ⚠️ تحذير: إجمالي التخصيصات يتجاوز الميزانية!
+                      </div>
+                    </div>
+                  )}
                 </div>
               </Card>
 
@@ -643,10 +1254,11 @@ export default function CategoryAssignmentModal({
                       const contractor = contractors.find(
                         (c) => c.id === assignment.contractorId
                       );
-                      const IconComponent =
-                        categoryIcons[
-                          assignment.categoryId as keyof typeof categoryIcons
-                        ] || Package;
+                      const IconComponent = assignment.isPurchasing
+                        ? ShoppingCart
+                        : categoryIcons[
+                            assignment.categoryId as keyof typeof categoryIcons
+                          ] || Package;
 
                       const isBeingEdited =
                         assignment.id === editingAssignmentId;
@@ -662,8 +1274,20 @@ export default function CategoryAssignmentModal({
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex items-start space-x-3 space-x-reverse flex-1">
-                              <div className="bg-blue-100 p-2 rounded-lg">
-                                <IconComponent className="h-4 w-4 text-blue-600 no-flip" />
+                              <div
+                                className={`p-2 rounded-lg ${
+                                  assignment.isPurchasing
+                                    ? "bg-green-100"
+                                    : "bg-blue-100"
+                                }`}
+                              >
+                                <IconComponent
+                                  className={`h-4 w-4 no-flip ${
+                                    assignment.isPurchasing
+                                      ? "text-green-600"
+                                      : "text-blue-600"
+                                  }`}
+                                />
                               </div>
                               <div className="flex-1">
                                 <h4 className="font-semibold text-gray-900 arabic-spacing">
@@ -673,14 +1297,26 @@ export default function CategoryAssignmentModal({
                                   {assignment.subcategory}
                                 </p>
                                 <div className="flex items-center space-x-4 space-x-reverse mt-2 text-sm">
-                                  <span className="text-gray-600">
-                                    المقاول:{" "}
-                                    <span className="font-medium text-gray-900">
-                                      {contractor?.full_name ||
-                                        assignment.contractorName ||
-                                        "غير محدد"}
+                                  {assignment.isPurchasing ? (
+                                    <div className="flex items-center space-x-2 space-x-reverse">
+                                      <ShoppingCart className="h-4 w-4 text-green-600 no-flip" />
+                                      <span className="text-gray-600">
+                                        نوع التعيين:{" "}
+                                        <span className="font-medium text-green-600">
+                                          مشتريات
+                                        </span>
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-600">
+                                      المقاول:{" "}
+                                      <span className="font-medium text-gray-900">
+                                        {contractor?.full_name ||
+                                          assignment.contractorName ||
+                                          "غير محدد"}
+                                      </span>
                                     </span>
-                                  </span>
+                                  )}
                                   <span className="text-gray-600">
                                     المبلغ:{" "}
                                     <span className="font-medium text-green-600">
@@ -732,9 +1368,11 @@ export default function CategoryAssignmentModal({
               <span className="text-sm arabic-spacing">
                 {assignments.length === 0
                   ? "لم يتم إضافة أي تعيينات"
-                  : `تم إضافة ${
+                  : `${
                       assignments.length
-                    } تعيين بإجمالي ${calculateTotalEstimated().toLocaleString(
+                    } تعيين جديد (${budgetStatus.newAssignmentsTotal.toLocaleString(
+                      "ar-IQ"
+                    )} د.ع) | إجمالي كامل: ${budgetStatus.totalCumulativeAllocations.toLocaleString(
                       "ar-IQ"
                     )} د.ع`}
               </span>
@@ -746,13 +1384,22 @@ export default function CategoryAssignmentModal({
               </Button>
               <Button
                 onClick={handleSave}
-                disabled={loading}
-                className="bg-blue-600 hover:bg-blue-700"
+                disabled={loading || budgetStatus.isOverBudget}
+                className={`${
+                  budgetStatus.isOverBudget
+                    ? "bg-red-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
               >
                 {loading ? (
                   <div className="flex items-center space-x-2 space-x-reverse">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     <span className="arabic-spacing">جاري الحفظ...</span>
+                  </div>
+                ) : budgetStatus.isOverBudget ? (
+                  <div className="flex items-center space-x-2 space-x-reverse">
+                    <AlertCircle className="h-4 w-4 no-flip" />
+                    <span className="arabic-spacing">تجاوز الميزانية</span>
                   </div>
                 ) : (
                   <div className="flex items-center space-x-2 space-x-reverse">

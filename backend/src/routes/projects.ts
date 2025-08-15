@@ -1,6 +1,6 @@
 import express from 'express';
 import { projectService, CreateProjectData } from '../../database/services/projectService';
-import { authenticate } from '../middleware/auth';
+import { authenticate, requirePermission } from '../middleware/auth';
 
 const router = express.Router();
 
@@ -14,7 +14,7 @@ router.get('/health', (req, res) => {
 });
 
 // Generate unique project code
-router.get('/generate-code', async (req, res) => {
+router.get('/generate-code', authenticate, async (req, res) => {
   try {
     const code = await projectService.generateProjectCode();
     res.json({ code });
@@ -28,7 +28,7 @@ router.get('/generate-code', async (req, res) => {
 });
 
 // Get all projects
-router.get('/', async (req, res) => {
+router.get('/', authenticate, async (req, res) => {
   try {
     const projects = await projectService.getAllProjects();
     res.json(projects);
@@ -42,7 +42,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get single project by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const project = await projectService.getProjectById(id);
@@ -62,7 +62,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create new project with category assignments
-router.post('/', async (req, res) => {
+router.post('/', authenticate, requirePermission('canManageProjects'), async (req, res) => {
   try {
     console.log('POST /api/projects - Request body:', req.body);
     
@@ -75,7 +75,12 @@ router.post('/', async (req, res) => {
       startDate,
       endDate,
       status,
-      categoryAssignments
+      categoryAssignments,
+      // NEW FINANCIAL FIELDS
+      pricePerMeter,
+      ownerDealPrice,
+      ownerPaidAmount,
+      totalSiteArea
     } = req.body;
 
     // Validate required fields
@@ -127,7 +132,12 @@ router.post('/', async (req, res) => {
       end_date: endDate ? new Date(endDate) : null,
       status: status || 'planning',
       created_by: null, // TODO: Get from authenticated user
-      categoryAssignments: preparedCategoryAssignments
+      categoryAssignments: preparedCategoryAssignments,
+      // NEW FINANCIAL FIELDS
+      price_per_meter: pricePerMeter ? parseFloat(pricePerMeter) : 0,
+      owner_deal_price: ownerDealPrice ? parseFloat(ownerDealPrice) : 0,
+      owner_paid_amount: ownerPaidAmount ? parseFloat(ownerPaidAmount) : 0,
+      total_site_area: totalSiteArea ? parseFloat(totalSiteArea) : 0
     };
 
     const project = await projectService.createProject(projectData);
@@ -147,9 +157,25 @@ router.post('/', async (req, res) => {
 });
 
 // Update project
-router.put('/:id', async (req, res) => {
+router.put('/:id', authenticate, requirePermission('canManageProjects'), async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Check if user is admin for sensitive field updates
+    const userRole = (req as any).user?.role;
+    const SENSITIVE_FIELDS = ['budgetEstimate', 'pricePerMeter', 'ownerDealPrice', 'totalSiteArea'];
+    
+    const hasSensitiveUpdates = SENSITIVE_FIELDS.some(field => 
+      req.body.hasOwnProperty(field)
+    );
+    
+    if (hasSensitiveUpdates && userRole !== 'admin') {
+      return res.status(403).json({
+        error: 'Access denied',
+        userMessage: 'غير مسموح - يتطلب صلاحيات المدير'
+      });
+    }
+    
     const {
       name,
       location,
@@ -160,7 +186,12 @@ router.put('/:id', async (req, res) => {
       endDate,
       status,
       notes,
-      categoryAssignments
+      categoryAssignments,
+      // NEW FINANCIAL FIELDS
+      pricePerMeter,
+      ownerDealPrice,
+      ownerPaidAmount,
+      totalSiteArea
     } = req.body;
 
     console.log('PUT /api/projects/:id - Request body:', req.body);
@@ -175,7 +206,12 @@ router.put('/:id', async (req, res) => {
     if (startDate !== undefined) updateData.start_date = new Date(startDate);
     if (endDate !== undefined) updateData.end_date = endDate ? new Date(endDate) : null;
     if (status !== undefined) updateData.status = status;
-    if (notes !== undefined) updateData.notes = notes;
+    
+    // NEW FINANCIAL FIELDS
+    if (pricePerMeter !== undefined) updateData.price_per_meter = parseFloat(pricePerMeter);
+    if (ownerDealPrice !== undefined) updateData.owner_deal_price = parseFloat(ownerDealPrice);
+    if (ownerPaidAmount !== undefined) updateData.owner_paid_amount = parseFloat(ownerPaidAmount);
+    if (totalSiteArea !== undefined) updateData.total_site_area = parseFloat(totalSiteArea);
 
     // Handle category assignments if provided
     if (categoryAssignments !== undefined) {
@@ -195,25 +231,41 @@ router.put('/:id', async (req, res) => {
                 notes: contractor.notes || null
               });
             }
-          } else if (assignment.main_category && assignment.contractor_id) {
-            // Flat format - each assignment is a single contractor assignment
-            // Validate contractor_id is not empty
-            const contractorId = assignment.contractor_id?.trim();
-            if (!contractorId) {
-              return res.status(400).json({
-                error: 'Invalid assignment data',
-                details: `Contractor ID is required for assignment: ${assignment.main_category} - ${assignment.subcategory}`
+          } else if (assignment.main_category) {
+            // Flat format - each assignment is either a contractor or purchasing assignment
+            
+            // Handle contractor assignments (require contractor_id)
+            if (assignment.assignment_type === 'contractor' || (assignment.contractor_id && assignment.assignment_type !== 'purchasing')) {
+              const contractorId = assignment.contractor_id?.trim();
+              if (!contractorId) {
+                return res.status(400).json({
+                  error: 'Invalid assignment data',
+                  details: `Contractor ID is required for contractor assignment: ${assignment.main_category} - ${assignment.subcategory}`
+                });
+              }
+
+              preparedCategoryAssignments.push({
+                main_category: assignment.main_category,
+                subcategory: assignment.subcategory,
+                contractor_id: contractorId,
+                contractor_name: assignment.contractor_name,
+                estimated_amount: parseFloat(assignment.estimated_amount?.toString() || '0'),
+                notes: assignment.notes || null,
+                assignment_type: assignment.assignment_type || 'contractor'
               });
             }
-
-            preparedCategoryAssignments.push({
-              main_category: assignment.main_category,
-              subcategory: assignment.subcategory,
-              contractor_id: contractorId,
-              contractor_name: assignment.contractor_name,
-              estimated_amount: parseFloat(assignment.estimated_amount?.toString() || '0'),
-              notes: assignment.notes || null
-            });
+            // Handle purchasing assignments (contractor_id can be null)
+            else if (assignment.assignment_type === 'purchasing' || !assignment.contractor_id) {
+              preparedCategoryAssignments.push({
+                main_category: assignment.main_category,
+                subcategory: assignment.subcategory,
+                contractor_id: null,
+                contractor_name: assignment.contractor_name || 'مشتريات',
+                estimated_amount: parseFloat(assignment.estimated_amount?.toString() || '0'),
+                notes: assignment.notes || null,
+                assignment_type: 'purchasing'
+              });
+            }
           }
         }
       }
@@ -250,8 +302,199 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// Delete a specific assignment from a project
+router.delete('/:projectId/assignments/:assignmentId', authenticate, requirePermission('canManageProjects'), async (req, res) => {
+  try {
+    const { projectId, assignmentId } = req.params;
+    const userId = (req as any).user?.id;
+    const userRole = (req as any).user?.role;
+    
+    console.log(`🗑️ DELETE assignment request - Project: ${projectId}, Assignment: ${assignmentId}, User: ${userId} (${userRole})`);
+    
+    // Use enhanced delete for admins, regular delete for others
+    const success = userRole === 'admin' 
+      ? await projectService.deleteAssignmentEnhanced(projectId, assignmentId)
+      : await projectService.deleteAssignment(projectId, assignmentId);
+    
+    if (!success) {
+      return res.status(404).json({ 
+        error: 'Assignment not found or cannot be deleted',
+        userMessage: 'التعيين غير موجود أو لا يمكن حذفه'
+      });
+    }
+
+    res.json({ 
+      message: 'Assignment deleted successfully',
+      userMessage: userRole === 'admin' 
+        ? 'تم حذف التعيين بنجاح (صلاحيات المدير)'
+        : 'تم حذف التعيين بنجاح'
+    });
+
+  } catch (error: any) {
+    console.error('❌ Error deleting assignment:', error);
+    
+    // Handle business validation errors
+    if (error?.isValidationError) {
+      return res.status(400).json({ 
+        error: 'Cannot delete assignment',
+        userMessage: error.message
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Failed to delete assignment',
+      userMessage: 'فشل في حذف التعيين',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Get assignment financial summary
+router.get('/:projectId/assignments/:assignmentId/summary', authenticate, async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    
+    const result = await projectService.getAssignmentFinancialSummary(assignmentId);
+    
+    if (!result.success) {
+      return res.status(404).json({ 
+        error: result.error,
+        userMessage: 'التعيين غير موجود'
+      });
+    }
+
+    res.json(result);
+
+  } catch (error) {
+    console.error('❌ Error getting assignment summary:', error);
+    res.status(500).json({ 
+      error: 'Failed to get assignment summary',
+      userMessage: 'فشل في جلب ملخص التعيين',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Freeze assignment
+router.put('/:projectId/assignments/:assignmentId/freeze', authenticate, requirePermission('canManageProjects'), async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { reason } = req.body;
+    const userId = (req as any).user?.id;
+
+    console.log(`🧊 FREEZE assignment request - Assignment: ${assignmentId}, User: ${userId}`);
+
+    if (!reason || reason.trim().length === 0) {
+      return res.status(400).json({
+        error: 'Freeze reason is required',
+        userMessage: 'سبب التجميد مطلوب'
+      });
+    }
+
+    const result = await projectService.freezeAssignment(assignmentId, reason, userId);
+    
+    if (!result.success) {
+      return res.status(400).json({ 
+        error: result.error,
+        userMessage: result.userMessage || 'فشل في تجميد التعيين'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Assignment frozen successfully',
+      userMessage: 'تم تجميد التعيين بنجاح',
+      data: result
+    });
+
+  } catch (error) {
+    console.error('❌ Error freezing assignment:', error);
+    res.status(500).json({ 
+      error: 'Failed to freeze assignment',
+      userMessage: 'فشل في تجميد التعيين',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Unfreeze assignment
+router.put('/:projectId/assignments/:assignmentId/unfreeze', authenticate, requirePermission('canManageProjects'), async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const userId = (req as any).user?.id;
+
+    console.log(`🔓 UNFREEZE assignment request - Assignment: ${assignmentId}, User: ${userId}`);
+
+    const result = await projectService.unfreezeAssignment(assignmentId, userId);
+    
+    if (!result.success) {
+      return res.status(400).json({ 
+        error: result.error,
+        userMessage: result.userMessage || 'فشل في إلغاء تجميد التعيين'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Assignment unfrozen successfully',
+      userMessage: 'تم إلغاء تجميد التعيين بنجاح',
+      data: result
+    });
+
+  } catch (error) {
+    console.error('❌ Error unfreezing assignment:', error);
+    res.status(500).json({ 
+      error: 'Failed to unfreeze assignment',
+      userMessage: 'فشل في إلغاء تجميد التعيين',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Edit assignment amount
+router.put('/:projectId/assignments/:assignmentId/amount', authenticate, requirePermission('canManageProjects'), async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { newAmount, reason } = req.body;
+    const userId = (req as any).user?.id;
+
+    console.log(`✏️ EDIT assignment amount request - Assignment: ${assignmentId}, New Amount: ${newAmount}`);
+
+    if (!newAmount || newAmount <= 0) {
+      return res.status(400).json({
+        error: 'Valid amount is required',
+        userMessage: 'مبلغ صحيح مطلوب'
+      });
+    }
+
+    const result = await projectService.editAssignmentAmount(assignmentId, newAmount, reason, userId);
+    
+    if (!result.success) {
+      return res.status(400).json({ 
+        error: result.error,
+        userMessage: result.userMessage || 'فشل في تعديل مبلغ التعيين'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Assignment amount updated successfully',
+      userMessage: 'تم تحديث مبلغ التعيين بنجاح',
+      data: result
+    });
+
+  } catch (error) {
+    console.error('❌ Error editing assignment amount:', error);
+    res.status(500).json({ 
+      error: 'Failed to edit assignment amount',
+      userMessage: 'فشل في تعديل مبلغ التعيين',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Delete project
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', authenticate, requirePermission('canDeleteRecords'), async (req, res) => {
   try {
     const { id } = req.params;
     const success = await projectService.deleteProject(id);

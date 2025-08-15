@@ -17,11 +17,23 @@ import {
   Users,
   Settings,
   Briefcase,
+  ShoppingCart,
+  Clock,
+  Snowflake,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Layers,
+  TrendingUp,
+  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { formatCurrency } from "@/lib/utils";
+import { useUIPermissions } from "@/hooks/useUIPermissions";
+import { FinancialDisplay } from "@/components/ui/FinancialDisplay";
+import { PermissionButton } from "@/components/ui/PermissionButton";
 
 interface CategoryAssignment {
   id: string;
@@ -39,6 +51,16 @@ interface CategoryAssignment {
   pending_invoices: number;
   approved_invoices: number;
   paid_invoices: number;
+  assignment_type?: "contractor" | "purchasing";
+  // New assignment management fields
+  frozen_at?: string;
+  frozen_by?: string;
+  freeze_reason?: string;
+  returned_budget?: number;
+  original_amount?: number;
+  spent_amount?: number;
+  pending_amount?: number;
+  available_amount?: number;
 }
 
 interface CategoryAssignmentsTableProps {
@@ -49,6 +71,14 @@ interface CategoryAssignmentsTableProps {
   onDeleteAssignment: (assignmentId: string) => void;
   onViewInvoices: (assignment: CategoryAssignment) => void;
   onAddAssignment?: () => void;
+  // New assignment management callbacks
+  onFreezeAssignment?: (assignmentId: string, reason: string) => void;
+  onUnfreezeAssignment?: (assignmentId: string) => void;
+  onEditAssignmentAmount?: (
+    assignmentId: string,
+    newAmount: number,
+    reason?: string
+  ) => void;
 }
 
 const categoryIcons = {
@@ -59,10 +89,12 @@ const categoryIcons = {
 };
 
 const statusColors = {
-  active: "bg-green-100 text-green-800",
-  completed: "bg-blue-100 text-blue-800",
-  pending: "bg-yellow-100 text-yellow-800",
-  cancelled: "bg-red-100 text-red-800",
+  active: "bg-emerald-100 text-emerald-800 border border-emerald-200",
+  completed: "bg-blue-100 text-blue-800 border border-blue-200",
+  pending: "bg-amber-100 text-amber-800 border border-amber-200",
+  cancelled: "bg-red-100 text-red-800 border border-red-200",
+  frozen:
+    "bg-gradient-to-r from-cyan-100 via-blue-100 to-cyan-100 text-cyan-900 border border-cyan-200 shadow-sm backdrop-blur-sm",
 };
 
 const statusLabels = {
@@ -70,6 +102,7 @@ const statusLabels = {
   completed: "مكتمل",
   pending: "في الانتظار",
   cancelled: "ملغي",
+  frozen: "مجمد",
 };
 
 export default function CategoryAssignmentsTable({
@@ -80,14 +113,26 @@ export default function CategoryAssignmentsTable({
   onDeleteAssignment,
   onViewInvoices,
   onAddAssignment,
+  onFreezeAssignment,
+  onUnfreezeAssignment,
+  onEditAssignmentAmount,
 }: CategoryAssignmentsTableProps) {
+  const permissions = useUIPermissions();
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [assignmentTypeFilter, setAssignmentTypeFilter] = useState("all");
   const [sortBy, setSortBy] = useState<
     "category" | "contractor" | "amount" | "invoices"
   >("category");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  // Assignment management modal states
+  const [showFreezeModal, setShowFreezeModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedAssignment, setSelectedAssignment] =
+    useState<CategoryAssignment | null>(null);
 
   // Get unique categories for filter
   const uniqueCategories = useMemo(() => {
@@ -114,9 +159,27 @@ export default function CategoryAssignmentsTable({
       const matchesStatus =
         statusFilter === "all" || assignment.status === statusFilter;
 
-      return matchesSearch && matchesCategory && matchesStatus;
+      const matchesAssignmentType =
+        assignmentTypeFilter === "all" ||
+        (assignmentTypeFilter === "contractor" &&
+          assignment.assignment_type !== "purchasing") ||
+        (assignmentTypeFilter === "purchasing" &&
+          assignment.assignment_type === "purchasing");
+
+      return (
+        matchesSearch &&
+        matchesCategory &&
+        matchesStatus &&
+        matchesAssignmentType
+      );
     });
-  }, [assignments, searchTerm, categoryFilter, statusFilter]);
+  }, [
+    assignments,
+    searchTerm,
+    categoryFilter,
+    statusFilter,
+    assignmentTypeFilter,
+  ]);
 
   // Sort assignments
   const sortedAssignments = useMemo(() => {
@@ -165,7 +228,10 @@ export default function CategoryAssignmentsTable({
     }
   };
 
-  const getCategoryIcon = (category: string) => {
+  const getCategoryIcon = (category: string, isPurchasing?: boolean) => {
+    if (isPurchasing) {
+      return ShoppingCart;
+    }
     const IconComponent =
       categoryIcons[category as keyof typeof categoryIcons] || Package;
     return IconComponent;
@@ -206,13 +272,15 @@ export default function CategoryAssignmentsTable({
             </div>
 
             {onAddAssignment && (
-              <Button
+              <PermissionButton
+                permission="canEditProjects"
                 onClick={onAddAssignment}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 text-xs rounded font-medium shadow-sm hover:shadow transition-all duration-200"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 text-xs rounded font-medium shadow-sm hover:shadow transition-all duration-200"
+                viewOnlyTooltip="غير متاح - وضع العرض فقط"
               >
                 <Plus className="h-4 w-4 ml-1 no-flip" />
                 <span className="arabic-spacing">جديد</span>
-              </Button>
+              </PermissionButton>
             )}
           </div>
         </div>
@@ -259,6 +327,16 @@ export default function CategoryAssignmentsTable({
               </Select>
 
               <Select
+                value={assignmentTypeFilter}
+                onChange={(e) => setAssignmentTypeFilter(e.target.value)}
+                className="h-10 text-xs border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500 min-w-32"
+              >
+                <option value="all">كل الأنواع</option>
+                <option value="contractor">مقاولين</option>
+                <option value="purchasing">مشتريات</option>
+              </Select>
+
+              <Select
                 value={`${sortBy}-${sortOrder}`}
                 onChange={(e) => {
                   const [newSortBy, newSortOrder] = e.target.value.split("-");
@@ -302,46 +380,72 @@ export default function CategoryAssignmentsTable({
                   : "ابدأ بإضافة تعيينات جديدة"}
               </p>
               {onAddAssignment && (
-                <Button
+                <PermissionButton
+                  permission="canEditProjects"
                   onClick={onAddAssignment}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm rounded font-medium shadow-sm hover:shadow transition-all duration-200"
+                  viewOnlyTooltip="غير متاح - وضع العرض فقط"
                 >
                   <Plus className="h-4 w-4 ml-1 no-flip" />
                   إضافة تعيين جديد
-                </Button>
+                </PermissionButton>
               )}
             </div>
           ) : (
             <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600 arabic-spacing border-r border-gray-200 min-w-48">
-                    الفئة والتفاصيل
+                <tr className="bg-gradient-to-r from-slate-100 to-gray-100 border-b-2 border-gray-300">
+                  <th className="text-right px-4 py-3 text-xs font-bold text-gray-700 arabic-spacing border-r border-gray-300 min-w-48">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <Layers className="h-4 w-4 text-gray-600" />
+                      <span>الفئة والتفاصيل</span>
+                    </div>
                   </th>
-                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600 arabic-spacing border-r border-gray-200 min-w-36">
-                    المقاول
+                  <th className="text-right px-4 py-3 text-xs font-bold text-gray-700 arabic-spacing border-r border-gray-300 min-w-36">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <User className="h-4 w-4 text-gray-600" />
+                      <span>المقاول</span>
+                    </div>
                   </th>
-                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600 arabic-spacing border-r border-gray-200 min-w-24">
-                    الميزانية المقدرة
+                  <th className="text-right px-4 py-3 text-xs font-bold text-gray-700 arabic-spacing border-r border-gray-300 min-w-24">
+                    <div className="flex items-center justify-end space-x-2 space-x-reverse">
+                      <DollarSign className="h-4 w-4 text-gray-600" />
+                      <span>الميزانية المقدرة</span>
+                    </div>
                   </th>
-                  <th className="text-right px-3 py-2 text-xs font-semibold text-gray-600 arabic-spacing border-r border-gray-200 min-w-24">
-                    المبلغ الفعلي
+                  <th className="text-right px-4 py-3 text-xs font-bold text-gray-700 arabic-spacing border-r border-gray-300 min-w-24">
+                    <div className="flex items-center justify-end space-x-2 space-x-reverse">
+                      <TrendingUp className="h-4 w-4 text-gray-600" />
+                      <span>المبلغ الفعلي</span>
+                    </div>
                   </th>
-                  <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 arabic-spacing border-r border-gray-200 min-w-20">
-                    عدد الفواتير
+                  <th className="text-center px-4 py-3 text-xs font-bold text-gray-700 arabic-spacing border-r border-gray-300 min-w-20">
+                    <div className="flex items-center justify-center space-x-2 space-x-reverse">
+                      <FileText className="h-4 w-4 text-gray-600" />
+                      <span>عدد الفواتير</span>
+                    </div>
                   </th>
-                  <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 arabic-spacing border-r border-gray-200 min-w-16">
-                    الحالة
+                  <th className="text-center px-4 py-3 text-xs font-bold text-gray-700 arabic-spacing border-r border-gray-300 min-w-16">
+                    <div className="flex items-center justify-center space-x-2 space-x-reverse">
+                      <Activity className="h-4 w-4 text-gray-600" />
+                      <span>الحالة</span>
+                    </div>
                   </th>
-                  <th className="text-center px-3 py-2 text-xs font-semibold text-gray-600 arabic-spacing min-w-40">
-                    الإجراءات
+                  <th className="text-center px-4 py-3 text-xs font-bold text-gray-700 arabic-spacing min-w-40">
+                    <div className="flex items-center justify-center space-x-2 space-x-reverse">
+                      <Settings className="h-4 w-4 text-gray-600" />
+                      <span>الإجراءات</span>
+                    </div>
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {sortedAssignments.map((assignment, index) => {
+                  const isPurchasing =
+                    assignment.assignment_type === "purchasing";
                   const IconComponent = getCategoryIcon(
-                    assignment.main_category
+                    assignment.main_category,
+                    isPurchasing
                   );
                   // Different protection logic for different actions:
                   // - Edit/Delete: Protected if has any approved invoice
@@ -353,23 +457,33 @@ export default function CategoryAssignmentsTable({
                   return (
                     <tr
                       key={assignment.id}
-                      className={`border-b border-gray-200 hover:bg-gray-50 transition-colors duration-150 ${
-                        isEditDeleteProtected ? "bg-red-50/50" : ""
+                      className={`border-b border-gray-200 transition-all duration-200 hover:shadow-sm ${
+                        assignment.status === "frozen"
+                          ? "bg-gradient-to-r from-cyan-50/60 via-blue-50/40 to-cyan-50/60 hover:from-cyan-100/60 hover:via-blue-100/40 hover:to-cyan-100/60 border-l-4 border-l-cyan-300"
+                          : isPurchasing
+                          ? "bg-emerald-50/40 hover:bg-emerald-50/60 border-l-4 border-l-emerald-300"
+                          : isEditDeleteProtected
+                          ? "bg-red-50/40 hover:bg-red-50/60 border-l-4 border-l-red-300"
+                          : "hover:bg-slate-50/60"
                       }`}
                     >
                       {/* Category & Subcategory */}
-                      <td className="px-3 py-2 border-r border-gray-200 ">
+                      <td className="px-4 py-3 border-r border-gray-300">
                         <div className="flex items-center space-x-2 space-x-reverse">
                           <div
                             className={`w-6 h-6 rounded flex items-center justify-center mr-2 ${
-                              isEditDeleteProtected
+                              isPurchasing
+                                ? "bg-green-100"
+                                : isEditDeleteProtected
                                 ? "bg-red-100"
                                 : "bg-blue-100"
                             }`}
                           >
                             <IconComponent
                               className={`h-3 w-3 no-flip ${
-                                isEditDeleteProtected
+                                isPurchasing
+                                  ? "text-green-600"
+                                  : isEditDeleteProtected
                                   ? "text-red-600"
                                   : "text-blue-600"
                               }`}
@@ -405,38 +519,63 @@ export default function CategoryAssignmentsTable({
                       </td>
 
                       {/* Contractor */}
-                      <td className="px-3 py-2 border-r border-gray-200">
+                      <td className="px-4 py-3 border-r border-gray-300">
                         <div className="flex items-center space-x-2 space-x-reverse">
-                          <div className="w-5 h-5 bg-green-100 rounded flex items-center justify-center mr-2">
-                            <User className="h-3 w-3 text-green-600 no-flip" />
+                          <div
+                            className={`w-5 h-5 rounded flex items-center justify-center mr-2 ${
+                              isPurchasing ? "bg-green-100" : "bg-blue-100"
+                            }`}
+                          >
+                            {isPurchasing ? (
+                              <ShoppingCart className="h-3 w-3 text-green-600 no-flip" />
+                            ) : (
+                              <User className="h-3 w-3 text-blue-600 no-flip" />
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs font-medium text-gray-900 arabic-spacing truncate">
+                            <div
+                              className={`text-xs font-medium arabic-spacing truncate ${
+                                isPurchasing
+                                  ? "text-green-700"
+                                  : "text-gray-900"
+                              }`}
+                            >
                               {assignment.contractor_name}
                             </div>
+                            {isPurchasing && (
+                              <div className="text-xs text-green-600 arabic-spacing">
+                                تعيين مشتريات
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
 
                       {/* Estimated Budget */}
-                      <td className="px-3 py-2 border-r border-gray-200">
+                      <td className="px-4 py-3 border-r border-gray-300">
                         <div className="text-xs text-gray-900 arabic-spacing text-right">
-                          {formatCurrency(assignment.estimated_amount)}
+                          <FinancialDisplay
+                            value={assignment.estimated_amount}
+                          />
                         </div>
                       </td>
 
                       {/* Actual Amount */}
-                      <td className="px-3 py-2 border-r border-gray-200">
+                      <td className="px-4 py-3 border-r border-gray-300">
                         <div className="text-xs text-gray-900 arabic-spacing text-right">
                           {assignment.actual_amount &&
-                          assignment.actual_amount > 0
-                            ? formatCurrency(assignment.actual_amount)
-                            : "-"}
+                          assignment.actual_amount > 0 ? (
+                            <FinancialDisplay
+                              value={assignment.actual_amount}
+                            />
+                          ) : (
+                            "-"
+                          )}
                         </div>
                       </td>
 
                       {/* Invoices Count */}
-                      <td className="px-3 py-2 border-r border-gray-200 text-center">
+                      <td className="px-4 py-3 border-r border-gray-300 text-center">
                         <div className="flex flex-col items-center space-y-1">
                           <div className="text-xs font-semibold text-gray-900">
                             {assignment.total_invoices}
@@ -457,7 +596,7 @@ export default function CategoryAssignmentsTable({
                       </td>
 
                       {/* Status */}
-                      <td className="px-3 py-2 border-r border-gray-200 text-center">
+                      <td className="px-4 py-3 border-r border-gray-300 text-center">
                         <span
                           className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
                             statusColors[
@@ -465,85 +604,182 @@ export default function CategoryAssignmentsTable({
                             ] || statusColors.active
                           }`}
                         >
-                          {statusLabels[
-                            assignment.status as keyof typeof statusLabels
-                          ] || assignment.status}
+                          {assignment.status === "frozen" && (
+                            <>
+                              {/* Ice crystal effect */}
+                              <div className="absolute inset-0 bg-gradient-to-br from-white/20 via-transparent to-cyan-200/20 pointer-events-none" />
+                              <div className="absolute top-0 left-0 w-1 h-1 bg-white/40 rounded-full" />
+                              <div className="absolute top-1 right-1 w-0.5 h-0.5 bg-cyan-300/60 rounded-full" />
+                              <div className="absolute bottom-0 left-1/2 w-0.5 h-0.5 bg-blue-200/50 rounded-full" />
+                            </>
+                          )}
+                          <span className="relative z-10 flex items-center space-x-1 space-x-reverse">
+                            {assignment.status === "frozen" && (
+                              <svg
+                                className="w-3 h-3 text-cyan-700"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path d="M10 2L13 8h4l-3 2 1 4-5-3-5 3 1-4-3-2h4l3-6z" />
+                              </svg>
+                            )}
+                            <span>
+                              {statusLabels[
+                                assignment.status as keyof typeof statusLabels
+                              ] || assignment.status}
+                            </span>
+                          </span>
                         </span>
                       </td>
 
-                      {/* Actions */}
-                      <td className="px-3 py-2">
-                        <div className="flex items-center justify-center space-x-1 space-x-reverse">
-                          {/* Add Invoice */}
-                          <Button
-                            onClick={() =>
-                              !isInvoiceButtonDisabled &&
-                              onAddInvoice(assignment)
-                            }
-                            className={`w-7 h-7 p-0 rounded border transition-colors ${
-                              isInvoiceButtonDisabled
-                                ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
-                                : "bg-green-50 border-green-200 text-green-600 hover:bg-green-100"
-                            }`}
-                            disabled={isInvoiceButtonDisabled}
-                            title={
-                              isInvoiceButtonDisabled
-                                ? "الميزانية مستنفدة"
-                                : "إضافة فاتورة"
-                            }
-                          >
-                            <Receipt className="h-3 w-3 no-flip" />
-                          </Button>
+                      {/* Actions / Freeze Reason */}
+                      <td className="px-4 py-3">
+                        {assignment.status === "frozen" ? (
+                          /* Freeze Reason Display */
+                          <div className="bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-lg p-3 text-center">
+                            <div className="flex items-center justify-center mb-1">
+                              <Snowflake className="h-4 w-4 text-cyan-600 mr-1" />
+                              <span className="text-xs font-semibold text-cyan-800 arabic-spacing">
+                                مجمد
+                              </span>
+                            </div>
+                            <div
+                              className="text-xs text-cyan-700 arabic-spacing leading-relaxed"
+                              title={assignment.freeze_reason}
+                            >
+                              {assignment.freeze_reason ||
+                                "تم تجميد هذا التعيين"}
+                            </div>
+                            {assignment.frozen_at && (
+                              <div className="text-xs text-cyan-600 arabic-spacing mt-1 opacity-75">
+                                {new Date(
+                                  assignment.frozen_at
+                                ).toLocaleDateString("ar-EG")}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* Regular Action Buttons */
+                          <div className="flex items-center justify-center space-x-1 space-x-reverse">
+                            {/* Add Invoice */}
+                            <PermissionButton
+                              permission="canCreateInvoices"
+                              onClick={() =>
+                                !isInvoiceButtonDisabled &&
+                                assignment.status === "active" &&
+                                onAddInvoice(assignment)
+                              }
+                              className={`w-7 h-7 p-0 rounded border transition-colors ${
+                                isInvoiceButtonDisabled ||
+                                assignment.status !== "active"
+                                  ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+                                  : "bg-green-50 border-green-200 text-green-600 hover:bg-green-100"
+                              }`}
+                              disabled={
+                                isInvoiceButtonDisabled ||
+                                assignment.status !== "active"
+                              }
+                              title={
+                                assignment.status !== "active"
+                                  ? "التعيين غير نشط"
+                                  : isInvoiceButtonDisabled
+                                  ? "الميزانية مستنفدة"
+                                  : "إضافة فاتورة"
+                              }
+                              viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                            >
+                              <Receipt className="h-3 w-3 no-flip" />
+                            </PermissionButton>
 
-                          {/* View Invoices */}
-                          <Button
-                            onClick={() => onViewInvoices(assignment)}
-                            className="w-7 h-7 p-0 rounded border bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100 transition-colors"
-                            title="عرض الفواتير"
-                          >
-                            <Eye className="h-3 w-3 no-flip" />
-                          </Button>
+                            {/* Edit Amount */}
+                            {onEditAssignmentAmount && (
+                              <PermissionButton
+                                permission="canEditProjects"
+                                onClick={() => {
+                                  setSelectedAssignment(assignment);
+                                  setShowEditModal(true);
+                                }}
+                                className={`w-7 h-7 p-0 rounded border transition-colors ${
+                                  assignment.status !== "active"
+                                    ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+                                    : "bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100"
+                                }`}
+                                disabled={assignment.status !== "active"}
+                                title={
+                                  assignment.status !== "active"
+                                    ? "لا يمكن التعديل - التعيين غير نشط"
+                                    : "تعديل المبلغ"
+                                }
+                                viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                              >
+                                <Edit className="h-3 w-3 no-flip" />
+                              </PermissionButton>
+                            )}
 
-                          {/* Edit */}
-                          <Button
-                            onClick={() =>
-                              !isEditDeleteProtected &&
-                              onEditAssignment(assignment)
-                            }
-                            className={`w-7 h-7 p-0 rounded border transition-colors ${
-                              isEditDeleteProtected
-                                ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
-                                : "bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100"
-                            }`}
-                            disabled={isEditDeleteProtected}
-                            title={
-                              isEditDeleteProtected
-                                ? "لا يمكن التعديل"
-                                : "تعديل"
-                            }
-                          >
-                            <Edit className="h-3 w-3 no-flip" />
-                          </Button>
+                            {/* Freeze Only (No Unfreeze) */}
+                            {onFreezeAssignment &&
+                              assignment.status === "active" && (
+                                <PermissionButton
+                                  permission="canEditProjects"
+                                  onClick={() => {
+                                    setSelectedAssignment(assignment);
+                                    setShowFreezeModal(true);
+                                  }}
+                                  className="w-7 h-7 p-0 rounded border transition-colors bg-cyan-50 border-cyan-200 text-cyan-600 hover:bg-cyan-100"
+                                  title="تجميد التعيين"
+                                  viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                                >
+                                  <Snowflake className="h-3 w-3 no-flip" />
+                                </PermissionButton>
+                              )}
 
-                          {/* Delete */}
-                          <Button
-                            onClick={() =>
-                              !isEditDeleteProtected &&
-                              onDeleteAssignment(assignment.id)
-                            }
-                            className={`w-7 h-7 p-0 rounded border transition-colors ${
-                              isEditDeleteProtected
-                                ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
-                                : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
-                            }`}
-                            disabled={isEditDeleteProtected}
-                            title={
-                              isEditDeleteProtected ? "لا يمكن الحذف" : "حذف"
-                            }
-                          >
-                            <Trash2 className="h-3 w-3 no-flip" />
-                          </Button>
-                        </div>
+                            {/* Frozen Status Indicator (No Action) */}
+                            {assignment.status === "frozen" && (
+                              <div className="w-7 h-7 p-0 rounded border bg-gradient-to-br from-cyan-100 via-blue-100 to-cyan-100 border-cyan-200 flex items-center justify-center relative overflow-hidden">
+                                {/* Ice crystal effect */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-cyan-200/30 pointer-events-none" />
+                                <div className="absolute top-0 left-0 w-1 h-1 bg-white/50 rounded-full" />
+                                <div className="absolute top-1 right-1 w-0.5 h-0.5 bg-cyan-400/70 rounded-full" />
+                                <div className="absolute bottom-0 left-1/2 w-0.5 h-0.5 bg-blue-300/60 rounded-full" />
+                                <Snowflake className="h-3 w-3 no-flip text-cyan-700 relative z-10" />
+                              </div>
+                            )}
+
+                            {/* Delete */}
+                            <PermissionButton
+                              permission="canEditProjects"
+                              onClick={() => {
+                                if (
+                                  !isEditDeleteProtected &&
+                                  assignment.status !== "frozen"
+                                ) {
+                                  setSelectedAssignment(assignment);
+                                  setShowDeleteConfirm(true);
+                                }
+                              }}
+                              className={`w-7 h-7 p-0 rounded border transition-colors ${
+                                isEditDeleteProtected ||
+                                assignment.status === "frozen"
+                                  ? "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed"
+                                  : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
+                              }`}
+                              disabled={
+                                isEditDeleteProtected ||
+                                assignment.status === "frozen"
+                              }
+                              title={
+                                assignment.status === "frozen"
+                                  ? "لا يمكن الحذف - التعيين مجمد"
+                                  : isEditDeleteProtected
+                                  ? "محمي - لا يمكن الحذف (يوجد فواتير معتمدة)"
+                                  : "حذف التعيين"
+                              }
+                              viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                            >
+                              <Trash2 className="h-3 w-3 no-flip" />
+                            </PermissionButton>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -650,12 +886,12 @@ export default function CategoryAssignmentsTable({
                 </div>
                 <div>
                   <div className="text-sm font-bold text-green-600 arabic-spacing">
-                    {formatCurrency(
-                      sortedAssignments.reduce(
+                    <FinancialDisplay
+                      value={sortedAssignments.reduce(
                         (sum, a) => sum + a.estimated_amount,
                         0
-                      )
-                    )}
+                      )}
+                    />
                   </div>
                   <div className="text-xs text-gray-500 arabic-spacing">
                     إجمالي المقدر
@@ -680,13 +916,13 @@ export default function CategoryAssignmentsTable({
                 </div>
                 <div>
                   <div className="text-sm font-bold text-emerald-600 arabic-spacing">
-                    {formatCurrency(
-                      sortedAssignments.reduce(
+                    <FinancialDisplay
+                      value={sortedAssignments.reduce(
                         (sum, a) =>
                           sum + (a.estimated_amount - (a.actual_amount || 0)),
                         0
-                      )
-                    )}
+                      )}
+                    />
                   </div>
                   <div className="text-xs text-gray-500 arabic-spacing">
                     المتبقي
@@ -702,17 +938,23 @@ export default function CategoryAssignmentsTable({
                   تقدم المشروع
                 </span>
                 <span className="text-xs text-gray-600 arabic-spacing">
-                  {Math.round(
-                    (sortedAssignments.reduce(
+                  {(() => {
+                    const actualTotal = sortedAssignments.reduce(
                       (sum, a) => sum + (a.actual_amount || 0),
                       0
-                    ) /
-                      sortedAssignments.reduce(
-                        (sum, a) => sum + a.estimated_amount,
-                        0
-                      )) *
-                      100
-                  )}
+                    );
+                    const estimatedTotal = sortedAssignments.reduce(
+                      (sum, a) => sum + (a.estimated_amount || 0),
+                      0
+                    );
+
+                    if (estimatedTotal === 0) return "0";
+
+                    const percentage = Math.round(
+                      (actualTotal / estimatedTotal) * 100
+                    );
+                    return isNaN(percentage) ? "0" : percentage;
+                  })()}
                   %
                 </span>
               </div>
@@ -720,26 +962,426 @@ export default function CategoryAssignmentsTable({
                 <div
                   className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-500"
                   style={{
-                    width: `${Math.min(
-                      100,
-                      Math.round(
-                        (sortedAssignments.reduce(
-                          (sum, a) => sum + (a.actual_amount || 0),
-                          0
-                        ) /
-                          sortedAssignments.reduce(
-                            (sum, a) => sum + a.estimated_amount,
-                            0
-                          )) *
-                          100
-                      )
-                    )}%`,
+                    width: `${(() => {
+                      const actualTotal = sortedAssignments.reduce(
+                        (sum, a) => sum + (a.actual_amount || 0),
+                        0
+                      );
+                      const estimatedTotal = sortedAssignments.reduce(
+                        (sum, a) => sum + (a.estimated_amount || 0),
+                        0
+                      );
+
+                      if (estimatedTotal === 0) return 0;
+
+                      const percentage = Math.round(
+                        (actualTotal / estimatedTotal) * 100
+                      );
+                      const safePercentage = isNaN(percentage) ? 0 : percentage;
+                      return Math.min(100, safePercentage);
+                    })()}%`,
                   }}
                 ></div>
               </div>
             </div>
           </div>
         )}
+      </div>
+
+      {/* Freeze Assignment Modal */}
+      {showFreezeModal && selectedAssignment && (
+        <FreezeAssignmentModal
+          assignment={selectedAssignment}
+          onClose={() => {
+            setShowFreezeModal(false);
+            setSelectedAssignment(null);
+          }}
+          onConfirm={(reason) => {
+            if (onFreezeAssignment) {
+              onFreezeAssignment(selectedAssignment.id, reason);
+            }
+            setShowFreezeModal(false);
+            setSelectedAssignment(null);
+          }}
+        />
+      )}
+
+      {/* Edit Assignment Amount Modal */}
+      {showEditModal && selectedAssignment && (
+        <EditAssignmentModal
+          assignment={selectedAssignment}
+          onClose={() => {
+            setShowEditModal(false);
+            setSelectedAssignment(null);
+          }}
+          onConfirm={(newAmount, reason) => {
+            if (onEditAssignmentAmount) {
+              onEditAssignmentAmount(selectedAssignment.id, newAmount, reason);
+            }
+            setShowEditModal(false);
+            setSelectedAssignment(null);
+          }}
+        />
+      )}
+
+      {/* Delete Assignment Confirmation Modal */}
+      {showDeleteConfirm && selectedAssignment && (
+        <DeleteAssignmentConfirm
+          assignment={selectedAssignment}
+          onClose={() => {
+            setShowDeleteConfirm(false);
+            setSelectedAssignment(null);
+          }}
+          onConfirm={() => {
+            onDeleteAssignment(selectedAssignment.id);
+            setShowDeleteConfirm(false);
+            setSelectedAssignment(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Freeze Assignment Modal Component
+function FreezeAssignmentModal({
+  assignment,
+  onClose,
+  onConfirm,
+}: {
+  assignment: CategoryAssignment;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      await onConfirm(reason.trim());
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div className="flex items-center space-x-3 space-x-reverse mb-4">
+          <div className="bg-cyan-100 p-2 rounded-lg">
+            <Snowflake className="h-6 w-6 text-cyan-600 no-flip" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 arabic-spacing">
+              تجميد التعيين
+            </h3>
+            <p className="text-sm text-gray-600 arabic-spacing">
+              {assignment.contractor_name} - {assignment.main_category}
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-4 p-3 bg-cyan-50 rounded-lg">
+          <div className="flex items-center space-x-2 space-x-reverse mb-2">
+            <AlertTriangle className="h-4 w-4 text-cyan-600 no-flip" />
+            <span className="text-sm font-medium text-cyan-800 arabic-spacing">
+              معلومات مهمة
+            </span>
+          </div>
+          <ul className="text-xs text-cyan-700 arabic-spacing space-y-1">
+            <li>• سيتم إرجاع الرصيد غير المستخدم إلى المشروع</li>
+            <li>• لن يتمكن المقاول من إنشاء فواتير جديدة</li>
+            <li>• يمكن إلغاء التجميد لاحقاً إذا لزم الأمر</li>
+          </ul>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2 arabic-spacing">
+              سبب التجميد *
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="اذكر سبب تجميد هذا التعيين..."
+              className="w-full p-3 border border-gray-300 rounded-lg resize-none arabic-spacing"
+              rows={3}
+              required
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="flex items-center space-x-3 space-x-reverse">
+            <Button
+              type="submit"
+              disabled={!reason.trim() || isSubmitting}
+              className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white"
+            >
+              {isSubmitting ? (
+                <>
+                  <Clock className="h-4 w-4 ml-2 animate-spin no-flip" />
+                  <span className="arabic-spacing">جاري التجميد...</span>
+                </>
+              ) : (
+                <>
+                  <Snowflake className="h-4 w-4 ml-2 no-flip" />
+                  <span className="arabic-spacing">تجميد التعيين</span>
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="flex-1"
+            >
+              <span className="arabic-spacing">إلغاء</span>
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Edit Assignment Amount Modal Component
+function EditAssignmentModal({
+  assignment,
+  onClose,
+  onConfirm,
+}: {
+  assignment: CategoryAssignment;
+  onClose: () => void;
+  onConfirm: (newAmount: number, reason?: string) => void;
+}) {
+  const [newAmount, setNewAmount] = useState(
+    assignment.estimated_amount.toString()
+  );
+  const [reason, setReason] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = parseFloat(newAmount);
+    if (isNaN(amount) || amount <= 0) return;
+
+    setIsSubmitting(true);
+    try {
+      await onConfirm(amount, reason.trim() || undefined);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const amountDifference = parseFloat(newAmount) - assignment.estimated_amount;
+  const isIncreasing = amountDifference > 0;
+  const isDecreasing = amountDifference < 0;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div className="flex items-center space-x-3 space-x-reverse mb-4">
+          <div className="bg-amber-100 p-2 rounded-lg">
+            <Edit className="h-6 w-6 text-amber-600 no-flip" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 arabic-spacing">
+              تعديل مبلغ التعيين
+            </h3>
+            <p className="text-sm text-gray-600 arabic-spacing">
+              {assignment.contractor_name} - {assignment.main_category}
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+          <div className="text-sm text-gray-600 arabic-spacing mb-1">
+            المبلغ الحالي:
+          </div>
+          <div className="text-lg font-semibold text-gray-900 arabic-nums">
+            {formatCurrency(assignment.estimated_amount)}
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2 arabic-spacing">
+              المبلغ الجديد *
+            </label>
+            <Input
+              type="number"
+              value={newAmount}
+              onChange={(e) => setNewAmount(e.target.value)}
+              placeholder="أدخل المبلغ الجديد"
+              min="0"
+              step="0.01"
+              required
+              disabled={isSubmitting}
+              className="arabic-nums"
+            />
+            {amountDifference !== 0 && (
+              <div
+                className={`mt-2 text-sm ${
+                  isIncreasing ? "text-red-600" : "text-green-600"
+                }`}
+              >
+                {isIncreasing ? "↗️" : "↘️"} التغيير:{" "}
+                {formatCurrency(Math.abs(amountDifference))}
+                {isIncreasing
+                  ? " (سيتم خصمه من رصيد المشروع)"
+                  : " (سيتم إرجاعه لرصيد المشروع)"}
+              </div>
+            )}
+          </div>
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2 arabic-spacing">
+              سبب التعديل (اختياري)
+            </label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="اذكر سبب تعديل المبلغ..."
+              className="w-full p-3 border border-gray-300 rounded-lg resize-none arabic-spacing"
+              rows={2}
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="flex items-center space-x-3 space-x-reverse">
+            <Button
+              type="submit"
+              disabled={
+                !newAmount || parseFloat(newAmount) <= 0 || isSubmitting
+              }
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              {isSubmitting ? (
+                <>
+                  <Clock className="h-4 w-4 ml-2 animate-spin no-flip" />
+                  <span className="arabic-spacing">جاري التحديث...</span>
+                </>
+              ) : (
+                <>
+                  <Edit className="h-4 w-4 ml-2 no-flip" />
+                  <span className="arabic-spacing">تحديث المبلغ</span>
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="flex-1"
+            >
+              <span className="arabic-spacing">إلغاء</span>
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Delete Assignment Confirmation Modal Component
+function DeleteAssignmentConfirm({
+  assignment,
+  onClose,
+  onConfirm,
+}: {
+  assignment: CategoryAssignment;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirm = async () => {
+    setIsDeleting(true);
+    try {
+      await onConfirm();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div className="flex items-center space-x-3 space-x-reverse mb-4">
+          <div className="bg-red-100 p-2 rounded-lg">
+            <AlertTriangle className="h-6 w-6 text-red-600 no-flip" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 arabic-spacing">
+              تأكيد حذف التعيين
+            </h3>
+            <p className="text-sm text-gray-600 arabic-spacing">
+              هذا الإجراء لا يمكن التراجع عنه
+            </p>
+          </div>
+        </div>
+
+        <div className="mb-4 p-4 bg-red-50 rounded-lg border border-red-200">
+          <div className="text-sm text-red-800 arabic-spacing mb-2">
+            <strong>سيتم حذف:</strong>
+          </div>
+          <div className="text-sm text-red-700 arabic-spacing">
+            • المقاول: {assignment.contractor_name}
+          </div>
+          <div className="text-sm text-red-700 arabic-spacing">
+            • الفئة: {assignment.main_category}
+          </div>
+          <div className="text-sm text-red-700 arabic-spacing">
+            • المبلغ: {formatCurrency(assignment.estimated_amount)}
+          </div>
+        </div>
+
+        <div className="mb-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+          <div className="flex items-center space-x-2 space-x-reverse mb-2">
+            <AlertTriangle className="h-4 w-4 text-yellow-600 no-flip" />
+            <span className="text-sm font-medium text-yellow-800 arabic-spacing">
+              تنبيه مهم
+            </span>
+          </div>
+          <div className="text-xs text-yellow-700 arabic-spacing">
+            سيتم إرجاع المبلغ غير المستخدم إلى رصيد المشروع تلقائياً
+          </div>
+        </div>
+
+        <div className="flex items-center space-x-3 space-x-reverse">
+          <Button
+            onClick={handleConfirm}
+            disabled={isDeleting}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+          >
+            {isDeleting ? (
+              <>
+                <Clock className="h-4 w-4 ml-2 animate-spin no-flip" />
+                <span className="arabic-spacing">جاري الحذف...</span>
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-4 w-4 ml-2 no-flip" />
+                <span className="arabic-spacing">نعم، احذف التعيين</span>
+              </>
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onClose}
+            disabled={isDeleting}
+            className="flex-1"
+          >
+            <span className="arabic-spacing">إلغاء</span>
+          </Button>
+        </div>
       </div>
     </div>
   );

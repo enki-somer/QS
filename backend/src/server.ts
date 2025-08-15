@@ -21,14 +21,16 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || ['http://localhost:3000', 'http:/
 // Security middleware
 app.use(helmet());
 
-// Rate limiting
+// Rate limiting - More lenient for development
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: process.env.NODE_ENV === 'development' ? 1000 : 100, // Higher limit for development
   message: {
     success: false,
     message: 'تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقاً',
   },
+  // Skip rate limiting for OPTIONS requests (CORS preflight)
+  skip: (req) => req.method === 'OPTIONS',
 });
 
 app.use('/api', limiter);
@@ -45,26 +47,51 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
   exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
   preflightContinue: false,
   optionsSuccessStatus: 204
 }));
 
-// Handle preflight requests explicitly
-app.options('*', cors());
+// Handle preflight requests explicitly - apply before rate limiting
+app.options('*', cors({
+  origin: (origin, callback) => {
+    if (!origin || /^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  optionsSuccessStatus: 204
+}));
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check endpoint
+// Health check endpoint (public - no auth required)
 app.get('/health', (req, res) => {
   res.json({
     success: true,
     message: 'نظام الإدارة المالية - الخادم يعمل بشكل طبيعي',
     timestamp: new Date().toISOString(),
     version: '1.0.0',
+  });
+});
+
+// Public API status endpoint (no auth required)
+app.get('/api/status', (req, res) => {
+  res.json({
+    success: true,
+    message: 'API is running',
+    timestamp: new Date().toISOString(),
+    cors: {
+      origin: req.headers.origin || 'no-origin',
+      allowed: 'localhost development'
+    }
   });
 });
 

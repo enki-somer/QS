@@ -11,9 +11,14 @@ export interface CreateProjectData {
   start_date?: Date | null;
   end_date?: Date | null;
   status: ProjectStatus;
-  notes?: string | null;
   created_by?: string | null;
   categoryAssignments?: CreateProjectCategoryAssignmentData[];
+  
+  // NEW FINANCIAL FIELDS
+  price_per_meter?: number;
+  owner_deal_price?: number;
+  owner_paid_amount?: number;
+  total_site_area?: number;
 }
 
 export interface ProjectWithAssignments extends Project {
@@ -31,6 +36,23 @@ export interface ProjectWithAssignments extends Project {
 }
 
 class ProjectService {
+  // Calculate project financial fields
+  private calculateProjectFinancials(projectData: any): any {
+    const area = projectData.area || 0;
+    const pricePerMeter = projectData.price_per_meter || 0;
+    const ownerDealPrice = projectData.owner_deal_price || 0;
+    
+    const constructionCost = area * pricePerMeter;
+    const estimatedProfit = ownerDealPrice - constructionCost;
+    const profitMargin = ownerDealPrice > 0 ? (estimatedProfit / ownerDealPrice) * 100 : 0;
+    
+    return {
+      ...projectData,
+      construction_cost: constructionCost,
+      profit_margin: parseFloat(profitMargin.toFixed(2)) // Round to 2 decimal places
+    };
+  }
+
   // Generate unique project code
   async generateProjectCode(): Promise<string> {
     const year = new Date().getFullYear();
@@ -57,29 +79,39 @@ class ProjectService {
     try {
       await client.query('BEGIN');
 
+      // Calculate financial fields before insertion
+      const calculatedData = this.calculateProjectFinancials(data);
+      
       // Insert the main project
       const projectQuery = `
         INSERT INTO projects (
           name, code, location, area, budget_estimate, client, 
-          start_date, end_date, status, notes, created_by
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          start_date, end_date, status, created_by,
+          price_per_meter, owner_deal_price, owner_paid_amount, 
+          construction_cost, profit_margin, total_site_area
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *
       `;
       
-      console.log('Creating project with data:', data);
+      console.log('Creating project with data:', calculatedData);
       
       const projectValues = [
-        data.name,
-        data.code,
-        data.location || null,
-        data.area || null,
-        data.budget_estimate,
-        data.client,
-        data.start_date,
-        data.end_date || null,
-        data.status,
-        data.notes || null,
-        data.created_by || null
+        calculatedData.name,
+        calculatedData.code,
+        calculatedData.location || null,
+        calculatedData.area || null,
+        calculatedData.budget_estimate,
+        calculatedData.client,
+        calculatedData.start_date,
+        calculatedData.end_date || null,
+        calculatedData.status,
+        calculatedData.created_by || null,
+        calculatedData.price_per_meter || 0,
+        calculatedData.owner_deal_price || 0,
+        calculatedData.owner_paid_amount || 0,
+        calculatedData.construction_cost || 0,
+        calculatedData.profit_margin || 0,
+        calculatedData.total_site_area || 0
       ];
       
       console.log('Project values:', projectValues);
@@ -91,13 +123,13 @@ class ProjectService {
       const categoryAssignments = [];
       if (data.categoryAssignments && data.categoryAssignments.length > 0) {
         for (const assignment of data.categoryAssignments) {
-          const assignmentQuery = `
-            INSERT INTO project_category_assignments (
-              project_id, main_category, subcategory, contractor_id,
-              contractor_name, estimated_amount, notes, created_by
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            RETURNING *
-          `;
+                      const assignmentQuery = `
+              INSERT INTO project_category_assignments (
+                project_id, main_category, subcategory, contractor_id,
+                contractor_name, estimated_amount, notes, assignment_type, created_by
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+              RETURNING *
+            `;
 
           const assignmentValues = [
             project.id,
@@ -107,6 +139,7 @@ class ProjectService {
             assignment.contractor_name,
             assignment.estimated_amount,
             assignment.notes,
+            assignment.assignment_type || (assignment.contractor_id ? 'contractor' : 'purchasing'),
             data.created_by
           ];
 
@@ -132,10 +165,11 @@ class ProjectService {
 
   // Get all projects with their category assignments
   async getAllProjects(): Promise<ProjectWithAssignments[]> {
-    const query = `
-      SELECT 
-        p.*,
-        json_agg(
+    try {
+      const query = `
+        SELECT 
+          p.*,
+          json_agg(
           json_build_object(
             'id', pca.id,
             'main_category', pca.main_category,
@@ -146,6 +180,7 @@ class ProjectService {
             'actual_amount', pca.actual_amount,
             'notes', pca.notes,
             'status', pca.status,
+            'assignment_type', pca.assignment_type,
             'has_approved_invoice', pca.has_approved_invoice,
             'budget_exhausted', pca.budget_exhausted,
             'invoice_count', pca.invoice_count,
@@ -172,20 +207,29 @@ class ProjectService {
       ORDER BY p.created_at DESC
     `;
 
-    const result = await getPool().query(query);
-    
-    return result.rows.map((row: any) => ({
-      ...row,
-      categoryAssignments: row.category_assignments || []
-    }));
+      const result = await getPool().query(query);
+      
+      return result.rows.map((row: any) => ({
+        ...row,
+        // Add fallback values for budget columns if they don't exist
+        allocated_budget: row.allocated_budget || 0,
+        available_budget: row.available_budget || row.budget_estimate || 0,
+        spent_budget: row.spent_budget || 0,
+        categoryAssignments: row.category_assignments || []
+      }));
+    } catch (error) {
+      console.error('Error in getAllProjects:', error);
+      throw error;
+    }
   }
 
   // Get a single project with its category assignments
   async getProjectById(id: string): Promise<ProjectWithAssignments | null> {
-    const query = `
-      SELECT 
-        p.*,
-        json_agg(
+    try {
+      const query = `
+        SELECT 
+          p.*,
+          json_agg(
           json_build_object(
             'id', pca.id,
             'main_category', pca.main_category,
@@ -196,6 +240,7 @@ class ProjectService {
             'actual_amount', pca.actual_amount,
             'notes', pca.notes,
             'status', pca.status,
+            'assignment_type', pca.assignment_type,
             'has_approved_invoice', pca.has_approved_invoice,
             'budget_exhausted', pca.budget_exhausted,
             'invoice_count', pca.invoice_count,
@@ -222,17 +267,25 @@ class ProjectService {
       GROUP BY p.id
     `;
 
-    const result = await getPool().query(query, [id]);
-    
-    if (result.rows.length === 0) {
-      return null;
-    }
+      const result = await getPool().query(query, [id]);
+      
+      if (result.rows.length === 0) {
+        return null;
+      }
 
-    const row = result.rows[0];
-    return {
-      ...row,
-      categoryAssignments: row.category_assignments || []
-    };
+      const row = result.rows[0];
+      return {
+        ...row,
+        // Add fallback values for budget columns if they don't exist
+        allocated_budget: row.allocated_budget || 0,
+        available_budget: row.available_budget || row.budget_estimate || 0,
+        spent_budget: row.spent_budget || 0,
+        categoryAssignments: row.category_assignments || []
+      };
+    } catch (error) {
+      console.error('Error in getProjectById:', error);
+      throw error;
+    }
   }
 
   // Update project with category assignments
@@ -242,41 +295,47 @@ class ProjectService {
     try {
       await client.query('BEGIN');
 
-      // Update basic project fields
-    const setClauses = [];
-    const values = [];
-    let paramCount = 1;
-
-    Object.entries(data).forEach(([key, value]) => {
-      if (key !== 'categoryAssignments' && value !== undefined) {
-        setClauses.push(`${key} = $${paramCount}`);
-        values.push(value);
-        paramCount++;
+      // First get existing project to merge with updates
+      const existingResult = await client.query('SELECT * FROM projects WHERE id = $1', [id]);
+      if (existingResult.rows.length === 0) {
+        throw new Error('Project not found');
       }
-    });
+      const existingProject = existingResult.rows[0];
+      
+      // Merge existing data with updates for financial calculations
+      const mergedData = { ...existingProject, ...data };
+      const calculatedData = this.calculateProjectFinancials(mergedData);
+
+      // Update basic project fields
+      const setClauses = [];
+      const values = [];
+      let paramCount = 1;
+
+      Object.entries(calculatedData).forEach(([key, value]) => {
+        if (key !== 'categoryAssignments' && key !== 'id' && key !== 'created_at' && key !== 'updated_at' && value !== undefined) {
+          setClauses.push(`${key} = $${paramCount}`);
+          values.push(value);
+          paramCount++;
+        }
+      });
 
       let project = null;
       if (setClauses.length > 0) {
-    setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
-    values.push(id);
+        setClauses.push(`updated_at = CURRENT_TIMESTAMP`);
+        values.push(id);
 
-    const query = `
-      UPDATE projects 
-      SET ${setClauses.join(', ')}
-      WHERE id = $${paramCount}
-      RETURNING *
-    `;
+        const query = `
+          UPDATE projects 
+          SET ${setClauses.join(', ')}
+          WHERE id = $${paramCount}
+          RETURNING *
+        `;
 
         const result = await client.query(query, values);
         project = result.rows[0];
       } else {
-        // If no basic fields to update, just get the existing project
-        const result = await client.query('SELECT * FROM projects WHERE id = $1', [id]);
-        project = result.rows[0];
-      }
-
-      if (!project) {
-        throw new Error('Project not found');
+        // If no basic fields to update, use the existing project
+        project = existingProject;
       }
 
       // Handle category assignments update if provided
@@ -291,6 +350,7 @@ class ProjectService {
           WHERE pca.project_id = $1
           GROUP BY pca.id
         `;
+        
         const existingResult = await client.query(existingAssignmentsQuery, [id]);
         const existingAssignments = existingResult.rows;
 
@@ -310,7 +370,7 @@ class ProjectService {
         // Frontend now sends ONLY new assignments in ADD mode, complete list in EDIT mode
         console.log('🔍 DEBUG: Processing incoming assignments');
 
-        // Insert or update assignments
+        // Process assignments: Update existing, Create new
         if (data.categoryAssignments && data.categoryAssignments.length > 0) {
           for (const assignment of data.categoryAssignments) {
             console.log('📝 DEBUG: Processing assignment:', {
@@ -320,53 +380,81 @@ class ProjectService {
             });
 
             // Check if this exact assignment already exists
-            const existingMatch = existingAssignments.find(existing => 
-              existing.main_category === assignment.main_category &&
-              existing.subcategory === assignment.subcategory &&
-              existing.contractor_id === assignment.contractor_id
-            );
+            const assignmentType = assignment.assignment_type || (assignment.contractor_id ? 'contractor' : 'purchasing');
+            const existingMatch = existingAssignments.find(existing => {
+              const sameCategory = existing.main_category === assignment.main_category &&
+                                 existing.subcategory === assignment.subcategory;
+              
+              // Must be same assignment type to be considered a match
+              const sameType = existing.assignment_type === assignmentType;
+              
+              if (!sameCategory || !sameType) {
+                return false; // Different category or different type = not a match
+              }
+              
+              // For purchasing assignments, match by category + type
+              if (assignmentType === 'purchasing') {
+                return true; // Same category + same type = match for purchasing
+              }
+              
+              // For contractor assignments, match by exact contractor
+              return existing.contractor_id === assignment.contractor_id;
+            });
 
             if (existingMatch) {
-              const errorMessage = `التعيين موجود مسبقاً: المقاول "${assignment.contractor_name}" مُعيّن بالفعل لـ "${assignment.main_category} - ${assignment.subcategory}". استخدم زر التعديل لتحديث التعيين الموجود.`;
+              // UPDATE existing assignment
+              console.log('🔄 DEBUG: Updating existing assignment:', existingMatch.id);
               
-              console.log('✋ Business validation: Duplicate assignment rejected', {
-                existingId: existingMatch.id,
-                category: `${assignment.main_category} - ${assignment.subcategory}`,
-                contractor: assignment.contractor_name,
-                existingAmount: existingMatch.estimated_amount,
-                attemptedAmount: assignment.estimated_amount
-              });
+              const updateQuery = `
+                UPDATE project_category_assignments 
+                SET 
+                  estimated_amount = $1,
+                  notes = $2,
+                  contractor_name = $3,
+                  updated_at = CURRENT_TIMESTAMP
+                WHERE id = $4
+                RETURNING *
+              `;
+
+              const updateValues = [
+                assignment.estimated_amount,
+                assignment.notes,
+                assignment.contractor_name,
+                existingMatch.id
+              ];
+
+              const updateResult = await client.query(updateQuery, updateValues);
+              categoryAssignments.push(updateResult.rows[0]);
+              console.log('✅ DEBUG: Assignment updated:', existingMatch.id);
               
-              // Create a validation error (not a technical error)
-              const validationError = new Error(errorMessage);
-              (validationError as any).isValidationError = true;
-              throw validationError;
+            } else {
+              // CREATE new assignment
+              console.log('✨ DEBUG: Creating NEW assignment');
+              
+              const insertQuery = `
+                INSERT INTO project_category_assignments (
+                  project_id, main_category, subcategory, contractor_id,
+                  contractor_name, estimated_amount, notes, assignment_type, created_by
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                RETURNING *
+              `;
+
+              const insertValues = [
+                id,
+                assignment.main_category,
+                assignment.subcategory,
+                assignment.contractor_id,
+                assignment.contractor_name,
+                assignment.estimated_amount,
+                assignment.notes,
+                assignmentType,
+                data.created_by || null
+              ];
+
+              const insertResult = await client.query(insertQuery, insertValues);
+              categoryAssignments.push(insertResult.rows[0]);
+              console.log('✅ DEBUG: NEW assignment created with ID:', insertResult.rows[0].id);
             }
-
-            // Insert NEW assignment only
-            console.log('✨ DEBUG: Creating NEW assignment');
-            const insertQuery = `
-              INSERT INTO project_category_assignments (
-                project_id, main_category, subcategory, contractor_id,
-                contractor_name, estimated_amount, notes, created_by
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-              RETURNING *
-            `;
-
-            const insertValues = [
-              id,
-              assignment.main_category,
-              assignment.subcategory,
-              assignment.contractor_id,
-              assignment.contractor_name,
-              assignment.estimated_amount,
-              assignment.notes,
-              data.created_by || null
-            ];
-
-            const insertResult = await client.query(insertQuery, insertValues);
-            categoryAssignments.push(insertResult.rows[0]);
-            console.log('✅ DEBUG: NEW assignment created with ID:', insertResult.rows[0].id);
           }
         }
 
@@ -418,11 +506,222 @@ class ProjectService {
     }
   }
 
+  // Delete a specific assignment from a project
+  async deleteAssignment(projectId: string, assignmentId: string): Promise<boolean> {
+    const client = await getPool().connect();
+    
+    try {
+      await client.query('BEGIN');
+
+      // First, check if the assignment exists and can be deleted
+      const checkQuery = `
+        SELECT pca.*, 
+          CASE WHEN COUNT(i.id) > 0 THEN true ELSE false END as has_invoices,
+          CASE WHEN COUNT(CASE WHEN i.status IN ('approved', 'paid') THEN 1 END) > 0 THEN true ELSE false END as has_approved_invoices
+        FROM project_category_assignments pca
+        LEFT JOIN invoices i ON i.category_assignment_id = pca.id
+        WHERE pca.id = $1 AND pca.project_id = $2
+        GROUP BY pca.id
+      `;
+      
+      const checkResult = await client.query(checkQuery, [assignmentId, projectId]);
+      
+      if (checkResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return false; // Assignment not found
+      }
+
+      const assignment = checkResult.rows[0];
+
+      // Prevent deletion if there are approved/paid invoices
+      if (assignment.has_approved_invoices) {
+        const validationError = new Error('لا يمكن حذف التعيين - يوجد فواتير معتمدة أو مدفوعة مرتبطة بهذا التعيين');
+        (validationError as any).isValidationError = true;
+        throw validationError;
+      }
+
+      console.log(`🗑️ Deleting assignment: ${assignment.main_category} - ${assignment.subcategory} (${assignment.contractor_name})`);
+
+      // Delete any pending invoices first
+      if (assignment.has_invoices) {
+        const deletePendingInvoicesQuery = `
+          DELETE FROM invoices 
+          WHERE category_assignment_id = $1 AND status = 'pending_approval'
+        `;
+        await client.query(deletePendingInvoicesQuery, [assignmentId]);
+        console.log('🗑️ Deleted pending invoices for assignment');
+      }
+
+      // Delete the assignment
+      const deleteQuery = `
+        DELETE FROM project_category_assignments 
+        WHERE id = $1 AND project_id = $2
+      `;
+      
+      const deleteResult = await client.query(deleteQuery, [assignmentId, projectId]);
+      
+      if (deleteResult.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return false;
+      }
+
+      await client.query('COMMIT');
+      
+      console.log('✅ Assignment deleted successfully');
+      return true;
+
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('❌ Error deleting assignment:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   // Delete project
   async deleteProject(id: string): Promise<boolean> {
     const query = 'DELETE FROM projects WHERE id = $1';
     const result = await getPool().query(query, [id]);
     return (result.rowCount || 0) > 0;
+  }
+
+  // Get assignment financial summary
+  async getAssignmentFinancialSummary(assignmentId: string): Promise<any> {
+    try {
+      const query = 'SELECT get_assignment_financial_summary($1) as summary';
+      const result = await getPool().query(query, [assignmentId]);
+      
+      if (result.rows.length === 0) {
+        return { success: false, error: 'Assignment not found' };
+      }
+
+      return result.rows[0].summary;
+    } catch (error) {
+      console.error('❌ Error getting assignment financial summary:', error);
+      throw error;
+    }
+  }
+
+  // Freeze assignment
+  async freezeAssignment(assignmentId: string, reason: string, userId: string): Promise<any> {
+    try {
+      const query = 'SELECT recalculate_assignment_budget($1, $2, $3, $4, $5) as result';
+      const result = await getPool().query(query, [assignmentId, 'frozen', null, reason, userId]);
+      
+      if (result.rows.length === 0) {
+        return { success: false, error: 'Assignment not found' };
+      }
+
+      return result.rows[0].result;
+    } catch (error) {
+      console.error('❌ Error freezing assignment:', error);
+      throw error;
+    }
+  }
+
+  // Unfreeze assignment
+  async unfreezeAssignment(assignmentId: string, userId: string): Promise<any> {
+    try {
+      // First check if assignment is frozen
+      const checkQuery = `
+        SELECT status, estimated_amount, returned_budget 
+        FROM project_category_assignments 
+        WHERE id = $1
+      `;
+      const checkResult = await getPool().query(checkQuery, [assignmentId]);
+      
+      if (checkResult.rows.length === 0) {
+        return { success: false, error: 'Assignment not found' };
+      }
+
+      const assignment = checkResult.rows[0];
+      if (assignment.status !== 'frozen') {
+        return { success: false, error: 'Assignment is not frozen', userMessage: 'التعيين غير مجمد' };
+      }
+
+      // Unfreeze by setting status back to active and reversing budget return
+      const unfreezeQuery = `
+        UPDATE project_category_assignments 
+        SET status = 'active',
+            frozen_at = NULL,
+            frozen_by = NULL,
+            freeze_reason = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        RETURNING *
+      `;
+      
+      const unfreezeResult = await getPool().query(unfreezeQuery, [assignmentId]);
+
+      // Update project budget (subtract the returned budget since we're unfreezing)
+      const updateProjectQuery = `
+        UPDATE projects 
+        SET available_budget = available_budget - $1,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = (SELECT project_id FROM project_category_assignments WHERE id = $2)
+        RETURNING available_budget
+      `;
+      
+      const projectResult = await getPool().query(updateProjectQuery, [assignment.returned_budget, assignmentId]);
+
+      return {
+        success: true,
+        assignment_id: assignmentId,
+        status: 'active',
+        returned_budget_reversed: assignment.returned_budget,
+        new_project_budget: projectResult.rows[0]?.available_budget
+      };
+
+    } catch (error) {
+      console.error('❌ Error unfreezing assignment:', error);
+      throw error;
+    }
+  }
+
+  // Edit assignment amount
+  async editAssignmentAmount(assignmentId: string, newAmount: number, reason: string | undefined, userId: string): Promise<any> {
+    try {
+      const query = 'SELECT recalculate_assignment_budget($1, $2, $3, $4, $5) as result';
+      const result = await getPool().query(query, [assignmentId, 'active', newAmount, reason || null, userId]);
+      
+      if (result.rows.length === 0) {
+        return { success: false, error: 'Assignment not found' };
+      }
+
+      return result.rows[0].result;
+    } catch (error) {
+      console.error('❌ Error editing assignment amount:', error);
+      throw error;
+    }
+  }
+
+  // Enhanced delete assignment with budget recalculation
+  async deleteAssignmentEnhanced(projectId: string, assignmentId: string): Promise<boolean> {
+    try {
+      // First use the budget recalculation function with correct parameters
+      const budgetQuery = 'SELECT recalculate_assignment_budget($1, $2, $3, $4, $5) as result';
+      const budgetResult = await getPool().query(budgetQuery, [
+        assignmentId, 
+        'cancelled', 
+        null, // new_amount
+        'Admin delete - enhanced mode', // reason
+        null // user_id (will be handled by admin override)
+      ]);
+      
+      if (budgetResult.rows.length === 0 || !budgetResult.rows[0].result.success) {
+        throw new Error(budgetResult.rows[0]?.result?.error || 'Failed to recalculate budget');
+      }
+
+      // Now delete the assignment
+      const deleteQuery = 'DELETE FROM project_category_assignments WHERE id = $1 AND project_id = $2';
+      const deleteResult = await getPool().query(deleteQuery, [assignmentId, projectId]);
+      
+      return (deleteResult.rowCount || 0) > 0;
+    } catch (error) {
+      console.error('❌ Error in enhanced delete assignment:', error);
+      throw error;
+    }
   }
 }
 

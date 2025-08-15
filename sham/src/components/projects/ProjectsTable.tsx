@@ -21,7 +21,6 @@ interface ProjectsTableProps {
   getProjectTotalInvoiced: (projectId: string) => number;
   onViewProject: (project: Project) => void;
   onEditProject: (project: Project) => void;
-  onCreateInvoice: (projectId: string) => void;
 }
 
 const statusColors = {
@@ -44,7 +43,6 @@ export default function ProjectsTable({
   getProjectTotalInvoiced,
   onViewProject,
   onEditProject,
-  onCreateInvoice,
 }: ProjectsTableProps) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -64,8 +62,8 @@ export default function ProjectsTable({
               <th className="px-4 py-3 text-right text-sm font-semibold arabic-spacing min-w-[120px]">
                 الموقع
               </th>
-              <th className="px-4 py-3 text-right text-sm font-semibold arabic-spacing min-w-[150px]">
-                التقدم المالي
+              <th className="px-4 py-3 text-right text-sm font-semibold arabic-spacing min-w-[120px]">
+                الميزانية
               </th>
               <th className="px-4 py-3 text-right text-sm font-semibold arabic-spacing min-w-[80px]">
                 الفواتير
@@ -82,7 +80,9 @@ export default function ProjectsTable({
               const completionPercentage = Math.round(
                 (totalInvoiced / project.budgetEstimate) * 100
               );
-              const isOverBudget = completionPercentage > 100;
+              const isCompleted = project.status === "completed";
+              const isBudgetExhausted = completionPercentage >= 100;
+              const isProjectDisabled = isCompleted || isBudgetExhausted;
 
               return (
                 <tr
@@ -90,7 +90,7 @@ export default function ProjectsTable({
                   onClick={() => onViewProject(project)}
                   className={`hover:bg-blue-50 hover:cursor-pointer transition-colors border-b border-gray-200 ${
                     index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                  }`}
+                  } ${isProjectDisabled ? "opacity-60" : ""}`}
                 >
                   {/* Project Info */}
                   <td className="px-4 py-4">
@@ -144,41 +144,21 @@ export default function ProjectsTable({
                     </div>
                   </td>
 
-                  {/* Financial Progress */}
+                  {/* Budget */}
                   <td className="px-4 py-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span
-                          className={`text-sm font-medium ${
-                            isOverBudget ? "text-red-600" : "text-[#182C61]"
-                          }`}
-                        >
-                          {completionPercentage}%
-                        </span>
-                        {isOverBudget && (
-                          <AlertTriangle className="h-3 w-3 text-red-500 no-flip" />
-                        )}
+                    <div className="text-center">
+                      <span className="text-sm font-medium text-[#182C61] arabic-nums">
+                        {formatCurrency(project.budgetEstimate)}
+                      </span>
+                      <div className="text-xs text-gray-500 arabic-spacing mt-1">
+                        الميزانية المقدرة
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className={`h-2 rounded-full transition-all duration-300 ${
-                            isOverBudget
-                              ? "bg-red-500"
-                              : "bg-gradient-to-r from-[#182C61] to-blue-500"
-                          }`}
-                          style={{
-                            width: `${Math.min(completionPercentage, 100)}%`,
-                          }}
-                        ></div>
-                      </div>
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span className="arabic-nums">
-                          {formatCurrency(totalInvoiced)}
-                        </span>
-                        <span className="arabic-nums">
-                          {formatCurrency(project.budgetEstimate)}
-                        </span>
-                      </div>
+                      {isBudgetExhausted && (
+                        <div className="text-xs text-red-600 font-medium mt-1 flex items-center justify-center">
+                          <AlertTriangle className="h-3 w-3 ml-1 no-flip" />
+                          ميزانية مستنفدة
+                        </div>
+                      )}
                     </div>
                   </td>
 
@@ -219,22 +199,23 @@ export default function ProjectsTable({
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onCreateInvoice(project.id);
+                          if (!isProjectDisabled) {
+                            onEditProject(project);
+                          }
                         }}
-                        className="hover:bg-green-50 hover:text-green-600 p-2"
-                        title="فاتورة جديدة"
-                      >
-                        <FileText className="h-4 w-4 no-flip" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEditProject(project);
-                        }}
-                        className="hover:bg-[#182C61]/10 hover:text-[#182C61] p-2"
-                        title="تعديل المشروع"
+                        disabled={isProjectDisabled}
+                        className={`p-2 ${
+                          isProjectDisabled
+                            ? "opacity-50 cursor-not-allowed"
+                            : "hover:bg-[#182C61]/10 hover:text-[#182C61]"
+                        }`}
+                        title={
+                          isProjectDisabled
+                            ? isCompleted
+                              ? "لا يمكن تعديل مشروع مكتمل"
+                              : "لا يمكن تعديل مشروع بميزانية مستنفدة"
+                            : "تعديل المشروع"
+                        }
                       >
                         <Edit className="h-4 w-4 no-flip" />
                       </Button>

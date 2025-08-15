@@ -45,6 +45,9 @@ import { useSafe } from "@/contexts/SafeContext";
 import { useToast } from "@/components/ui/Toast";
 import { Select } from "@/components/ui/Select";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUIPermissions } from "@/hooks/useUIPermissions";
+import { PermissionRoute } from "@/components/ui/PermissionRoute";
+import { PermissionButton } from "@/components/ui/PermissionButton";
 
 // No hardcoded data - start with empty state for real testing
 
@@ -72,7 +75,7 @@ export default function GeneralExpensesPage() {
   const { addToast } = useToast();
   const { safeState, deductForExpense, hasBalance } = useSafe();
   const { hasPermission, isDataEntry, user } = useAuth();
-
+  const permissions = useUIPermissions();
   const [expenses, setExpenses] = useState<EnhancedGeneralExpense[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -330,10 +333,14 @@ export default function GeneralExpensesPage() {
             <PieChart className="h-4 w-4 ml-2 no-flip" />
             <span className="arabic-spacing">تقرير الفئات</span>
           </Button>
-          <Button onClick={() => setShowExpenseModal(true)}>
+          <PermissionButton
+            permission="canCreateInvoices"
+            onClick={() => setShowExpenseModal(true)}
+            viewOnlyTooltip="غير متاح - وضع العرض فقط"
+          >
             <Plus className="h-4 w-4 ml-2 no-flip" />
             <span className="arabic-spacing">مصروف جديد</span>
-          </Button>
+          </PermissionButton>
         </div>
       </div>
 
@@ -617,9 +624,15 @@ export default function GeneralExpensesPage() {
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
                         <Eye className="h-4 w-4 no-flip" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <PermissionButton
+                        permission="canEditProjects"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                      >
                         <Edit className="h-4 w-4 no-flip" />
-                      </Button>
+                      </PermissionButton>
 
                       {/* Payment button - Admin only */}
                       {hasPermission("canMakePayments") && (
@@ -639,15 +652,15 @@ export default function GeneralExpensesPage() {
                       )}
 
                       {/* Delete button - Admin only */}
-                      {hasPermission("canDeleteRecords") && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4 no-flip" />
-                        </Button>
-                      )}
+                      <PermissionButton
+                        permission="canDeleteProjects"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                      >
+                        <Trash2 className="h-4 w-4 no-flip" />
+                      </PermissionButton>
                     </div>
                   </div>
                 </div>
@@ -670,10 +683,14 @@ export default function GeneralExpensesPage() {
                 ? "جرب تعديل معايير البحث"
                 : "ابدأ بتسجيل مصروفك الأول"}
             </p>
-            <Button onClick={() => setShowExpenseModal(true)}>
+            <PermissionButton
+              permission="canCreateInvoices"
+              onClick={() => setShowExpenseModal(true)}
+              viewOnlyTooltip="غير متاح - وضع العرض فقط"
+            >
               <Plus className="h-4 w-4 ml-2 no-flip" />
               <span className="arabic-spacing">إضافة مصروف</span>
-            </Button>
+            </PermissionButton>
           </CardContent>
         </Card>
       )}

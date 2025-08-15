@@ -44,8 +44,8 @@ class ContractorService {
 
       const values = [
         data.full_name,
-        data.phone_number,
-        data.category,
+        data.phone_number || null,
+        data.category || null,
         data.notes || null,
         userId || null
       ];
@@ -67,7 +67,7 @@ class ContractorService {
       console.error('Error creating contractor:', error);
       
       // Handle unique constraint error
-      if (error.code === '23505' && error.constraint === 'contractors_full_name_key') {
+      if (error.code === '23505' && error.constraint?.includes('full_name')) {
         return {
           success: false,
           error: 'يوجد مقاول بنفس الاسم مسبقاً. لا يسمح بالأسماء المكررة.'
@@ -295,7 +295,7 @@ class ContractorService {
       console.error('Error updating contractor:', error);
       
       // Handle unique constraint error
-      if (error.code === '23505' && error.constraint === 'contractors_full_name_key') {
+      if (error.code === '23505' && error.constraint?.includes('full_name')) {
         return {
           success: false,
           error: 'يوجد مقاول بنفس الاسم مسبقاً. لا يسمح بالأسماء المكررة.'
@@ -394,7 +394,6 @@ class ContractorService {
     total: number;
     active: number;
     inactive: number;
-    byCategory: { [key: string]: number };
   }>> {
     const client: PoolClient = await this.pool.connect();
     
@@ -403,26 +402,16 @@ class ContractorService {
       const totalQuery = 'SELECT COUNT(*) as total, COUNT(CASE WHEN is_active THEN 1 END) as active FROM contractors';
       const totalResult = await client.query(totalQuery);
 
-      // Get by category counts
-      const categoryQuery = 'SELECT category, COUNT(*) as count FROM contractors WHERE is_active = true GROUP BY category';
-      const categoryResult = await client.query(categoryQuery);
-
       const total = parseInt(totalResult.rows[0].total);
       const active = parseInt(totalResult.rows[0].active);
       const inactive = total - active;
-
-      const byCategory: { [key: string]: number } = {};
-      categoryResult.rows.forEach(row => {
-        byCategory[row.category] = parseInt(row.count);
-      });
 
       return {
         success: true,
         data: {
           total,
           active,
-          inactive,
-          byCategory
+          inactive
         }
       };
     } catch (error: any) {

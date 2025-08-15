@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { safeService, CreateSafeTransactionData, SafeTransactionFilter } from '../services/safeService';
+import { safeService, CreateSafeTransactionData, EditSafeTransactionData, SafeTransactionFilter, FundingSource } from '../services/safeService';
 import { authenticate, requireSafeAccess, requirePaymentAccess } from '../middleware/auth';
 
 const router = Router();
@@ -50,7 +50,7 @@ router.get('/state', async (req: Request, res: Response) => {
  */
 router.post('/funding', requirePaymentAccess, async (req: Request, res: Response) => {
   try {
-    const { amount, description, funding_source, funding_notes } = req.body;
+    const { amount, description, funding_source, funding_notes, project_id, project_name, batch_number } = req.body;
     const userId = (req as any).user?.id;
 
     // Validate required fields
@@ -82,8 +82,19 @@ router.post('/funding', requirePaymentAccess, async (req: Request, res: Response
       description,
       date: new Date(),
       funding_source,
-      funding_notes
+      funding_notes,
+      project_id,
+      project_name,
+      batch_number: batch_number ? parseInt(batch_number) : undefined
     };
+
+    // Debug logging
+    console.log('🔍 Safe Route DEBUG:', {
+      originalAmount: amount,
+      parsedAmount: parseFloat(amount),
+      amountType: typeof parseFloat(amount),
+      transactionData
+    });
 
     const result = await safeService.addFunding(transactionData, userId);
 
@@ -380,6 +391,141 @@ router.get('/summary', async (req: Request, res: Response) => {
     }
   } catch (error) {
     console.error('Safe summary error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'خطأ في الخادم'
+    });
+  }
+});
+
+/**
+ * GET /api/safe/transactions/:id
+ * Get a specific transaction by ID (for editing)
+ */
+router.get('/transactions/:id', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userRole = (req as any).user?.role;
+
+    // Only admins can access individual transactions for editing
+    if (userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'غير مسموح - يتطلب صلاحيات المدير'
+      });
+    }
+
+    const result = await safeService.getTransactionById(id);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        data: result.data
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        message: result.error || 'المعاملة غير موجودة'
+      });
+    }
+  } catch (error) {
+    console.error('Get transaction error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'خطأ في الخادم'
+    });
+  }
+});
+
+/**
+ * PUT /api/safe/transactions/:id
+ * Edit a safe transaction (admin only)
+ */
+router.put('/transactions/:id', authenticate, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { amount, description, funding_source, funding_notes, edit_reason } = req.body;
+    const userId = (req as any).user?.id;
+    const userRole = (req as any).user?.role;
+
+    // Only admins can edit transactions
+    if (userRole !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'غير مسموح - يتطلب صلاحيات المدير'
+      });
+    }
+
+    // Validate edit reason is provided
+    if (!edit_reason?.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'سبب التعديل مطلوب'
+      });
+    }
+
+    // Validate amount if provided
+    if (amount !== undefined && (isNaN(amount) || amount <= 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'المبلغ يجب أن يكون رقماً موجباً'
+      });
+    }
+
+    const editData: EditSafeTransactionData = {
+      edit_reason: edit_reason.trim()
+    };
+
+    // Add optional fields if provided
+    if (amount !== undefined) editData.amount = parseFloat(amount);
+    if (description?.trim()) editData.description = description.trim();
+    if (funding_source?.trim()) editData.funding_source = funding_source.trim();
+    if (funding_notes?.trim()) editData.funding_notes = funding_notes.trim();
+
+    const result = await safeService.editTransaction(id, editData, userId);
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'تم تعديل المعاملة بنجاح',
+        data: result.data
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.error || 'فشل في تعديل المعاملة'
+      });
+    }
+  } catch (error) {
+    console.error('Edit transaction error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'خطأ في الخادم'
+    });
+  }
+});
+
+/**
+ * GET /api/safe/funding-sources
+ * Get available funding sources including dynamic project sources
+ */
+router.get('/funding-sources', authenticate, async (req: Request, res: Response) => {
+  try {
+    const result = await safeService.getFundingSources();
+
+    if (result.success) {
+      res.json({
+        success: true,
+        fundingSources: result.data
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: result.error || 'فشل في جلب مصادر التمويل'
+      });
+    }
+  } catch (error) {
+    console.error('Funding sources error:', error);
     res.status(500).json({
       success: false,
       message: 'خطأ في الخادم'

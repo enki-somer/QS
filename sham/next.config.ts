@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Enable static exports for Netlify
-  output: 'export',
+  // Disable static export for development - use SSR instead
+  // output: 'export', // Commented out to fix dynamic route issues
   trailingSlash: true,
   images: {
     unoptimized: true,

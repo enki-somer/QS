@@ -43,14 +43,31 @@ export default function MainLayout({ children }: MainLayoutProps) {
       const checkPendingApprovals = async () => {
         let count = 0;
 
-        // Check pending invoices (localStorage)
+        // Check pending category invoices (database API) - NEW SYSTEM
+        try {
+          const response = await apiRequest("/category-invoices/pending-count");
+          if (response.ok) {
+            const data = await response.json();
+            const categoryInvoicesCount = data.count || 0;
+            count += categoryInvoicesCount;
+            console.log(
+              `🧾 Found ${categoryInvoicesCount} pending category invoices`
+            );
+          }
+        } catch (error) {
+          console.warn("Failed to load pending category invoices:", error);
+        }
+
+        // Check pending invoices (localStorage) - LEGACY SYSTEM
         const storedInvoices = localStorage.getItem("financial-invoices");
         if (storedInvoices) {
           try {
             const invoices: EnhancedInvoice[] = JSON.parse(storedInvoices);
-            count += invoices.filter(
+            const legacyCount = invoices.filter(
               (inv) => inv.status === "pending_approval"
             ).length;
+            count += legacyCount;
+            console.log(`🧾 Found ${legacyCount} pending legacy invoices`);
           } catch (error) {
             console.warn("Failed to load invoices for notification:", error);
           }
@@ -81,12 +98,17 @@ export default function MainLayout({ children }: MainLayoutProps) {
           const response = await apiRequest("/general-expenses/pending-count");
           if (response.ok) {
             const data = await response.json();
-            count += data.count || 0;
+            const projectExpensesCount = data.count || 0;
+            count += projectExpensesCount;
+            console.log(
+              `💰 Found ${projectExpensesCount} pending project expenses`
+            );
           }
         } catch (error) {
           console.warn("Failed to load pending project expenses:", error);
         }
 
+        console.log(`🔔 Total pending items: ${count}`);
         setPendingCount(count);
       };
 
@@ -102,9 +124,16 @@ export default function MainLayout({ children }: MainLayoutProps) {
       };
       window.addEventListener("storage", handleStorageChange);
 
+      // Listen for custom events from approval actions
+      const handleApprovalEvent = () => {
+        checkPendingApprovals();
+      };
+      window.addEventListener("approvalStateChanged", handleApprovalEvent);
+
       return () => {
         clearInterval(pendingTimer);
         window.removeEventListener("storage", handleStorageChange);
+        window.removeEventListener("approvalStateChanged", handleApprovalEvent);
       };
     }
   }, [hasPermission, isAuthenticated]);
@@ -233,6 +262,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
                     <div className="text-xs text-gray-500 arabic-spacing">
                       {user?.role === "admin"
                         ? "المدير العام"
+                        : user?.role === "partners"
+                        ? "شريك"
                         : "موظف إدخال البيانات"}
                     </div>
                   </div>
