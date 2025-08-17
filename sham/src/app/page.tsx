@@ -178,9 +178,15 @@ export default function HomePage() {
             <p className="text-xl text-gray-600 mb-6 arabic-spacing">
               {isDataEntry()
                 ? `مرحباً ${
-                    user?.fullName || "موظف الإدخال"
+                    user?.fullName && !user.fullName.includes("?")
+                      ? user.fullName
+                      : user?.username || "موظف الإدخال"
                   } • نظام إدخال البيانات المالية`
-                : `مرحباً ${user?.fullName || "المدير"} • لوحة التحكم الرئيسية`}
+                : `مرحباً ${
+                    user?.fullName && !user.fullName.includes("?")
+                      ? user.fullName
+                      : user?.username || "المدير"
+                  } • لوحة التحكم الرئيسية`}
             </p>
             <div className="flex items-center justify-center space-x-6 space-x-reverse">
               <div className="flex items-center space-x-2 space-x-reverse text-green-600">

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Home,
@@ -8,9 +8,12 @@ import {
   Wallet,
   BarChart3,
   Shield,
+  Menu,
+  X,
 } from "lucide-react";
 import { useUIPermissions } from "@/hooks/useUIPermissions";
 import { useAuth } from "@/contexts/AuthContext";
+import { useResponsive } from "@/hooks/useResponsive";
 
 interface NavItem {
   icon: React.ComponentType<any>;
@@ -65,15 +68,20 @@ const navigationItems: NavItem[] = [
 
 interface RoleBasedNavigationProps {
   className?: string;
+  isMobileMenuOpen?: boolean;
+  onMobileMenuToggle?: () => void;
 }
 
 export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({
   className = "",
+  isMobileMenuOpen = false,
+  onMobileMenuToggle,
 }) => {
   const router = useRouter();
   const pathname = usePathname();
   const permissions = useUIPermissions();
   const { user } = useAuth();
+  const { isMobile } = useResponsive();
 
   const filteredNavItems = navigationItems.filter((item) => {
     // Hide admin-only items from non-admins
@@ -94,6 +102,30 @@ export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({
     return true;
   });
 
+  // Filter out general expenses and reports pages on mobile
+  const mobileFilteredNavItems = isMobile
+    ? filteredNavItems.filter(
+        (item) =>
+          item.href !== "/general-expenses" &&
+          item.href !== "/financial-reports"
+      )
+    : filteredNavItems;
+
+  if (isMobile) {
+    return (
+      <MobileNavigation
+        filteredNavItems={mobileFilteredNavItems}
+        pathname={pathname}
+        router={router}
+        permissions={permissions}
+        user={user}
+        isOpen={isMobileMenuOpen}
+        onToggle={onMobileMenuToggle}
+        className={className}
+      />
+    );
+  }
+
   return (
     <div className={`bg-white border-b border-gray-200 shadow-sm ${className}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -113,9 +145,20 @@ export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({
             <div className="flex items-center space-x-2 space-x-reverse px-3 py-2 text-xs">
               <Shield className="h-3 w-3 text-gray-400" />
               <span className="text-gray-500 arabic-spacing">
-                {permissions.isAdminMode && "مدير"}
-                {permissions.isDataEntryMode && "إدخال بيانات"}
-                {permissions.isViewOnlyMode && "عرض فقط"}
+                {(() => {
+                  if (permissions.isAdminMode) return "مدير";
+                  if (permissions.isDataEntryMode) return "مدخل بيانات";
+                  if (permissions.isViewOnlyMode) return "شريك";
+
+                  // Fallback to direct role mapping if permission modes don't work
+                  const role = user?.role as string;
+                  if (role === "admin") return "مدير";
+                  if (role === "data_entry" || role === "dataentry")
+                    return "مدخل بيانات";
+                  if (role === "partners" || role === "partner") return "شريك";
+
+                  return role || "مستخدم";
+                })()}
               </span>
             </div>
           </div>
@@ -178,6 +221,150 @@ const RoleBasedNavButton: React.FC<RoleBasedNavButtonProps> = ({
         <span className="text-xs opacity-60">(عرض)</span>
       )}
     </button>
+  );
+};
+
+// Mobile Navigation Component
+interface MobileNavigationProps {
+  filteredNavItems: NavItem[];
+  pathname: string;
+  router: any;
+  permissions: ReturnType<typeof useUIPermissions>;
+  user: any;
+  isOpen: boolean;
+  onToggle?: () => void;
+  className?: string;
+}
+
+const MobileNavigation: React.FC<MobileNavigationProps> = ({
+  filteredNavItems,
+  pathname,
+  router,
+  permissions,
+  user,
+  isOpen,
+  onToggle,
+  className = "",
+}) => {
+  const handleNavClick = (href: string) => {
+    router.push(href);
+    if (onToggle) {
+      onToggle(); // Close menu after navigation
+    }
+  };
+
+  // Don't render anything if menu is not open
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <>
+      {/* Mobile Menu Overlay */}
+      <div
+        className="fixed inset-0 bg-black bg-opacity-60 z-40"
+        onClick={onToggle}
+      />
+
+      {/* Mobile Menu Drawer */}
+      <div className="fixed top-0 left-0 h-full w-72 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col translate-x-0">
+        {/* Menu Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 relative flex-shrink-0">
+          {/* Close Button */}
+          <button
+            onClick={onToggle}
+            className="absolute top-3 left-3 text-white hover:bg-white/20 p-1.5 rounded-lg transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          {/* Header Content */}
+          <div className="text-center text-white pt-1">
+            <div className="bg-white/20 p-2 rounded-lg inline-block mb-2">
+              <img
+                src="/QS-WHITE.svg"
+                alt="شركة قصر الشام"
+                width={20}
+                height={20}
+                style={{ display: "block" }}
+              />
+            </div>
+            <h2 className="text-base font-bold arabic-spacing">قصر الشام</h2>
+            <div className="flex items-center justify-center space-x-2 space-x-reverse text-xs text-blue-100 mt-1">
+              <span className="arabic-spacing">
+                {(() => {
+                  if (permissions.isAdminMode) return "مدير";
+                  if (permissions.isDataEntryMode) return "مدخل بيانات";
+                  if (permissions.isViewOnlyMode) return "شريك";
+
+                  // Fallback to direct role mapping if permission modes don't work
+                  const role = user?.role as string;
+                  if (role === "admin") return "مدير";
+                  if (role === "data_entry" || role === "dataentry")
+                    return "مدخل بيانات";
+                  if (role === "partners" || role === "partner") return "شريك";
+
+                  return role || "مستخدم";
+                })()}
+              </span>
+              <Shield className="h-3 w-3" />
+            </div>
+          </div>
+        </div>
+
+        {/* Menu Items */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-3 space-y-1">
+            {filteredNavItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = pathname === item.href;
+              const hasPermission =
+                !item.permission || permissions[item.permission];
+
+              return (
+                <button
+                  key={item.href}
+                  onClick={() => hasPermission && handleNavClick(item.href)}
+                  disabled={!hasPermission}
+                  className={`w-full flex items-center space-x-3 space-x-reverse p-3 rounded-lg text-right transition-all duration-200 ${
+                    isActive
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : hasPermission
+                      ? "text-gray-700 hover:bg-gray-50 hover:text-gray-900"
+                      : "text-gray-400 cursor-not-allowed opacity-50"
+                  }`}
+                >
+                  <div className="flex-1 text-right">
+                    <span className="arabic-spacing font-medium text-sm">
+                      {item.label}
+                    </span>
+                    {permissions.isViewOnlyMode && hasPermission && (
+                      <span className="text-xs opacity-60 mr-2">(عرض)</span>
+                    )}
+                  </div>
+                  <Icon
+                    className={`h-4 w-4 no-flip flex-shrink-0 ${
+                      isActive
+                        ? "text-white"
+                        : hasPermission
+                        ? "text-blue-600"
+                        : "text-gray-400"
+                    }`}
+                  />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Menu Footer */}
+        <div className="border-t border-gray-200 bg-gray-50 p-3 flex-shrink-0">
+          <div className="text-center text-xs text-gray-500 arabic-spacing">
+            نظام الإدارة المالية
+          </div>
+        </div>
+      </div>
+    </>
   );
 };
 

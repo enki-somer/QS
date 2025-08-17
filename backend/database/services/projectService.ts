@@ -15,7 +15,8 @@ export interface CreateProjectData {
   categoryAssignments?: CreateProjectCategoryAssignmentData[];
   
   // NEW FINANCIAL FIELDS
-  price_per_meter?: number;
+  price_per_meter?: number;      // Deal price per square meter (what we charge client)
+  real_cost_per_meter?: number;  // Actual cost per square meter (our expenses)
   owner_deal_price?: number;
   owner_paid_amount?: number;
   total_site_area?: number;
@@ -36,19 +37,27 @@ export interface ProjectWithAssignments extends Project {
 }
 
 class ProjectService {
-  // Calculate project financial fields
+  // Calculate project financial fields with accurate profit calculation
   private calculateProjectFinancials(projectData: any): any {
     const area = projectData.area || 0;
-    const pricePerMeter = projectData.price_per_meter || 0;
+    const pricePerMeter = projectData.price_per_meter || 0;        // What we charge per m²
+    const realCostPerMeter = projectData.real_cost_per_meter || 0; // What it costs us per m²
     const ownerDealPrice = projectData.owner_deal_price || 0;
     
-    const constructionCost = area * pricePerMeter;
-    const estimatedProfit = ownerDealPrice - constructionCost;
-    const profitMargin = ownerDealPrice > 0 ? (estimatedProfit / ownerDealPrice) * 100 : 0;
+    // Revenue calculations
+    const constructionCost = area * pricePerMeter;           // Total revenue from construction
+    const realConstructionCost = area * realCostPerMeter;    // Total cost to us
+    
+    // Profit calculations
+    const grossProfit = constructionCost - realConstructionCost;  // Real profit
+    const profitMargin = pricePerMeter > 0 ? 
+      ((pricePerMeter - realCostPerMeter) / pricePerMeter) * 100 : 0;
     
     return {
       ...projectData,
       construction_cost: constructionCost,
+      real_construction_cost: realConstructionCost,
+      gross_profit: grossProfit,
       profit_margin: parseFloat(profitMargin.toFixed(2)) // Round to 2 decimal places
     };
   }
@@ -79,6 +88,9 @@ class ProjectService {
     try {
       await client.query('BEGIN');
 
+      // Generate project code
+      const code = await this.generateProjectCode();
+      
       // Calculate financial fields before insertion
       const calculatedData = this.calculateProjectFinancials(data);
       
@@ -87,9 +99,9 @@ class ProjectService {
         INSERT INTO projects (
           name, code, location, area, budget_estimate, client, 
           start_date, end_date, status, created_by,
-          price_per_meter, owner_deal_price, owner_paid_amount, 
-          construction_cost, profit_margin, total_site_area
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          price_per_meter, real_cost_per_meter, owner_deal_price, owner_paid_amount, 
+          construction_cost, real_construction_cost, gross_profit, profit_margin, total_site_area
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         RETURNING *
       `;
       
@@ -97,7 +109,7 @@ class ProjectService {
       
       const projectValues = [
         calculatedData.name,
-        calculatedData.code,
+        code, // Use the generated code, not calculatedData.code
         calculatedData.location || null,
         calculatedData.area || null,
         calculatedData.budget_estimate,
@@ -107,9 +119,12 @@ class ProjectService {
         calculatedData.status,
         calculatedData.created_by || null,
         calculatedData.price_per_meter || 0,
+        calculatedData.real_cost_per_meter || 0,
         calculatedData.owner_deal_price || 0,
         calculatedData.owner_paid_amount || 0,
         calculatedData.construction_cost || 0,
+        calculatedData.real_construction_cost || 0,
+        calculatedData.gross_profit || 0,
         calculatedData.profit_margin || 0,
         calculatedData.total_site_area || 0
       ];

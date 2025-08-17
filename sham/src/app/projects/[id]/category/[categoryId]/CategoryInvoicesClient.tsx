@@ -162,9 +162,7 @@ export default function CategoryInvoicesClient() {
         setError(null);
 
         // Fetch project data
-        const projectResponse = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${projectId}`
-        );
+        const projectResponse = await apiRequest(`/projects/${projectId}`);
         if (!projectResponse.ok) throw new Error("Project not found");
         const projectData = await projectResponse.json();
 

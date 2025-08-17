@@ -36,6 +36,7 @@ import PageNavigation from "@/components/layout/PageNavigation";
 import { useContractors } from "@/contexts/ContractorContext";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useResponsive } from "@/hooks/useResponsive";
 import { Contractor, ContractorFormData } from "@/types";
 
 // Contractor categories - English values for database, Arabic labels for display
@@ -77,6 +78,7 @@ export default function ContractorsPage() {
   const router = useRouter();
   const { addToast } = useToast();
   const { user } = useAuth();
+  const { isMobile, isTablet } = useResponsive();
   const {
     contractors,
     isLoading,
@@ -259,44 +261,73 @@ export default function ContractorsPage() {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Page Navigation */}
-      <PageNavigation />
+    <div className={isMobile ? "space-y-4 p-3" : "space-y-8"}>
+      {/* Page Navigation - Hidden on Mobile */}
+      {!isMobile && <PageNavigation />}
 
       {/* Page Header */}
-      <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-gray-900 arabic-spacing">
-            إدارة المقاولين
-          </h1>
-          <p className="text-gray-600 arabic-spacing leading-relaxed">
-            إدارة قاعدة بيانات المقاولين والموردين - يُستخدمون في جميع أنحاء
-            النظام
-          </p>
-          <div className="flex items-center space-x-4 space-x-reverse text-sm text-gray-500">
-            <span className="flex items-center space-x-1 space-x-reverse">
-              <UserCheck className="h-4 w-4 no-flip" />
-              <span className="arabic-spacing">
-                {contractors.length} مقاول نشط
+      <div
+        className={`bg-white rounded-xl shadow-sm border border-gray-200 ${
+          isMobile ? "p-4" : "p-6"
+        }`}
+      >
+        <div
+          className={`flex items-center justify-between ${
+            isMobile ? "flex-col space-y-3" : ""
+          }`}
+        >
+          <div className={`space-y-2 ${isMobile ? "text-center" : ""}`}>
+            <h1
+              className={`font-bold text-gray-900 arabic-spacing ${
+                isMobile ? "text-xl" : "text-3xl"
+              }`}
+            >
+              {isMobile ? "المقاولين" : "إدارة المقاولين"}
+            </h1>
+            {!isMobile && (
+              <p className="text-gray-600 arabic-spacing leading-relaxed">
+                إدارة قاعدة بيانات المقاولين والموردين - يُستخدمون في جميع أنحاء
+                النظام
+              </p>
+            )}
+            <div
+              className={`flex items-center text-gray-500 ${
+                isMobile
+                  ? "justify-center space-x-2 space-x-reverse text-xs"
+                  : "space-x-4 space-x-reverse text-sm"
+              }`}
+            >
+              <span className="flex items-center space-x-1 space-x-reverse">
+                <UserCheck
+                  className={`no-flip ${isMobile ? "h-3 w-3" : "h-4 w-4"}`}
+                />
+                <span className="arabic-spacing">
+                  {contractors.length} مقاول
+                </span>
               </span>
-            </span>
-            <span className="flex items-center space-x-1 space-x-reverse">
-              <Clock className="h-4 w-4 no-flip" />
-              <span className="arabic-spacing">
-                آخر تحديث: {new Date().toLocaleDateString("ar-EG")}
-              </span>
-            </span>
+              {!isMobile && (
+                <span className="flex items-center space-x-1 space-x-reverse">
+                  <Clock className="h-4 w-4 no-flip" />
+                  <span className="arabic-spacing">
+                    آخر تحديث: {new Date().toLocaleDateString("ar-EG")}
+                  </span>
+                </span>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center space-x-4 gap-2 space-x-reverse">
-          <Button
-            onClick={() => setShowAddModal(true)}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-          >
-            <Plus className="h-4 w-4 ml-2 no-flip" />
-            <span className="arabic-spacing">إضافة مقاول جديد</span>
-          </Button>
+          {/* Action Buttons - Hidden on Mobile */}
+          {!isMobile && (
+            <div className="flex items-center space-x-4 gap-2 space-x-reverse">
+              <Button
+                onClick={() => setShowAddModal(true)}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              >
+                <Plus className="h-4 w-4 ml-2 no-flip" />
+                <span className="arabic-spacing">إضافة مقاول جديد</span>
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -323,26 +354,48 @@ export default function ContractorsPage() {
 
       {/* Filters and Search */}
       <Card className="shadow-lg border-0">
-        <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row gap-6">
+        <CardContent className={isMobile ? "p-4" : "p-6"}>
+          <div
+            className={`flex gap-6 ${
+              isMobile ? "flex-col gap-4" : "flex-col sm:flex-row"
+            }`}
+          >
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 no-flip" />
+                <Search
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 no-flip ${
+                    isMobile ? "h-4 w-4" : "h-5 w-5"
+                  }`}
+                />
                 <Input
-                  placeholder="ابحث بالاسم أو رقم الهاتف أو الفئة..."
+                  placeholder={
+                    isMobile
+                      ? "ابحث في المقاولين..."
+                      : "ابحث بالاسم أو رقم الهاتف أو الفئة..."
+                  }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pr-12 h-12 text-base arabic-spacing border-gray-300 focus:border-blue-500 focus:ring-blue-500/20"
+                  className={`pr-12 arabic-spacing border-gray-300 focus:border-blue-500 focus:ring-blue-500/20 ${
+                    isMobile ? "h-10 text-sm" : "h-12 text-base"
+                  }`}
                 />
               </div>
             </div>
             <div className="flex items-center space-x-4 space-x-reverse">
               <div className="flex items-center space-x-2 space-x-reverse">
-                <Filter className="h-5 w-5 text-gray-500 no-flip" />
+                <Filter
+                  className={`text-gray-500 no-flip ${
+                    isMobile ? "h-4 w-4" : "h-5 w-5"
+                  }`}
+                />
                 <Select
                   value={categoryFilter}
                   onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="h-12 rounded-lg border border-gray-300 px-4 py-2 text-base focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 arabic-spacing min-w-[180px]"
+                  className={`rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 arabic-spacing ${
+                    isMobile
+                      ? "h-10 text-sm w-full"
+                      : "h-12 text-base min-w-[180px]"
+                  }`}
                 >
                   <option value="all">جميع الفئات</option>
                   {contractorCategories.map((category) => (
@@ -383,84 +436,88 @@ export default function ContractorsPage() {
               </p>
             </div>
           ) : filteredContractors.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredContractors.map((contractor) => (
-                <div
-                  key={contractor.id}
-                  className="p-6 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 bg-white"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-3 space-x-reverse">
-                      <div className="bg-blue-100 p-3 rounded-full">
-                        {categoryIcons[contractor.category] || (
-                          <UserCheck className="h-5 w-5 no-flip" />
-                        )}
-                      </div>
-                      <div>
-                        <h4 className="font-semibold text-gray-900 arabic-spacing text-lg">
-                          {contractor.full_name}
-                        </h4>
-                        <div className="flex items-center space-x-2 space-x-reverse text-sm text-gray-600">
-                          <Phone className="h-4 w-4 no-flip" />
-                          <span className="arabic-nums">
-                            {contractor.phone_number}
-                          </span>
+            isMobile ? (
+              <MobileContractorCards contractors={filteredContractors} />
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredContractors.map((contractor) => (
+                  <div
+                    key={contractor.id}
+                    className="p-6 rounded-xl border border-gray-200 hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 bg-white"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center space-x-3 space-x-reverse">
+                        <div className="bg-blue-100 p-3 rounded-full">
+                          {categoryIcons[contractor.category] || (
+                            <UserCheck className="h-5 w-5 no-flip" />
+                          )}
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 arabic-spacing text-lg">
+                            {contractor.full_name}
+                          </h4>
+                          <div className="flex items-center space-x-2 space-x-reverse text-sm text-gray-600">
+                            <Phone className="h-4 w-4 no-flip" />
+                            <span className="arabic-nums">
+                              {contractor.phone_number}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openViewModal(contractor)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Eye className="h-4 w-4 no-flip" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditModal(contractor)}
-                        className="h-8 w-8 p-0"
-                      >
-                        <Edit2 className="h-4 w-4 no-flip" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteContractor(contractor)}
-                        className="h-8 w-8 p-0 text-red-600 hover:text-red-800"
-                      >
-                        <Trash2 className="h-4 w-4 no-flip" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-600 arabic-spacing">
-                        الفئة:
-                      </span>
-                      <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 arabic-spacing">
-                        {categoryLabels[contractor.category]}
-                      </span>
-                    </div>
-
-                    {contractor.notes && (
-                      <div className="pt-2 border-t border-gray-200">
-                        <p className="text-sm text-gray-600 arabic-spacing">
-                          {contractor.notes}
-                        </p>
+                      <div className="flex items-center space-x-2 space-x-reverse">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openViewModal(contractor)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Eye className="h-4 w-4 no-flip" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditModal(contractor)}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Edit2 className="h-4 w-4 no-flip" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteContractor(contractor)}
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-800"
+                        >
+                          <Trash2 className="h-4 w-4 no-flip" />
+                        </Button>
                       </div>
-                    )}
+                    </div>
 
-                    <div className="pt-2 border-t border-gray-200 text-xs text-gray-500 arabic-spacing">
-                      تاريخ الإضافة: {formatDate(contractor.created_at)}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-gray-600 arabic-spacing">
+                          الفئة:
+                        </span>
+                        <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 arabic-spacing">
+                          {categoryLabels[contractor.category]}
+                        </span>
+                      </div>
+
+                      {contractor.notes && (
+                        <div className="pt-2 border-t border-gray-200">
+                          <p className="text-sm text-gray-600 arabic-spacing">
+                            {contractor.notes}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t border-gray-200 text-xs text-gray-500 arabic-spacing">
+                        تاريخ الإضافة: {formatDate(contractor.created_at)}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )
           ) : (
             <div className="text-center py-16">
               <div className="bg-gray-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -476,7 +533,7 @@ export default function ContractorsPage() {
                   ? "جرب تعديل معايير البحث أو الفلاتر"
                   : "ابدأ بإضافة مقاولين جدد إلى قاعدة البيانات"}
               </p>
-              {!searchQuery && categoryFilter === "all" && (
+              {!searchQuery && categoryFilter === "all" && !isMobile && (
                 <Button
                   onClick={() => setShowAddModal(true)}
                   className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
@@ -785,6 +842,74 @@ function ContractorModal({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Mobile Contractor Cards Component - No Action Buttons
+function MobileContractorCards({ contractors }: { contractors: Contractor[] }) {
+  return (
+    <div className="space-y-3">
+      {contractors.map((contractor) => (
+        <div
+          key={contractor.id}
+          className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm"
+        >
+          {/* Mobile Card Header */}
+          <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-4 text-white">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center space-x-3 space-x-reverse">
+                <div className="bg-white/20 p-2 rounded-lg">
+                  {categoryIcons[contractor.category] || (
+                    <UserCheck className="h-4 w-4 no-flip" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold arabic-spacing truncate">
+                    {contractor.full_name}
+                  </h3>
+                  <p className="text-blue-100 text-sm arabic-nums flex items-center mt-1">
+                    <Phone className="h-3 w-3 ml-1 no-flip" />
+                    {contractor.phone_number}
+                  </p>
+                </div>
+              </div>
+              <div className="px-2 py-1 rounded-full text-xs font-medium bg-white/20 border-white/30 text-white">
+                {categoryLabels[contractor.category]}
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile Card Content - Minimal Details */}
+          <div className="p-4">
+            <div className="space-y-3">
+              {/* Category */}
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600 arabic-spacing font-medium">
+                  الفئة:
+                </span>
+                <span className="text-blue-700 arabic-spacing font-semibold">
+                  {categoryLabels[contractor.category]}
+                </span>
+              </div>
+
+              {/* Notes */}
+              {contractor.notes && (
+                <div className="pt-2 border-t border-gray-200">
+                  <p className="text-sm text-gray-600 arabic-spacing line-clamp-2">
+                    {contractor.notes}
+                  </p>
+                </div>
+              )}
+
+              {/* Date */}
+              <div className="pt-2 border-t border-gray-200 text-xs text-gray-500 arabic-spacing">
+                تاريخ الإضافة: {formatDate(contractor.created_at)}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -55,7 +55,12 @@ interface SafeContextType {
     invoiceNumber: string,
     invoiceId?: string
   ) => Promise<boolean>;
-  deductForSalary: (amount: number, employeeName: string) => boolean;
+  deductForSalary: (
+    amount: number,
+    employeeName: string,
+    reason?: string,
+    employeeId?: string
+  ) => Promise<boolean>;
   deductForExpense: (
     amount: number,
     description: string,
@@ -270,30 +275,91 @@ export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  const deductForSalary = (amount: number, employeeName: string): boolean => {
+  const deductForSalary = async (
+    amount: number,
+    employeeName: string,
+    reason?: string,
+    employeeId?: string
+  ): Promise<boolean> => {
     if (safeState.currentBalance < amount) {
       return false;
     }
 
-    const transaction: SafeTransaction = {
-      id: generateTransactionId(),
-      type: "salary_payment",
-      amount: -amount,
-      description: `راتب الموظف: ${employeeName}`,
-      date: new Date().toISOString().split("T")[0],
-      previousBalance: safeState.currentBalance,
-      newBalance: safeState.currentBalance - amount,
-      createdAt: new Date().toISOString(),
-    };
+    const description = reason
+      ? `راتب الموظف: ${employeeName} - ${reason}`
+      : `راتب الموظف: ${employeeName}`;
 
-    setSafeState((prev) => ({
-      currentBalance: prev.currentBalance - amount,
-      transactions: [transaction, ...prev.transactions],
-      totalFunded: prev.totalFunded,
-      totalSpent: prev.totalSpent + amount,
-    }));
+    try {
+      // Save transaction to backend
+      const response = await apiRequest("/safe/deduct/salary", {
+        method: "POST",
+        body: JSON.stringify({
+          amount,
+          employeeId: employeeId || "unknown",
+          employeeName,
+          description,
+          reason,
+        }),
+      });
 
-    return true;
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Update local state with backend response
+          setSafeState((prev) => ({
+            currentBalance: result.data.newBalance,
+            transactions: [result.data.transaction, ...prev.transactions],
+            totalFunded: prev.totalFunded,
+            totalSpent: prev.totalSpent + amount,
+          }));
+          return true;
+        }
+      }
+
+      // If backend fails, still update local state for immediate feedback
+      const transaction: SafeTransaction = {
+        id: generateTransactionId(),
+        type: "salary_payment",
+        amount: -amount,
+        description,
+        date: new Date().toISOString().split("T")[0],
+        previousBalance: safeState.currentBalance,
+        newBalance: safeState.currentBalance - amount,
+        createdAt: new Date().toISOString(),
+      };
+
+      setSafeState((prev) => ({
+        currentBalance: prev.currentBalance - amount,
+        transactions: [transaction, ...prev.transactions],
+        totalFunded: prev.totalFunded,
+        totalSpent: prev.totalSpent + amount,
+      }));
+
+      return true;
+    } catch (error) {
+      console.error("Error saving salary transaction to backend:", error);
+
+      // Fallback to local state update
+      const transaction: SafeTransaction = {
+        id: generateTransactionId(),
+        type: "salary_payment",
+        amount: -amount,
+        description,
+        date: new Date().toISOString().split("T")[0],
+        previousBalance: safeState.currentBalance,
+        newBalance: safeState.currentBalance - amount,
+        createdAt: new Date().toISOString(),
+      };
+
+      setSafeState((prev) => ({
+        currentBalance: prev.currentBalance - amount,
+        transactions: [transaction, ...prev.transactions],
+        totalFunded: prev.totalFunded,
+        totalSpent: prev.totalSpent + amount,
+      }));
+
+      return true;
+    }
   };
 
   const deductForExpense = (

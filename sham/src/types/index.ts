@@ -19,12 +19,15 @@ export interface Project {
   updatedAt: string; // ISO timestamp
   
   // NEW FINANCIAL FIELDS
-  pricePerMeter?: number;    // Price per square meter for construction calculation
-  ownerDealPrice?: number;   // Total deal price agreed with project owner
-  ownerPaidAmount?: number;  // Amount paid by owner so far (updated from safe transactions)
-  constructionCost?: number; // Calculated: area * pricePerMeter
-  profitMargin?: number;     // Calculated: (ownerDealPrice - constructionCost) / ownerDealPrice * 100
-  totalSiteArea?: number;    // Total area of the site (for comparison with construction area)
+  pricePerMeter?: number;         // Deal price per square meter (what we charge client)
+  realCostPerMeter?: number;      // Actual cost per square meter (our expenses)
+  ownerDealPrice?: number;        // Total deal price agreed with project owner
+  ownerPaidAmount?: number;       // Amount paid by owner so far (updated from safe transactions)
+  constructionCost?: number;      // Calculated: area * pricePerMeter (revenue)
+  realConstructionCost?: number;  // Calculated: area * realCostPerMeter (our costs)
+  grossProfit?: number;           // Calculated: constructionCost - realConstructionCost
+  profitMargin?: number;          // Calculated: (pricePerMeter - realCostPerMeter) / pricePerMeter * 100
+  totalSiteArea?: number;         // Total area of the site (for comparison with construction area)
 }
 
 export interface Invoice {
@@ -53,17 +56,36 @@ export interface Contractor {
 export interface Employee {
   id: string;
   name: string;
-  role: string;
-  status: "active" | "inactive";
-  baseSalary: number;
-  joinDate: string;
-  dailyBonus?: number;
-  overtimePay?: number;
-  deductions?: number;
-  assignedProjectId?: string;
-  createdAt: string;
-  updatedAt: string;
+  position?: string;
+  department?: string;
+  phone?: string;
+  mobile_number?: string;
+  age?: number;
+  hire_date?: string;
+  monthly_salary?: number;
+  status: 'active' | 'inactive' | 'terminated';
+  assigned_project_id?: string;
+  last_payment_date?: string;
+  payment_status?: string; // Allow any string to match backend
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  project_name?: string; // From JOIN with projects table
 }
+
+export interface Position {
+  id: string;
+  position_name: string;
+  position_name_ar: string;
+  description?: string;
+  description_ar?: string;
+  base_salary_range_min?: number;
+  base_salary_range_max?: number;
+  is_active?: boolean;
+  created_at?: string;
+}
+
+
 
 export interface Transaction {
   id: string;
@@ -218,7 +240,8 @@ export interface EnhancedProjectFormData {
   categoryAssignments: ProjectCategoryAssignmentFormData[];
   
   // NEW FINANCIAL FIELDS
-  pricePerMeter: string;
+  pricePerMeter: string;        // Deal price per square meter (what we charge client)
+  realCostPerMeter: string;     // Actual cost per square meter (our expenses)
   ownerDealPrice: string;
   ownerPaidAmount: string;
   totalSiteArea: string;

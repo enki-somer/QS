@@ -78,6 +78,7 @@ router.post('/', authenticate, requirePermission('canManageProjects'), async (re
       categoryAssignments,
       // NEW FINANCIAL FIELDS
       pricePerMeter,
+      realCostPerMeter,
       ownerDealPrice,
       ownerPaidAmount,
       totalSiteArea
@@ -135,6 +136,7 @@ router.post('/', authenticate, requirePermission('canManageProjects'), async (re
       categoryAssignments: preparedCategoryAssignments,
       // NEW FINANCIAL FIELDS
       price_per_meter: pricePerMeter ? parseFloat(pricePerMeter) : 0,
+      real_cost_per_meter: realCostPerMeter ? parseFloat(realCostPerMeter) : 0,
       owner_deal_price: ownerDealPrice ? parseFloat(ownerDealPrice) : 0,
       owner_paid_amount: ownerPaidAmount ? parseFloat(ownerPaidAmount) : 0,
       total_site_area: totalSiteArea ? parseFloat(totalSiteArea) : 0
@@ -163,7 +165,7 @@ router.put('/:id', authenticate, requirePermission('canManageProjects'), async (
     
     // Check if user is admin for sensitive field updates
     const userRole = (req as any).user?.role;
-    const SENSITIVE_FIELDS = ['budgetEstimate', 'pricePerMeter', 'ownerDealPrice', 'totalSiteArea'];
+    const SENSITIVE_FIELDS = ['budgetEstimate', 'pricePerMeter', 'realCostPerMeter', 'ownerDealPrice', 'totalSiteArea'];
     
     const hasSensitiveUpdates = SENSITIVE_FIELDS.some(field => 
       req.body.hasOwnProperty(field)
@@ -189,6 +191,7 @@ router.put('/:id', authenticate, requirePermission('canManageProjects'), async (
       categoryAssignments,
       // NEW FINANCIAL FIELDS
       pricePerMeter,
+      realCostPerMeter,
       ownerDealPrice,
       ownerPaidAmount,
       totalSiteArea
@@ -209,6 +212,7 @@ router.put('/:id', authenticate, requirePermission('canManageProjects'), async (
     
     // NEW FINANCIAL FIELDS
     if (pricePerMeter !== undefined) updateData.price_per_meter = parseFloat(pricePerMeter);
+    if (realCostPerMeter !== undefined) updateData.real_cost_per_meter = parseFloat(realCostPerMeter);
     if (ownerDealPrice !== undefined) updateData.owner_deal_price = parseFloat(ownerDealPrice);
     if (ownerPaidAmount !== undefined) updateData.owner_paid_amount = parseFloat(ownerPaidAmount);
     if (totalSiteArea !== undefined) updateData.total_site_area = parseFloat(totalSiteArea);

@@ -26,6 +26,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useSafe } from "@/contexts/SafeContext";
 import { useToast } from "@/components/ui/Toast";
+import { useResponsive } from "@/hooks/useResponsive";
 
 interface InvoicePreviewModalProps {
   invoice: EnhancedInvoice;
@@ -43,6 +44,7 @@ export default function InvoicePreviewModal({
   const { user } = useAuth();
   const { hasBalance } = useSafe();
   const { addToast } = useToast();
+  const { isMobile, isTablet } = useResponsive();
 
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -108,19 +110,41 @@ export default function InvoicePreviewModal({
   return (
     <>
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-xl w-full max-w-5xl max-h-[95vh] overflow-hidden shadow-2xl">
+        <div
+          className={`bg-white rounded-xl w-full overflow-hidden shadow-2xl ${
+            isMobile ? "max-w-full max-h-[98vh] mx-1" : "max-w-5xl max-h-[95vh]"
+          }`}
+        >
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-6">
+          <div
+            className={`bg-gradient-to-r from-blue-600 to-indigo-700 text-white ${
+              isMobile ? "p-4" : "p-6"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3 space-x-reverse">
-                <div className="bg-white/20 p-3 rounded-lg">
-                  <Building2 className="h-6 w-6 no-flip" />
+                <div
+                  className={`bg-white/20 rounded-lg ${
+                    isMobile ? "p-2" : "p-3"
+                  }`}
+                >
+                  <Building2
+                    className={`no-flip ${isMobile ? "h-5 w-5" : "h-6 w-6"}`}
+                  />
                 </div>
-                <div>
-                  <h2 className="text-2xl font-bold arabic-spacing">
+                <div className="flex-1">
+                  <h2
+                    className={`font-bold arabic-spacing ${
+                      isMobile ? "text-lg" : "text-2xl"
+                    }`}
+                  >
                     معاينة الفاتورة للاعتماد
                   </h2>
-                  <p className="text-blue-100 arabic-spacing">
+                  <p
+                    className={`text-blue-100 arabic-spacing ${
+                      isMobile ? "text-sm" : "text-base"
+                    }`}
+                  >
                     فاتورة رقم: {formatInvoiceNumber(invoice.invoiceNumber)} •{" "}
                     {formatCurrency(invoice.amount)}
                   </p>
@@ -132,31 +156,47 @@ export default function InvoicePreviewModal({
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowAttachmentModal(true)}
-                    className="h-10 px-3 text-white hover:bg-white/20"
+                    className={`text-white hover:bg-white/20 ${
+                      isMobile ? "h-8 px-2 text-xs" : "h-10 px-3"
+                    }`}
                     title="عرض المرفقات"
                   >
-                    <ImageIcon className="h-5 w-5 ml-1 no-flip" />
-                    <span className="arabic-spacing">المرفقات</span>
+                    <ImageIcon
+                      className={`no-flip ${
+                        isMobile ? "h-4 w-4 ml-1" : "h-5 w-5 ml-1"
+                      }`}
+                    />
+                    {!isMobile && (
+                      <span className="arabic-spacing">المرفقات</span>
+                    )}
                   </Button>
                 )}
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={onClose}
-                  className="h-10 w-10 p-0 text-white hover:bg-white/20"
+                  className={`p-0 text-white hover:bg-white/20 ${
+                    isMobile ? "h-8 w-8" : "h-10 w-10"
+                  }`}
                 >
-                  <X className="h-5 w-5" />
+                  <X className={isMobile ? "h-4 w-4" : "h-5 w-5"} />
                 </Button>
               </div>
             </div>
           </div>
 
           {/* Content - Exact Print Layout Preview */}
-          <div className="flex-1 overflow-y-auto max-h-[60vh]">
-            <div className="p-6">
+          <div
+            className={`flex-1 overflow-y-auto ${
+              isMobile ? "max-h-[70vh]" : "max-h-[60vh]"
+            }`}
+          >
+            <div className={isMobile ? "p-3" : "p-6"}>
               {/* Exact Print Layout - Non-Printable Preview */}
               <div
-                className="bg-white border-2 border-gray-200 rounded-lg mx-auto max-w-4xl shadow-sm"
+                className={`bg-white border-2 border-gray-200 rounded-lg mx-auto shadow-sm ${
+                  isMobile ? "max-w-full" : "max-w-4xl"
+                }`}
                 style={{
                   fontFamily:
                     "'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
@@ -164,17 +204,17 @@ export default function InvoicePreviewModal({
                   color: "#1a202c",
                   direction: "rtl",
                   textAlign: "right",
-                  padding: "30px",
+                  padding: isMobile ? "15px" : "30px",
                 }}
               >
                 {/* Invoice Header - Exact Match */}
                 <div
-                  className="mb-6"
+                  className={isMobile ? "mb-4" : "mb-6"}
                   style={{
                     background:
                       "linear-gradient(135deg, #2e3192 0%, #4338ca 100%)",
                     color: "white",
-                    padding: "30px",
+                    padding: isMobile ? "20px" : "30px",
                     borderRadius: "12px",
                     boxShadow: "0 8px 25px rgba(46, 49, 146, 0.15)",
                   }}
@@ -184,7 +224,8 @@ export default function InvoicePreviewModal({
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "flex-start",
-                      gap: "30px",
+                      gap: isMobile ? "15px" : "30px",
+                      flexDirection: isMobile ? "column" : "row",
                     }}
                   >
                     <div
@@ -218,7 +259,7 @@ export default function InvoicePreviewModal({
                       <div>
                         <h1
                           style={{
-                            fontSize: "26px",
+                            fontSize: isMobile ? "20px" : "26px",
                             fontWeight: "700",
                             marginBottom: "8px",
                             textAlign: "right",
@@ -263,8 +304,9 @@ export default function InvoicePreviewModal({
                       style={{
                         display: "flex",
                         flexDirection: "column",
-                        gap: "12px",
-                        minWidth: "250px",
+                        gap: isMobile ? "8px" : "12px",
+                        minWidth: isMobile ? "100%" : "250px",
+                        width: isMobile ? "100%" : "auto",
                       }}
                     >
                       <div
@@ -397,12 +439,12 @@ export default function InvoicePreviewModal({
                 </div>
 
                 {/* Main Details Grid */}
-                <div style={{ marginBottom: "30px" }}>
+                <div style={{ marginBottom: isMobile ? "20px" : "30px" }}>
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "25px",
+                      gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+                      gap: isMobile ? "15px" : "25px",
                     }}
                   >
                     {/* Project Card */}
@@ -412,16 +454,16 @@ export default function InvoicePreviewModal({
                           "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)",
                         border: "2px solid #22c55e",
                         borderRadius: "12px",
-                        padding: "25px",
+                        padding: isMobile ? "15px" : "25px",
                         boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
                       }}
                     >
                       <h3
                         style={{
                           color: "#1e293b",
-                          fontSize: "18px",
+                          fontSize: isMobile ? "16px" : "18px",
                           fontWeight: "700",
-                          marginBottom: "20px",
+                          marginBottom: isMobile ? "15px" : "20px",
                           textAlign: "right",
                           borderBottom: "2px solid currentColor",
                           paddingBottom: "8px",
@@ -533,16 +575,16 @@ export default function InvoicePreviewModal({
                           "linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)",
                         border: "2px solid #f59e0b",
                         borderRadius: "12px",
-                        padding: "25px",
+                        padding: isMobile ? "15px" : "25px",
                         boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
                       }}
                     >
                       <h3
                         style={{
                           color: "#1e293b",
-                          fontSize: "18px",
+                          fontSize: isMobile ? "16px" : "18px",
                           fontWeight: "700",
-                          marginBottom: "20px",
+                          marginBottom: isMobile ? "15px" : "20px",
                           textAlign: "right",
                           borderBottom: "2px solid currentColor",
                           paddingBottom: "8px",
@@ -646,9 +688,9 @@ export default function InvoicePreviewModal({
                 {/* Invoice Summary */}
                 <div
                   style={{
-                    margin: "40px 0",
+                    margin: isMobile ? "20px 0" : "40px 0",
                     display: "flex",
-                    justifyContent: "flex-start",
+                    justifyContent: isMobile ? "center" : "flex-start",
                   }}
                 >
                   <div
@@ -656,8 +698,8 @@ export default function InvoicePreviewModal({
                       background: "#f8fafc",
                       border: "2px solid #e2e8f0",
                       borderRadius: "12px",
-                      padding: "25px",
-                      minWidth: "350px",
+                      padding: isMobile ? "15px" : "25px",
+                      minWidth: isMobile ? "100%" : "350px",
                       boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
                     }}
                   >
@@ -683,7 +725,7 @@ export default function InvoicePreviewModal({
                       >
                         <span
                           style={{
-                            fontSize: "18px",
+                            fontSize: isMobile ? "16px" : "18px",
                             fontWeight: "800",
                             color: "#1e3a8a",
                           }}
@@ -692,7 +734,7 @@ export default function InvoicePreviewModal({
                         </span>
                         <span
                           style={{
-                            fontSize: "22px",
+                            fontSize: isMobile ? "18px" : "22px",
                             fontWeight: "800",
                             color: "#1e40af",
                             fontFamily: "'Cairo', monospace",
@@ -709,20 +751,20 @@ export default function InvoicePreviewModal({
                 {invoice.notes && (
                   <div
                     style={{
-                      margin: "30px 0",
+                      margin: isMobile ? "20px 0" : "30px 0",
                       background:
                         "linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)",
                       border: "2px solid #f59e0b",
                       borderRadius: "12px",
-                      padding: "25px",
+                      padding: isMobile ? "15px" : "25px",
                     }}
                   >
                     <h4
                       style={{
                         color: "#92400e",
-                        fontSize: "16px",
+                        fontSize: isMobile ? "14px" : "16px",
                         fontWeight: "700",
-                        marginBottom: "15px",
+                        marginBottom: isMobile ? "10px" : "15px",
                         textAlign: "right",
                       }}
                     >
@@ -732,7 +774,7 @@ export default function InvoicePreviewModal({
                       style={{
                         color: "#451a03",
                         lineHeight: "1.7",
-                        fontSize: "14px",
+                        fontSize: isMobile ? "12px" : "14px",
                         textAlign: "right",
                       }}
                     >
@@ -895,37 +937,71 @@ export default function InvoicePreviewModal({
           </div>
 
           {/* Footer - Action Buttons */}
-          <div className="border-t border-gray-200 bg-gray-50 p-6">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600 arabic-spacing">
+          <div
+            className={`border-t border-gray-200 bg-gray-50 ${
+              isMobile ? "p-4" : "p-6"
+            }`}
+          >
+            <div
+              className={`flex items-center justify-between ${
+                isMobile ? "flex-col space-y-3" : ""
+              }`}
+            >
+              <div
+                className={`text-gray-600 arabic-spacing ${
+                  isMobile ? "text-xs text-center" : "text-sm"
+                }`}
+              >
                 <div className="flex items-center space-x-2 space-x-reverse">
-                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <AlertTriangle
+                    className={`text-amber-500 ${
+                      isMobile ? "h-3 w-3" : "h-4 w-4"
+                    }`}
+                  />
                   <span>يرجى مراجعة جميع التفاصيل قبل الاعتماد</span>
                 </div>
               </div>
-              <div className="flex items-center space-x-3 space-x-reverse">
+              <div
+                className={`flex items-center space-x-3 space-x-reverse ${
+                  isMobile ? "w-full" : ""
+                }`}
+              >
                 <Button
                   variant="outline"
                   onClick={onClose}
-                  className="arabic-spacing"
+                  className={`arabic-spacing ${
+                    isMobile ? "flex-1 text-sm h-9" : ""
+                  }`}
                 >
-                  إغلاق المعاينة
+                  {isMobile ? "إغلاق" : "إغلاق المعاينة"}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setShowRejectModal(true)}
-                  className="border-red-300 text-red-600 hover:bg-red-50 arabic-spacing"
+                  className={`border-red-300 text-red-600 hover:bg-red-50 arabic-spacing ${
+                    isMobile ? "flex-1 text-sm h-9" : ""
+                  }`}
                 >
-                  <XCircle className="h-4 w-4 ml-1 no-flip" />
-                  رفض الفاتورة
+                  <XCircle
+                    className={`no-flip ${
+                      isMobile ? "h-3 w-3 ml-1" : "h-4 w-4 ml-1"
+                    }`}
+                  />
+                  {isMobile ? "رفض" : "رفض الفاتورة"}
                 </Button>
                 <Button
                   onClick={handleApprove}
                   disabled={!hasBalance(invoice.amount)}
-                  className="bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300 arabic-spacing"
+                  className={`bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300 arabic-spacing ${
+                    isMobile ? "flex-1 text-sm h-9" : ""
+                  }`}
                 >
-                  <CheckCircle className="h-4 w-4 ml-1 no-flip" />
-                  اعتماد ودفع
+                  <CheckCircle
+                    className={`no-flip ${
+                      isMobile ? "h-3 w-3 ml-1" : "h-4 w-4 ml-1"
+                    }`}
+                  />
+                  {isMobile ? "اعتماد" : "اعتماد ودفع"}
                 </Button>
               </div>
             </div>
@@ -936,19 +1012,43 @@ export default function InvoicePreviewModal({
       {/* Enhanced Attachment Full View Modal for Comparison */}
       {showAttachmentModal && (invoice as any).attachmentData && (
         <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl max-w-6xl max-h-[95vh] overflow-hidden shadow-2xl">
+          <div
+            className={`bg-white rounded-xl overflow-hidden shadow-2xl ${
+              isMobile
+                ? "max-w-full max-h-[98vh] mx-1"
+                : "max-w-6xl max-h-[95vh]"
+            }`}
+          >
             {/* Enhanced Header */}
-            <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white p-6">
+            <div
+              className={`bg-gradient-to-r from-orange-600 to-red-600 text-white ${
+                isMobile ? "p-4" : "p-6"
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3 space-x-reverse">
-                  <div className="bg-white/20 p-2 rounded-lg">
-                    <ImageIcon className="h-6 w-6 no-flip" />
+                  <div
+                    className={`bg-white/20 rounded-lg ${
+                      isMobile ? "p-1.5" : "p-2"
+                    }`}
+                  >
+                    <ImageIcon
+                      className={`no-flip ${isMobile ? "h-5 w-5" : "h-6 w-6"}`}
+                    />
                   </div>
-                  <div>
-                    <h3 className="text-xl font-bold arabic-spacing">
+                  <div className="flex-1">
+                    <h3
+                      className={`font-bold arabic-spacing ${
+                        isMobile ? "text-base" : "text-xl"
+                      }`}
+                    >
                       📎 فاتورة العميل الأصلية - للمقارنة والتحقق
                     </h3>
-                    <p className="text-orange-100 arabic-spacing">
+                    <p
+                      className={`text-orange-100 arabic-spacing ${
+                        isMobile ? "text-xs" : "text-base"
+                      }`}
+                    >
                       رقم الفاتورة: {formatInvoiceNumber(invoice.invoiceNumber)}{" "}
                       • رقم فاتورة العميل:{" "}
                       {(invoice as any).customerInvoiceNumber || "غير محدد"}
@@ -959,16 +1059,22 @@ export default function InvoicePreviewModal({
                   variant="ghost"
                   size="sm"
                   onClick={() => setShowAttachmentModal(false)}
-                  className="h-10 w-10 p-0 text-white hover:bg-white/20"
+                  className={`p-0 text-white hover:bg-white/20 ${
+                    isMobile ? "h-8 w-8" : "h-10 w-10"
+                  }`}
                   title="إغلاق"
                 >
-                  <X className="h-5 w-5" />
+                  <X className={isMobile ? "h-4 w-4" : "h-5 w-5"} />
                 </Button>
               </div>
             </div>
 
             {/* Enhanced Content */}
-            <div className="p-6 max-h-[80vh] overflow-auto bg-gray-50">
+            <div
+              className={`overflow-auto bg-gray-50 ${
+                isMobile ? "p-3 max-h-[85vh]" : "p-6 max-h-[80vh]"
+              }`}
+            >
               {/* Comparison Instructions */}
               <div className="bg-orange-100 border-l-4 border-orange-500 p-4 mb-6 rounded-r-lg">
                 <div className="flex items-center">
@@ -1063,16 +1169,26 @@ export default function InvoicePreviewModal({
             </div>
 
             {/* Enhanced Footer */}
-            <div className="bg-gray-100 p-4 border-t">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600 arabic-spacing">
+            <div className={`bg-gray-100 border-t ${isMobile ? "p-3" : "p-4"}`}>
+              <div
+                className={`flex items-center justify-between ${
+                  isMobile ? "flex-col space-y-2" : ""
+                }`}
+              >
+                <div
+                  className={`text-gray-600 arabic-spacing ${
+                    isMobile ? "text-xs text-center" : "text-sm"
+                  }`}
+                >
                   💡 استخدم عجلة الماوس أو إيماءات اللمس للتكبير والتصغير
                 </div>
                 <Button
                   onClick={() => setShowAttachmentModal(false)}
-                  className="bg-orange-600 hover:bg-orange-700 text-white arabic-spacing"
+                  className={`bg-orange-600 hover:bg-orange-700 text-white arabic-spacing ${
+                    isMobile ? "w-full text-sm h-9" : ""
+                  }`}
                 >
-                  إغلاق المعاينة
+                  {isMobile ? "إغلاق" : "إغلاق المعاينة"}
                 </Button>
               </div>
             </div>
@@ -1083,62 +1199,116 @@ export default function InvoicePreviewModal({
       {/* Rejection Modal */}
       {showRejectModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl w-full max-w-md shadow-2xl">
-            <div className="p-6">
-              <div className="flex items-center space-x-3 space-x-reverse mb-4">
-                <div className="bg-red-100 p-2 rounded-full">
-                  <AlertTriangle className="h-5 w-5 text-red-600 no-flip" />
+          <div
+            className={`bg-white rounded-xl w-full shadow-2xl ${
+              isMobile ? "max-w-full mx-2" : "max-w-md"
+            }`}
+          >
+            <div className={isMobile ? "p-4" : "p-6"}>
+              <div
+                className={`flex items-center space-x-3 space-x-reverse ${
+                  isMobile ? "mb-3" : "mb-4"
+                }`}
+              >
+                <div
+                  className={`bg-red-100 rounded-full ${
+                    isMobile ? "p-1.5" : "p-2"
+                  }`}
+                >
+                  <AlertTriangle
+                    className={`text-red-600 no-flip ${
+                      isMobile ? "h-4 w-4" : "h-5 w-5"
+                    }`}
+                  />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 arabic-spacing">
+                  <h3
+                    className={`font-bold text-gray-900 arabic-spacing ${
+                      isMobile ? "text-base" : "text-lg"
+                    }`}
+                  >
                     تأكيد رفض الفاتورة
                   </h3>
-                  <p className="text-sm text-gray-600 arabic-spacing">
+                  <p
+                    className={`text-gray-600 arabic-spacing ${
+                      isMobile ? "text-xs" : "text-sm"
+                    }`}
+                  >
                     فاتورة رقم: {formatInvoiceNumber(invoice.invoiceNumber)}
                   </p>
                 </div>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2 arabic-spacing">
+              <div className={isMobile ? "mb-3" : "mb-4"}>
+                <label
+                  className={`block font-semibold text-gray-700 mb-2 arabic-spacing ${
+                    isMobile ? "text-xs" : "text-sm"
+                  }`}
+                >
                   سبب الرفض (مطلوب)
                 </label>
                 <textarea
                   value={rejectionReason}
                   onChange={(e) => setRejectionReason(e.target.value)}
                   placeholder="اكتب سبب رفض هذه الفاتورة ليتم إبلاغ موظف الإدخال..."
-                  className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-red-500 focus:border-red-500 arabic-spacing"
-                  rows={3}
+                  className={`w-full border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-red-500 focus:border-red-500 arabic-spacing ${
+                    isMobile ? "p-2 text-sm" : "p-3"
+                  }`}
+                  rows={isMobile ? 2 : 3}
                   required
                 />
               </div>
 
-              <div className="bg-red-50 p-3 rounded-lg mb-4">
+              <div
+                className={`bg-red-50 rounded-lg ${
+                  isMobile ? "p-2 mb-3" : "p-3 mb-4"
+                }`}
+              >
                 <div className="flex items-center space-x-2 space-x-reverse">
-                  <AlertTriangle className="h-4 w-4 text-red-600 no-flip" />
-                  <p className="text-sm text-red-700 arabic-spacing">
+                  <AlertTriangle
+                    className={`text-red-600 no-flip ${
+                      isMobile ? "h-3 w-3" : "h-4 w-4"
+                    }`}
+                  />
+                  <p
+                    className={`text-red-700 arabic-spacing ${
+                      isMobile ? "text-xs" : "text-sm"
+                    }`}
+                  >
                     <strong>تحذير:</strong> سيتم إشعار موظف الإدخال بسبب الرفض
                   </p>
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 space-x-reverse">
+              <div
+                className={`flex space-x-3 space-x-reverse ${
+                  isMobile ? "w-full" : "justify-end"
+                }`}
+              >
                 <Button
                   variant="outline"
                   onClick={() => {
                     setShowRejectModal(false);
                     setRejectionReason("");
                   }}
-                  className="arabic-spacing"
+                  className={`arabic-spacing ${
+                    isMobile ? "flex-1 text-sm h-9" : ""
+                  }`}
                 >
                   إلغاء
                 </Button>
                 <Button
                   onClick={handleReject}
                   disabled={!rejectionReason.trim()}
-                  className="bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-300 arabic-spacing"
+                  className={`bg-red-600 hover:bg-red-700 text-white disabled:bg-gray-300 arabic-spacing ${
+                    isMobile ? "flex-1 text-sm h-9" : ""
+                  }`}
                 >
-                  <XCircle className="h-4 w-4 ml-1 no-flip" />
+                  <XCircle
+                    className={`no-flip ${
+                      isMobile ? "h-3 w-3 ml-1" : "h-4 w-4 ml-1"
+                    }`}
+                  />
                   تأكيد الرفض
                 </Button>
               </div>

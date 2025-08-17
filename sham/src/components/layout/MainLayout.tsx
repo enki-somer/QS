@@ -2,12 +2,15 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { User, Bell, LogOut, Loader2 } from "lucide-react";
+import { User, Bell, LogOut, Loader2, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ToastProvider } from "@/components/ui/Toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { EmployeeProvider } from "@/contexts/EmployeeContext";
 import { EnhancedInvoice, EnhancedGeneralExpense } from "@/types/shared";
 import ApprovalsModal from "./ApprovalsModal";
+import RoleBasedNavigation from "@/components/ui/RoleBasedNavigation";
+import { useResponsive } from "@/hooks/useResponsive";
 import { apiRequest } from "@/lib/api";
 
 interface MainLayoutProps {
@@ -21,6 +24,22 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [currentTime, setCurrentTime] = React.useState(new Date());
   const [showApprovalsModal, setShowApprovalsModal] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { isMobile } = useResponsive();
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (isMobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+
+    // Cleanup on unmount
+    return () => {
+      document.body.style.overflow = "unset";
+    };
+  }, [isMobileMenuOpen]);
 
   // Public routes that don't require authentication - memoized to prevent re-renders
   const isPublicRoute = useMemo(() => {
@@ -177,7 +196,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   // For login page, show without header
   if (isPublicRoute) {
-    return <ToastProvider>{children}</ToastProvider>;
+    return (
+      <ToastProvider>
+        <EmployeeProvider>{children}</EmployeeProvider>
+      </ToastProvider>
+    );
   }
 
   // Protected content - require authentication
@@ -187,115 +210,150 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <ToastProvider>
-      <div
-        className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100"
-        dir="rtl"
-      >
-        {/* Top Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-0">
-              {/* Logo and Company Info */}
-              <div className="flex items-center gap-3 md:gap-5">
-                <div className="bg-gradient-to-r from-[#182C61] to-blue-700 p-2.5 md:p-3 rounded-xl flex-shrink-0">
-                  <img
-                    src="/QS-WHITE.svg"
-                    alt="شركة قصر الشام"
-                    width={32}
-                    height={32}
-                    style={{ display: "block" }}
-                  />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900 arabic-spacing">
-                    شركة قصر الشام
-                  </h1>
-                  <p className="text-sm text-gray-500 arabic-spacing">
-                    نظام الإدارة المالية المتكامل
-                  </p>
-                </div>
-              </div>
-
-              {/* User Info */}
-              <div className="flex items-center gap-2 md:gap-4">
-                {/* Current Time */}
-                <div className="hidden md:block text-sm text-gray-600 arabic-nums">
-                  {currentTime.toLocaleString("ar-EG", {
-                    weekday: "short",
-                    month: "short",
-                    day: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </div>
-
-                {/* Notifications */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="relative h-10 w-10 p-0"
-                  onClick={() =>
-                    hasPermission("canMakePayments")
-                      ? setShowApprovalsModal(true)
-                      : undefined
-                  }
-                  title={
-                    hasPermission("canMakePayments")
-                      ? `${pendingCount} عنصر بانتظار الاعتماد`
-                      : "الإشعارات"
-                  }
-                >
-                  <Bell className="h-5 w-5 no-flip" />
-                  {hasPermission("canMakePayments") && pendingCount > 0 && (
-                    <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-medium text-white arabic-nums animate-pulse">
-                      {pendingCount > 99 ? "99+" : pendingCount}
-                    </span>
+      <EmployeeProvider>
+        <div
+          className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100"
+          dir="rtl"
+        >
+          {/* Top Header */}
+          <header className="bg-white shadow-sm border-b border-gray-200">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 md:gap-0">
+                {/* Mobile Menu Button + Logo and Company Info */}
+                <div className="flex items-center gap-3 md:gap-5">
+                  {/* Mobile Menu Button - Left Side */}
+                  {isMobile && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                      className="h-10 w-10 p-0 text-gray-600 hover:bg-gray-100 flex-shrink-0"
+                      title={
+                        isMobileMenuOpen ? "إغلاق القائمة" : "فتح قائمة التنقل"
+                      }
+                    >
+                      {isMobileMenuOpen ? (
+                        <X className="h-5 w-5" />
+                      ) : (
+                        <Menu className="h-5 w-5" />
+                      )}
+                    </Button>
                   )}
-                </Button>
 
-                {/* User Profile */}
-                <div className="flex items-center gap-1 md:gap-2">
-                  <div className="hidden md:block text-right text-sm">
-                    <div className="font-medium text-gray-900 arabic-spacing">
-                      {user?.fullName}
-                    </div>
-                    <div className="text-xs text-gray-500 arabic-spacing">
-                      {user?.role === "admin"
-                        ? "المدير العام"
-                        : user?.role === "partners"
-                        ? "شريك"
-                        : "موظف إدخال البيانات"}
-                    </div>
+                  <div className="bg-gradient-to-r from-[#182C61] to-blue-700 p-2.5 md:p-3 rounded-xl flex-shrink-0">
+                    <img
+                      src="/QS-WHITE.svg"
+                      alt="شركة قصر الشام"
+                      width={32}
+                      height={32}
+                      style={{ display: "block" }}
+                    />
                   </div>
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#182C61]">
-                    <User className="h-5 w-5 text-white no-flip" />
+                  <div>
+                    <h1 className="text-xl font-bold text-gray-900 arabic-spacing">
+                      شركة قصر الشام
+                    </h1>
+                    <p className="text-sm text-gray-500 arabic-spacing">
+                      نظام الإدارة المالية المتكامل
+                    </p>
                   </div>
+                </div>
+
+                {/* User Info */}
+                <div className="flex items-center gap-2 md:gap-4">
+                  {/* Current Time */}
+                  <div className="hidden md:block text-sm text-gray-600 arabic-nums">
+                    {currentTime.toLocaleString("ar-EG", {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </div>
+
+                  {/* Notifications */}
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={handleLogout}
-                    className="h-10 w-10 p-0 text-red-600 hover:bg-red-50"
-                    title="تسجيل الخروج"
+                    className="relative h-10 w-10 p-0"
+                    onClick={() =>
+                      hasPermission("canMakePayments")
+                        ? setShowApprovalsModal(true)
+                        : undefined
+                    }
+                    title={
+                      hasPermission("canMakePayments")
+                        ? `${pendingCount} عنصر بانتظار الاعتماد`
+                        : "الإشعارات"
+                    }
                   >
-                    <LogOut className="h-5 w-5" />
+                    <Bell className="h-5 w-5 no-flip" />
+                    {hasPermission("canMakePayments") && pendingCount > 0 && (
+                      <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-medium text-white arabic-nums animate-pulse">
+                        {pendingCount > 99 ? "99+" : pendingCount}
+                      </span>
+                    )}
                   </Button>
+
+                  {/* User Profile */}
+                  <div className="flex items-center gap-1 md:gap-2">
+                    <div className="hidden md:block text-right text-sm">
+                      <div className="font-medium text-gray-900 arabic-spacing">
+                        {user?.fullName && !user.fullName.includes("?")
+                          ? user.fullName
+                          : user?.username || "مستخدم"}
+                      </div>
+                      <div className="text-xs text-gray-500 arabic-spacing">
+                        {(() => {
+                          const role = user?.role as string;
+                          if (role === "admin") return "المدير العام";
+                          if (role === "partners" || role === "partner")
+                            return "شريك";
+                          if (role === "data_entry" || role === "dataentry")
+                            return "مدخل بيانات";
+                          return "موظف إدخال البيانات";
+                        })()}
+                      </div>
+                    </div>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#182C61]">
+                      <User className="h-5 w-5 text-white no-flip" />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleLogout}
+                      className="h-10 w-10 p-0 text-red-600 hover:bg-red-50"
+                      title="تسجيل الخروج"
+                    >
+                      <LogOut className="h-5 w-5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </header>
+          </header>
 
-        {/* Main Content */}
-        <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
-      </div>
+          {/* Mobile Navigation - Only render when mobile and menu is open */}
+          {isMobile && (
+            <RoleBasedNavigation
+              isMobileMenuOpen={isMobileMenuOpen}
+              onMobileMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            />
+          )}
 
-      {/* Approvals Modal */}
-      {hasPermission("canMakePayments") && (
-        <ApprovalsModal
-          isOpen={showApprovalsModal}
-          onClose={() => setShowApprovalsModal(false)}
-        />
-      )}
+          {/* Main Content */}
+          <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
+        </div>
+
+        {/* Approvals Modal */}
+        {hasPermission("canMakePayments") && (
+          <ApprovalsModal
+            isOpen={showApprovalsModal}
+            onClose={() => setShowApprovalsModal(false)}
+          />
+        )}
+      </EmployeeProvider>
     </ToastProvider>
   );
 }

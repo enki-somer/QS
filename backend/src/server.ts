@@ -9,6 +9,7 @@ import contractorRoutes from './routes/contractors';
 import projectRoutes from './routes/projects';
 import categoryInvoiceRoutes from './routes/categoryInvoices';
 import generalExpenseRoutes from './routes/generalExpenses';
+import employeeRoutes from './routes/employees';
 import { testConnection, initializeDatabase } from '../database/config';
 
 // Load environment variables
@@ -102,6 +103,7 @@ app.use('/api/contractors', contractorRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/category-invoices', categoryInvoiceRoutes);
 app.use('/api/general-expenses', generalExpenseRoutes);
+app.use('/api/employees', employeeRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

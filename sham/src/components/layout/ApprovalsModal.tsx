@@ -33,6 +33,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSafe } from "@/contexts/SafeContext";
 import { useToast } from "@/components/ui/Toast";
 import { apiRequest } from "@/lib/api";
+import { useResponsive } from "@/hooks/useResponsive";
 import InvoicePreviewModal from "./InvoicePreviewModal";
 
 interface ApprovalsModalProps {
@@ -48,6 +49,7 @@ export default function ApprovalsModal({
   const { deductForInvoice, deductForExpense, hasBalance, refreshSafeState } =
     useSafe();
   const { addToast } = useToast();
+  const { isMobile, isTablet } = useResponsive();
 
   const [pendingInvoices, setPendingInvoices] = useState<EnhancedInvoice[]>([]);
   const [pendingExpenses, setPendingExpenses] = useState<
@@ -758,19 +760,37 @@ export default function ApprovalsModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl">
+      <div
+        className={`bg-white rounded-xl w-full overflow-hidden shadow-2xl ${
+          isMobile ? "max-w-full max-h-[95vh] mx-2" : "max-w-4xl max-h-[90vh]"
+        }`}
+      >
         {/* Header */}
-        <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-6">
+        <div
+          className={`bg-gradient-to-r from-amber-500 to-orange-500 text-white ${
+            isMobile ? "p-4" : "p-6"
+          }`}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3 space-x-reverse">
               <div className="bg-white/20 p-2 rounded-lg">
-                <Clock className="h-6 w-6 no-flip" />
+                <Clock
+                  className={`${isMobile ? "h-5 w-5" : "h-6 w-6"} no-flip`}
+                />
               </div>
               <div>
-                <h2 className="text-2xl font-bold arabic-spacing">
+                <h2
+                  className={`${
+                    isMobile ? "text-lg" : "text-2xl"
+                  } font-bold arabic-spacing`}
+                >
                   اعتماد المعاملات المالية
                 </h2>
-                <p className="text-amber-100 arabic-spacing">
+                <p
+                  className={`text-amber-100 arabic-spacing ${
+                    isMobile ? "text-sm" : "text-base"
+                  }`}
+                >
                   {filteredItems.length} عنصر • {formatCurrency(totalAmount)}
                 </p>
               </div>
@@ -780,43 +800,74 @@ export default function ApprovalsModal({
                 variant="ghost"
                 size="sm"
                 onClick={loadPendingItems}
-                className="h-10 w-10 p-0 text-white hover:bg-white/20"
+                className={`${
+                  isMobile ? "h-8 w-8" : "h-10 w-10"
+                } p-0 text-white hover:bg-white/20`}
                 title="تحديث القائمة"
               >
-                <RefreshCw className="h-5 w-5 no-flip" />
+                <RefreshCw
+                  className={`${isMobile ? "h-4 w-4" : "h-5 w-5"} no-flip`}
+                />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={onClose}
-                className="h-10 w-10 p-0 text-white hover:bg-white/20"
+                className={`${
+                  isMobile ? "h-8 w-8" : "h-10 w-10"
+                } p-0 text-white hover:bg-white/20`}
               >
-                <X className="h-5 w-5" />
+                <X className={`${isMobile ? "h-4 w-4" : "h-5 w-5"}`} />
               </Button>
             </div>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="p-4 border-b border-gray-200 bg-gray-50">
-          <div className="flex flex-col sm:flex-row gap-4">
+        <div
+          className={`border-b border-gray-200 bg-gray-50 ${
+            isMobile ? "p-3" : "p-4"
+          }`}
+        >
+          <div
+            className={`flex gap-4 ${
+              isMobile ? "flex-col" : "flex-col sm:flex-row"
+            }`}
+          >
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 no-flip" />
+                <Search
+                  className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 no-flip ${
+                    isMobile ? "h-4 w-4" : "h-4 w-4"
+                  }`}
+                />
                 <Input
                   placeholder="البحث في الفواتير والمصروفات..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pr-10 arabic-spacing"
+                  className={`pr-10 arabic-spacing ${
+                    isMobile ? "text-sm h-10" : ""
+                  }`}
                 />
               </div>
             </div>
-            <div className="flex items-center space-x-4 space-x-reverse">
+            <div
+              className={`flex items-center ${
+                isMobile
+                  ? "justify-center space-x-2 space-x-reverse"
+                  : "space-x-4 space-x-reverse"
+              }`}
+            >
               <div className="flex items-center space-x-2 space-x-reverse">
-                <Filter className="h-4 w-4 text-gray-500 no-flip" />
+                <Filter
+                  className={`text-gray-500 no-flip ${
+                    isMobile ? "h-4 w-4" : "h-4 w-4"
+                  }`}
+                />
                 <Select
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
+                  className={isMobile ? "text-sm" : ""}
                 >
                   <option value="all">جميع الأنواع</option>
                   <option value="invoices">الفواتير فقط</option>
@@ -828,49 +879,97 @@ export default function ApprovalsModal({
         </div>
 
         {/* Content */}
-        <div className="p-6 max-h-[60vh] overflow-y-auto">
+        <div
+          className={`overflow-y-auto ${
+            isMobile ? "p-3 max-h-[65vh]" : "p-6 max-h-[60vh]"
+          }`}
+        >
           {filteredItems.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <CheckCircle className="h-8 w-8 text-green-600 no-flip" />
+            <div className={`text-center ${isMobile ? "py-8" : "py-12"}`}>
+              <div
+                className={`bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                  isMobile ? "w-12 h-12" : "w-16 h-16"
+                }`}
+              >
+                <CheckCircle
+                  className={`text-green-600 no-flip ${
+                    isMobile ? "h-6 w-6" : "h-8 w-8"
+                  }`}
+                />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2 arabic-spacing">
+              <h3
+                className={`font-medium text-gray-900 mb-2 arabic-spacing ${
+                  isMobile ? "text-base" : "text-lg"
+                }`}
+              >
                 ممتاز! لا توجد عناصر معلقة
               </h3>
-              <p className="text-gray-500 arabic-spacing">
+              <p
+                className={`text-gray-500 arabic-spacing ${
+                  isMobile ? "text-sm" : "text-base"
+                }`}
+              >
                 جميع المعاملات تم اعتمادها أو معالجتها
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className={isMobile ? "space-y-3" : "space-y-4"}>
               {filteredItems.map((item) => (
                 <Card
                   key={`${item.itemType}-${item.id}`}
-                  className="border-l-4 border-l-amber-400 shadow-sm hover:shadow-md transition-shadow relative"
+                  className={`border-l-4 border-l-amber-400 shadow-sm hover:shadow-md transition-shadow relative ${
+                    isMobile ? "" : ""
+                  }`}
                 >
-                  <CardContent className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 space-x-reverse mb-2">
+                  <CardContent className={isMobile ? "p-3" : "p-4"}>
+                    <div
+                      className={`flex items-center justify-between ${
+                        isMobile ? "flex-col space-y-3" : ""
+                      }`}
+                    >
+                      <div className="flex-1 w-full">
+                        <div
+                          className={`flex items-center mb-2 ${
+                            isMobile
+                              ? "space-x-2 space-x-reverse"
+                              : "space-x-3 space-x-reverse"
+                          }`}
+                        >
                           <div
-                            className={`p-2 rounded-full ${
+                            className={`rounded-full ${
                               item.itemType === "invoice"
                                 ? "bg-blue-100 text-blue-600"
                                 : "bg-orange-100 text-orange-600"
-                            }`}
+                            } ${isMobile ? "p-1.5" : "p-2"}`}
                           >
                             {item.itemType === "invoice" ? (
-                              <Building2 className="h-4 w-4 no-flip" />
+                              <Building2
+                                className={`no-flip ${
+                                  isMobile ? "h-3 w-3" : "h-4 w-4"
+                                }`}
+                              />
                             ) : (
-                              <Receipt className="h-4 w-4 no-flip" />
+                              <Receipt
+                                className={`no-flip ${
+                                  isMobile ? "h-3 w-3" : "h-4 w-4"
+                                }`}
+                              />
                             )}
                           </div>
 
                           <div className="flex-1">
                             {/* Clean Header */}
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center space-x-2 space-x-reverse">
-                                <h4 className="font-semibold text-gray-900 arabic-spacing">
+                            <div
+                              className={`flex items-center justify-between ${
+                                isMobile ? "mb-2" : "mb-3"
+                              }`}
+                            >
+                              <div className="flex items-center space-x-2 space-x-reverse flex-1">
+                                <h4
+                                  className={`font-semibold text-gray-900 arabic-spacing ${
+                                    isMobile ? "text-sm" : "text-base"
+                                  } truncate`}
+                                >
                                   {item.itemType === "invoice"
                                     ? formatInvoiceNumber(
                                         (item as EnhancedInvoice).invoiceNumber
@@ -882,29 +981,63 @@ export default function ApprovalsModal({
                                 {item.itemType === "invoice" &&
                                   ((item as any).customerInvoiceNumber ||
                                     (item as any).attachmentData) && (
-                                    <div className="flex items-center text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
-                                      <FileText className="h-3 w-3 ml-1" />
+                                    <div
+                                      className={`flex items-center bg-orange-100 text-orange-700 rounded-full ${
+                                        isMobile
+                                          ? "text-xs px-1.5 py-0.5"
+                                          : "text-xs px-2 py-1"
+                                      }`}
+                                    >
+                                      <FileText
+                                        className={`ml-1 ${
+                                          isMobile ? "h-2.5 w-2.5" : "h-3 w-3"
+                                        }`}
+                                      />
                                     </div>
                                   )}
                               </div>
-                              <span className="text-lg font-bold text-green-600 arabic-spacing">
+                              <span
+                                className={`font-bold text-green-600 arabic-spacing ${
+                                  isMobile ? "text-base ml-2" : "text-lg"
+                                }`}
+                              >
                                 {formatCurrency(item.amount)}
                               </span>
                             </div>
 
                             {/* Essential Info - Single Clean Line */}
-                            <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                              <div className="flex items-center space-x-4 space-x-reverse">
+                            <div
+                              className={`flex items-center justify-between text-gray-600 mb-2 ${
+                                isMobile
+                                  ? "text-xs flex-col items-start space-y-1"
+                                  : "text-sm"
+                              }`}
+                            >
+                              <div
+                                className={`flex items-center ${
+                                  isMobile
+                                    ? "space-x-2 space-x-reverse"
+                                    : "space-x-4 space-x-reverse"
+                                }`}
+                              >
                                 {item.itemType === "invoice" ? (
                                   <>
-                                    <span className="arabic-spacing">
+                                    <span
+                                      className={`arabic-spacing ${
+                                        isMobile ? "truncate max-w-[200px]" : ""
+                                      }`}
+                                    >
                                       {(item as any).projectName ||
                                         getProjectName(
                                           (item as EnhancedInvoice).projectId
                                         )}
                                     </span>
                                     {(item as any).contractorName && (
-                                      <span className="text-orange-700 arabic-spacing">
+                                      <span
+                                        className={`text-orange-700 arabic-spacing ${
+                                          isMobile ? "hidden" : ""
+                                        }`}
+                                      >
                                         • {(item as any).contractorName}
                                       </span>
                                     )}
@@ -915,7 +1048,11 @@ export default function ApprovalsModal({
                                   </span>
                                 )}
                               </div>
-                              <span className="text-xs text-gray-500 arabic-spacing">
+                              <span
+                                className={`text-gray-500 arabic-spacing ${
+                                  isMobile ? "text-xs" : "text-xs"
+                                }`}
+                              >
                                 {formatDate(item.date)}
                               </span>
                             </div>
@@ -923,20 +1060,32 @@ export default function ApprovalsModal({
                         </div>
                       </div>
 
-                      <div className="flex items-center space-x-2 space-x-reverse">
+                      <div
+                        className={`flex items-center ${
+                          isMobile
+                            ? "w-full space-x-1 space-x-reverse"
+                            : "space-x-2 space-x-reverse"
+                        }`}
+                      >
                         {/* Preview Button for Invoices - Primary Action */}
                         {item.itemType === "invoice" && (
                           <Button
-                            size="sm"
+                            size={isMobile ? "sm" : "sm"}
                             onClick={() =>
                               openInvoicePreview(item as EnhancedInvoice)
                             }
-                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                            className={`bg-blue-600 hover:bg-blue-700 text-white ${
+                              isMobile ? "flex-1 text-xs h-8" : ""
+                            }`}
                             title="معاينة شاملة للفاتورة مع إمكانية الاعتماد"
                           >
-                            <Eye className="h-4 w-4 ml-1 no-flip" />
+                            <Eye
+                              className={`no-flip ${
+                                isMobile ? "h-3 w-3 ml-1" : "h-4 w-4 ml-1"
+                              }`}
+                            />
                             <span className="arabic-spacing">
-                              معاينة واعتماد
+                              {isMobile ? "معاينة" : "معاينة واعتماد"}
                             </span>
                           </Button>
                         )}
@@ -945,18 +1094,24 @@ export default function ApprovalsModal({
                         {item.itemType === "expense" && (
                           <>
                             <Button
-                              size="sm"
+                              size={isMobile ? "sm" : "sm"}
                               onClick={() =>
                                 approveExpense(item as EnhancedGeneralExpense)
                               }
                               disabled={!hasBalance(item.amount)}
-                              className="bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300"
+                              className={`bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300 ${
+                                isMobile ? "flex-1 text-xs h-8" : ""
+                              }`}
                             >
-                              <CheckCircle className="h-4 w-4 ml-1 no-flip" />
+                              <CheckCircle
+                                className={`no-flip ${
+                                  isMobile ? "h-3 w-3 ml-1" : "h-4 w-4 ml-1"
+                                }`}
+                              />
                               <span className="arabic-spacing">اعتماد</span>
                             </Button>
                             <Button
-                              size="sm"
+                              size={isMobile ? "sm" : "sm"}
                               variant="outline"
                               onClick={() =>
                                 openRejectModal(
@@ -965,9 +1120,15 @@ export default function ApprovalsModal({
                                   (item as EnhancedGeneralExpense).description
                                 )
                               }
-                              className="border-red-300 text-red-600 hover:bg-red-50"
+                              className={`border-red-300 text-red-600 hover:bg-red-50 ${
+                                isMobile ? "flex-1 text-xs h-8" : ""
+                              }`}
                             >
-                              <XCircle className="h-4 w-4 ml-1 no-flip" />
+                              <XCircle
+                                className={`no-flip ${
+                                  isMobile ? "h-3 w-3 ml-1" : "h-4 w-4 ml-1"
+                                }`}
+                              />
                               <span className="arabic-spacing">رفض</span>
                             </Button>
                           </>
@@ -976,7 +1137,7 @@ export default function ApprovalsModal({
                         {/* Quick Reject for Invoices */}
                         {item.itemType === "invoice" && (
                           <Button
-                            size="sm"
+                            size={isMobile ? "sm" : "sm"}
                             variant="outline"
                             onClick={() =>
                               openRejectModal(
@@ -987,10 +1148,16 @@ export default function ApprovalsModal({
                                 )}`
                               )
                             }
-                            className="border-red-300 text-red-600 hover:bg-red-50"
+                            className={`border-red-300 text-red-600 hover:bg-red-50 ${
+                              isMobile ? "flex-1 text-xs h-8" : ""
+                            }`}
                             title="رفض سريع بدون معاينة"
                           >
-                            <XCircle className="h-4 w-4 ml-1 no-flip" />
+                            <XCircle
+                              className={`no-flip ${
+                                isMobile ? "h-3 w-3 ml-1" : "h-4 w-4 ml-1"
+                              }`}
+                            />
                             <span className="arabic-spacing">رفض</span>
                           </Button>
                         )}
@@ -1005,14 +1172,36 @@ export default function ApprovalsModal({
 
         {/* Footer */}
         {filteredItems.length > 0 && (
-          <div className="p-4 border-t border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600 arabic-spacing">
+          <div
+            className={`border-t border-gray-200 bg-gray-50 ${
+              isMobile ? "p-3" : "p-4"
+            }`}
+          >
+            <div
+              className={`flex items-center justify-between ${
+                isMobile ? "flex-col space-y-3" : ""
+              }`}
+            >
+              <div
+                className={`text-gray-600 arabic-spacing ${
+                  isMobile ? "text-xs text-center" : "text-sm"
+                }`}
+              >
                 الإجمالي المحدد: {formatCurrency(totalAmount)} •{" "}
                 {filteredItems.length} عنصر
               </div>
-              <div className="flex space-x-2 space-x-reverse">
-                <Button variant="outline" onClick={onClose}>
+              <div
+                className={`flex ${
+                  isMobile
+                    ? "w-full space-x-2 space-x-reverse"
+                    : "space-x-2 space-x-reverse"
+                }`}
+              >
+                <Button
+                  variant="outline"
+                  onClick={onClose}
+                  className={isMobile ? "flex-1 text-sm h-9" : ""}
+                >
                   <span className="arabic-spacing">إغلاق</span>
                 </Button>
                 <Button
@@ -1027,9 +1216,13 @@ export default function ApprovalsModal({
                   disabled={
                     !filteredItems.every((item) => hasBalance(item.amount))
                   }
-                  className="bg-green-600 hover:bg-green-700 text-white"
+                  className={`bg-green-600 hover:bg-green-700 text-white ${
+                    isMobile ? "flex-1 text-sm h-9" : ""
+                  }`}
                 >
-                  <span className="arabic-spacing">اعتماد الكل</span>
+                  <span className="arabic-spacing">
+                    {isMobile ? "اعتماد الكل" : "اعتماد الكل"}
+                  </span>
                 </Button>
               </div>
             </div>
@@ -1040,46 +1233,92 @@ export default function ApprovalsModal({
       {/* Rejection Confirmation Modal */}
       {showRejectModal && itemToReject && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl w-full max-w-md shadow-2xl">
-            <div className="p-6">
-              <div className="flex items-center space-x-3 space-x-reverse mb-4">
-                <div className="bg-red-100 p-2 rounded-full">
-                  <AlertTriangle className="h-5 w-5 text-red-600 no-flip" />
+          <div
+            className={`bg-white rounded-xl w-full shadow-2xl ${
+              isMobile ? "max-w-full mx-2" : "max-w-md"
+            }`}
+          >
+            <div className={isMobile ? "p-4" : "p-6"}>
+              <div
+                className={`flex items-center space-x-3 space-x-reverse ${
+                  isMobile ? "mb-3" : "mb-4"
+                }`}
+              >
+                <div
+                  className={`bg-red-100 rounded-full ${
+                    isMobile ? "p-1.5" : "p-2"
+                  }`}
+                >
+                  <AlertTriangle
+                    className={`text-red-600 no-flip ${
+                      isMobile ? "h-4 w-4" : "h-5 w-5"
+                    }`}
+                  />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900 arabic-spacing">
+                  <h3
+                    className={`font-bold text-gray-900 arabic-spacing ${
+                      isMobile ? "text-base" : "text-lg"
+                    }`}
+                  >
                     تأكيد رفض العنصر
                   </h3>
-                  <p className="text-sm text-gray-600 arabic-spacing">
+                  <p
+                    className={`text-gray-600 arabic-spacing ${
+                      isMobile ? "text-xs" : "text-sm"
+                    }`}
+                  >
                     هل أنت متأكد من رفض {itemToReject?.title}؟
                   </p>
                 </div>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-semibold text-gray-700 mb-2 arabic-spacing">
+              <div className={isMobile ? "mb-3" : "mb-4"}>
+                <label
+                  className={`block font-semibold text-gray-700 mb-2 arabic-spacing ${
+                    isMobile ? "text-xs" : "text-sm"
+                  }`}
+                >
                   سبب الرفض (اختياري)
                 </label>
                 <textarea
                   value={rejectionReason}
                   onChange={(e) => setRejectionReason(e.target.value)}
                   placeholder="اكتب سبب رفض هذا العنصر ليتم إبلاغ موظف الإدخال..."
-                  className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-red-500 focus:border-red-500 arabic-spacing"
-                  rows={3}
+                  className={`w-full border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-red-500 focus:border-red-500 arabic-spacing ${
+                    isMobile ? "p-2 text-sm" : "p-3"
+                  }`}
+                  rows={isMobile ? 2 : 3}
                 />
               </div>
 
-              <div className="bg-red-50 p-3 rounded-lg mb-4">
+              <div
+                className={`bg-red-50 rounded-lg ${
+                  isMobile ? "p-2 mb-3" : "p-3 mb-4"
+                }`}
+              >
                 <div className="flex items-center space-x-2 space-x-reverse">
-                  <AlertTriangle className="h-4 w-4 text-red-600 no-flip" />
-                  <p className="text-sm text-red-700 arabic-spacing">
+                  <AlertTriangle
+                    className={`text-red-600 no-flip ${
+                      isMobile ? "h-3 w-3" : "h-4 w-4"
+                    }`}
+                  />
+                  <p
+                    className={`text-red-700 arabic-spacing ${
+                      isMobile ? "text-xs" : "text-sm"
+                    }`}
+                  >
                     <strong>تحذير:</strong> لا يمكن التراجع عن هذا الإجراء بعد
                     التأكيد
                   </p>
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 space-x-reverse">
+              <div
+                className={`flex space-x-3 space-x-reverse ${
+                  isMobile ? "w-full" : "justify-end"
+                }`}
+              >
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -1087,14 +1326,21 @@ export default function ApprovalsModal({
                     setItemToReject(null);
                     setRejectionReason("");
                   }}
+                  className={isMobile ? "flex-1 text-sm h-9" : ""}
                 >
                   <span className="arabic-spacing">إلغاء</span>
                 </Button>
                 <Button
                   onClick={confirmReject}
-                  className="bg-red-600 hover:bg-red-700 text-white"
+                  className={`bg-red-600 hover:bg-red-700 text-white ${
+                    isMobile ? "flex-1 text-sm h-9" : ""
+                  }`}
                 >
-                  <XCircle className="h-4 w-4 ml-1 no-flip" />
+                  <XCircle
+                    className={`no-flip ${
+                      isMobile ? "h-3 w-3 ml-1" : "h-4 w-4 ml-1"
+                    }`}
+                  />
                   <span className="arabic-spacing">تأكيد الرفض</span>
                 </Button>
               </div>
@@ -1106,20 +1352,46 @@ export default function ApprovalsModal({
       {/* Individual Item Detail Modal */}
       {showItemDetailModal && selectedItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
-          <div className="bg-white rounded-xl w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl">
+          <div
+            className={`bg-white rounded-xl w-full overflow-hidden shadow-2xl ${
+              isMobile
+                ? "max-w-full max-h-[95vh] mx-2"
+                : "max-w-3xl max-h-[90vh]"
+            }`}
+          >
             {/* Header */}
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-6">
+            <div
+              className={`bg-gradient-to-r from-blue-500 to-indigo-600 text-white ${
+                isMobile ? "p-4" : "p-6"
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3 space-x-reverse">
-                  <div className="bg-white/20 p-2 rounded-lg">
+                  <div
+                    className={`bg-white/20 rounded-lg ${
+                      isMobile ? "p-1.5" : "p-2"
+                    }`}
+                  >
                     {selectedItem?.itemType === "invoice" ? (
-                      <Building2 className="h-6 w-6 no-flip" />
+                      <Building2
+                        className={`no-flip ${
+                          isMobile ? "h-5 w-5" : "h-6 w-6"
+                        }`}
+                      />
                     ) : (
-                      <Receipt className="h-6 w-6 no-flip" />
+                      <Receipt
+                        className={`no-flip ${
+                          isMobile ? "h-5 w-5" : "h-6 w-6"
+                        }`}
+                      />
                     )}
                   </div>
-                  <div>
-                    <h2 className="text-2xl font-bold arabic-spacing">
+                  <div className="flex-1">
+                    <h2
+                      className={`font-bold arabic-spacing ${
+                        isMobile ? "text-base" : "text-2xl"
+                      }`}
+                    >
                       {selectedItem?.itemType === "invoice"
                         ? `تفاصيل الفاتورة: ${formatInvoiceNumber(
                             (selectedItem as EnhancedInvoice).invoiceNumber
@@ -1128,7 +1400,11 @@ export default function ApprovalsModal({
                             (selectedItem as EnhancedGeneralExpense).description
                           }`}
                     </h2>
-                    <p className="text-blue-100 arabic-spacing">
+                    <p
+                      className={`text-blue-100 arabic-spacing ${
+                        isMobile ? "text-xs" : "text-base"
+                      }`}
+                    >
                       مُدخل بواسطة:{" "}
                       {getUserFriendlyName(selectedItem?.submittedBy)} •{" "}
                       {formatDate(selectedItem?.date)}
@@ -1139,15 +1415,21 @@ export default function ApprovalsModal({
                   variant="ghost"
                   size="sm"
                   onClick={closeItemDetailModal}
-                  className="h-10 w-10 p-0 text-white hover:bg-white/20"
+                  className={`p-0 text-white hover:bg-white/20 ${
+                    isMobile ? "h-8 w-8" : "h-10 w-10"
+                  }`}
                 >
-                  <X className="h-5 w-5" />
+                  <X className={isMobile ? "h-4 w-4" : "h-5 w-5"} />
                 </Button>
               </div>
             </div>
 
             {/* Content */}
-            <div className="p-6 max-h-[60vh] overflow-y-auto">
+            <div
+              className={`overflow-y-auto ${
+                isMobile ? "p-4 max-h-[65vh]" : "p-6 max-h-[60vh]"
+              }`}
+            >
               {selectedItem?.itemType === "invoice" ? (
                 // Invoice Details
                 <div className="space-y-6">
@@ -1361,16 +1643,36 @@ export default function ApprovalsModal({
             </div>
 
             {/* Footer */}
-            <div className="p-6 border-t border-gray-200 bg-gray-50">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600 arabic-spacing">
+            <div
+              className={`border-t border-gray-200 bg-gray-50 ${
+                isMobile ? "p-4" : "p-6"
+              }`}
+            >
+              <div
+                className={`flex items-center justify-between ${
+                  isMobile ? "flex-col space-y-3" : ""
+                }`}
+              >
+                <div
+                  className={`text-gray-600 arabic-spacing ${
+                    isMobile ? "text-xs text-center" : "text-sm"
+                  }`}
+                >
                   الحالة:{" "}
                   <span className="font-medium text-yellow-600">
                     بانتظار الاعتماد
                   </span>
                 </div>
-                <div className="flex space-x-3 space-x-reverse">
-                  <Button variant="outline" onClick={closeItemDetailModal}>
+                <div
+                  className={`flex space-x-3 space-x-reverse ${
+                    isMobile ? "w-full" : ""
+                  }`}
+                >
+                  <Button
+                    variant="outline"
+                    onClick={closeItemDetailModal}
+                    className={isMobile ? "flex-1 text-sm h-9" : ""}
+                  >
                     <span className="arabic-spacing">إغلاق</span>
                   </Button>
                   <Button
@@ -1383,10 +1685,18 @@ export default function ApprovalsModal({
                       closeItemDetailModal();
                     }}
                     disabled={!hasBalance(selectedItem?.amount || 0)}
-                    className="bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300"
+                    className={`bg-green-600 hover:bg-green-700 text-white disabled:bg-gray-300 ${
+                      isMobile ? "flex-1 text-sm h-9" : ""
+                    }`}
                   >
-                    <CheckCircle className="h-4 w-4 ml-1 no-flip" />
-                    <span className="arabic-spacing">اعتماد ودفع</span>
+                    <CheckCircle
+                      className={`no-flip ${
+                        isMobile ? "h-3 w-3 ml-1" : "h-4 w-4 ml-1"
+                      }`}
+                    />
+                    <span className="arabic-spacing">
+                      {isMobile ? "اعتماد" : "اعتماد ودفع"}
+                    </span>
                   </Button>
                   <Button
                     variant="outline"
@@ -1402,9 +1712,15 @@ export default function ApprovalsModal({
                           : (selectedItem as EnhancedGeneralExpense).description
                       );
                     }}
-                    className="border-red-300 text-red-600 hover:bg-red-50"
+                    className={`border-red-300 text-red-600 hover:bg-red-50 ${
+                      isMobile ? "flex-1 text-sm h-9" : ""
+                    }`}
                   >
-                    <XCircle className="h-4 w-4 ml-1 no-flip" />
+                    <XCircle
+                      className={`no-flip ${
+                        isMobile ? "h-3 w-3 ml-1" : "h-4 w-4 ml-1"
+                      }`}
+                    />
                     <span className="arabic-spacing">رفض</span>
                   </Button>
                 </div>

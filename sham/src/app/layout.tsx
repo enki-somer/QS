@@ -18,6 +18,33 @@ export const metadata: Metadata = {
     "نظام شامل للإدارة المالية لشركات البناء والتشييد - إدارة المشاريع، التدفق النقدي، الموظفين والمصروفات",
   keywords:
     "الإدارة المالية، البناء والتشييد، المشاريع، التدفق النقدي، المحاسبة",
+  manifest: "/manifest.json",
+  themeColor: "#182C61",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "قصر الشام",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+  openGraph: {
+    type: "website",
+    siteName: "قصر الشام - نظام الإدارة المالية",
+    title: "قصر الشام - نظام الإدارة المالية",
+    description: "نظام شامل للإدارة المالية لشركات البناء والتشييد",
+  },
+  icons: {
+    icon: "/icons/android/android-launchericon-192-192.png",
+    shortcut: "/icons/android/android-launchericon-192-192.png",
+    apple: "/icons/ios/192.png",
+  },
 };
 
 export default function RootLayout({

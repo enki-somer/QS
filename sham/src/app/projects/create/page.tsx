@@ -23,6 +23,7 @@ import { Card } from "@/components/ui/Card";
 import { EnhancedProjectFormData } from "@/types";
 import { apiRequest } from "@/lib/api";
 import { useUIPermissions } from "@/hooks/useUIPermissions";
+import { useAuth } from "@/contexts/AuthContext";
 import { PermissionRoute } from "@/components/ui/PermissionRoute";
 
 const statusOptions = [
@@ -58,6 +59,7 @@ export default function CreateProjectPage() {
   const editProjectId = searchParams.get("edit");
   const isEditMode = !!editProjectId;
   const permissions = useUIPermissions();
+  const { isAdmin } = useAuth();
 
   const [loading, setLoading] = useState(false);
   const [currentSection, setCurrentSection] = useState<"basic" | "review">(
@@ -76,7 +78,8 @@ export default function CreateProjectPage() {
     status: "planning",
     categoryAssignments: [],
     // NEW FINANCIAL FIELDS
-    pricePerMeter: "",
+    pricePerMeter: "", // Deal price per square meter (what we charge client)
+    realCostPerMeter: "", // Actual cost per square meter (our expenses)
     ownerDealPrice: "",
     ownerPaidAmount: "",
     totalSiteArea: "",
@@ -97,9 +100,7 @@ export default function CreateProjectPage() {
       // Fetch existing project data for editing
       const fetchProjectData = async () => {
         try {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL}/api/projects/${editProjectId}`
-          );
+          const response = await apiRequest(`/projects/${editProjectId}`);
           if (response.ok) {
             const project = await response.json();
             console.log("Fetched project data:", project); // Debug log
@@ -126,6 +127,7 @@ export default function CreateProjectPage() {
                 [],
               // NEW FINANCIAL FIELDS
               pricePerMeter: project.price_per_meter?.toString() || "",
+              realCostPerMeter: project.real_cost_per_meter?.toString() || "",
               ownerDealPrice: project.owner_deal_price?.toString() || "",
               ownerPaidAmount: project.owner_paid_amount?.toString() || "",
               totalSiteArea: project.total_site_area?.toString() || "",
@@ -215,25 +217,18 @@ export default function CreateProjectPage() {
         body: JSON.stringify({
           name: projectForm.name.trim(),
           location: projectForm.location.trim(),
-          area: projectForm.area ? Number(projectForm.area) : null,
-          budgetEstimate: Number(projectForm.budgetEstimate),
+          area: projectForm.area ? cleanNumber(projectForm.area) : null,
+          budgetEstimate: cleanNumber(projectForm.budgetEstimate),
           client: projectForm.client.trim(),
           startDate: projectForm.startDate,
           endDate: projectForm.endDate,
           status: projectForm.status,
           // NEW FINANCIAL FIELDS
-          pricePerMeter: projectForm.pricePerMeter
-            ? Number(projectForm.pricePerMeter)
-            : 0,
-          ownerDealPrice: projectForm.ownerDealPrice
-            ? Number(projectForm.ownerDealPrice)
-            : 0,
-          ownerPaidAmount: projectForm.ownerPaidAmount
-            ? Number(projectForm.ownerPaidAmount)
-            : 0,
-          totalSiteArea: projectForm.totalSiteArea
-            ? Number(projectForm.totalSiteArea)
-            : 0,
+          pricePerMeter: cleanNumber(projectForm.pricePerMeter),
+          realCostPerMeter: cleanNumber(projectForm.realCostPerMeter),
+          ownerDealPrice: cleanNumber(projectForm.ownerDealPrice),
+          ownerPaidAmount: cleanNumber(projectForm.ownerPaidAmount),
+          totalSiteArea: cleanNumber(projectForm.totalSiteArea),
           // Category assignments are managed separately from the project detail page
           // Only send them during creation if explicitly provided
           ...(isEditMode
@@ -297,6 +292,55 @@ export default function CreateProjectPage() {
   };
 
   const canGoToReview = isBasicFormValid;
+
+  // Helper function for number formatting with commas
+  const formatNumber = (value: string | number) => {
+    if (!value) return "";
+    const num =
+      typeof value === "string" ? value.replace(/,/g, "") : value.toString();
+    if (isNaN(Number(num))) return value.toString();
+    return new Intl.NumberFormat("en-US").format(Number(num));
+  };
+
+  // Helper function to handle number input with comma formatting
+  const handleNumberInput = (
+    value: string,
+    field: keyof typeof projectForm
+  ) => {
+    const cleanValue = value.replace(/,/g, "");
+    if (cleanValue === "" || !isNaN(Number(cleanValue))) {
+      setProjectForm({ ...projectForm, [field]: cleanValue });
+    }
+  };
+
+  // Helper function to clean and convert form values to numbers for API
+  const cleanNumber = (value: string | number) => {
+    if (!value) return 0;
+    return Number(value.toString().replace(/,/g, ""));
+  };
+
+  // Real-time calculation helpers
+  const calculateRevenue = () => {
+    const area = cleanNumber(projectForm.area);
+    const pricePerMeter = cleanNumber(projectForm.pricePerMeter);
+    return area * pricePerMeter;
+  };
+
+  const calculateCosts = () => {
+    const area = cleanNumber(projectForm.area);
+    const realCostPerMeter = cleanNumber(projectForm.realCostPerMeter);
+    return area * realCostPerMeter;
+  };
+
+  const calculateProfit = () => {
+    return calculateRevenue() - calculateCosts();
+  };
+
+  const calculateProfitMargin = () => {
+    const revenue = calculateRevenue();
+    if (revenue === 0) return 0;
+    return (calculateProfit() / revenue) * 100;
+  };
 
   // Check permissions for project creation/editing
   const requiredPermission = isEditMode
@@ -414,402 +458,549 @@ export default function CreateProjectPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {/* Project Name */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    اسم المشروع *
-                  </label>
-                  <Input
-                    value={projectForm.name}
-                    onChange={(e) =>
-                      setProjectForm({ ...projectForm, name: e.target.value })
-                    }
-                    placeholder="مثال: مجمع الزهراء السكني"
-                    className="h-12 arabic-spacing"
-                  />
-                </div>
+              {/* Left Column - Basic Information */}
+              <div className="lg:col-span-1 space-y-6">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
+                  <h3 className="text-lg font-bold text-gray-900 arabic-spacing mb-4 flex items-center">
+                    <Building2 className="h-5 w-5 text-blue-600 ml-2 no-flip" />
+                    المعلومات الأساسية
+                  </h3>
 
-                {/* Auto-Generated Project Code */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    رقم المشروع (تلقائي)
-                  </label>
-                  <div className="relative">
-                    <Input
-                      value={projectCode}
-                      readOnly
-                      placeholder="جاري التحميل..."
-                      className="h-12 arabic-spacing bg-gray-50 text-gray-700"
-                    />
-                    <div className="absolute inset-y-0 left-3 flex items-center"></div>
-                  </div>
-                  <p className="text-xs text-gray-500 arabic-spacing">
-                    يتم إنشاء رقم المشروع تلقائياً حسب التسلسل الشهري
-                  </p>
-                </div>
-
-                {/* Client */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    اسم العميل *
-                  </label>
-                  <Input
-                    value={projectForm.client}
-                    onChange={(e) =>
-                      setProjectForm({ ...projectForm, client: e.target.value })
-                    }
-                    placeholder="مثال: شركة الإسكان الحديث"
-                    className="h-12 arabic-spacing"
-                  />
-                </div>
-
-                {/* Location */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    موقع المشروع *
-                  </label>
-                  <Input
-                    value={projectForm.location}
-                    onChange={(e) =>
-                      setProjectForm({
-                        ...projectForm,
-                        location: e.target.value,
-                      })
-                    }
-                    placeholder="مثال: بغداد - حي الكرادة"
-                    className="h-12 arabic-spacing"
-                  />
-                </div>
-
-                {/* Area */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    مساحة البناء الفعلية (متر مربع)
-                  </label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={projectForm.area}
-                    onChange={(e) =>
-                      setProjectForm({ ...projectForm, area: e.target.value })
-                    }
-                    placeholder="1000"
-                    className="h-12"
-                  />
-                </div>
-
-                {/* Total Site Area */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    المساحة الكلية للموقع (متر مربع)
-                  </label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={projectForm.totalSiteArea}
-                    onChange={(e) =>
-                      setProjectForm({
-                        ...projectForm,
-                        totalSiteArea: e.target.value,
-                      })
-                    }
-                    placeholder="1500"
-                    className="h-12"
-                  />
-                  {projectForm.totalSiteArea && projectForm.area && (
-                    <div className="flex items-center space-x-2 space-x-reverse text-sm">
-                      <p className="text-blue-600 font-medium">
-                        🏗️ مساحة البناء:{" "}
-                        {new Intl.NumberFormat("en-US").format(
-                          Number(projectForm.area)
-                        )}{" "}
-                        م²
-                      </p>
-                      <span className="text-gray-400">•</span>
-                      <p className="text-green-600 font-medium">
-                        🏞️ المساحة الكلية:{" "}
-                        {new Intl.NumberFormat("en-US").format(
-                          Number(projectForm.totalSiteArea)
-                        )}{" "}
-                        م²
-                      </p>
-                      <span className="text-gray-400">•</span>
-                      <p className="text-purple-600 font-medium">
-                        📊 نسبة البناء:{" "}
-                        {(
-                          (Number(projectForm.area) /
-                            Number(projectForm.totalSiteArea)) *
-                          100
-                        ).toFixed(1)}
-                        %
+                  <div className="space-y-4">
+                    {/* Auto-Generated Project Code */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        رقم المشروع (تلقائي)
+                      </label>
+                      <div className="relative">
+                        <Input
+                          value={projectCode}
+                          readOnly
+                          placeholder="جاري التحميل..."
+                          className="h-12 arabic-spacing bg-gray-50 text-gray-700"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 arabic-spacing">
+                        يتم إنشاء رقم المشروع تلقائياً حسب التسلسل الشهري
                       </p>
                     </div>
-                  )}
-                </div>
+                    {/* Project Name */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        اسم المشروع *
+                      </label>
+                      <Input
+                        value={projectForm.name}
+                        onChange={(e) =>
+                          setProjectForm({
+                            ...projectForm,
+                            name: e.target.value,
+                          })
+                        }
+                        placeholder="مثال: مجمع الزهراء السكني"
+                        className="h-12 arabic-spacing bg-white"
+                      />
+                    </div>
 
-                {/* Budget Estimate */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    الميزانية المقدرة (دينار عراقي) *
-                  </label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={projectForm.budgetEstimate}
-                    onChange={(e) =>
-                      setProjectForm({
-                        ...projectForm,
-                        budgetEstimate: e.target.value,
-                      })
-                    }
-                    placeholder="50000000"
-                    className="h-12"
-                    disabled={isEditMode}
-                    readOnly={isEditMode}
-                  />
-                  {projectForm.budgetEstimate && (
-                    <p className="text-green-600 text-sm font-medium">
-                      💰{" "}
-                      {new Intl.NumberFormat("en-US").format(
-                        Number(projectForm.budgetEstimate)
-                      )}{" "}
-                      دينار عراقي
-                    </p>
-                  )}
-                  {isEditMode && (
-                    <p className="text-amber-600 text-sm font-medium flex items-center">
-                      ⚠️ لا يمكن تعديل الميزانية بعد إنشاء المشروع لحماية
-                      البيانات المالية
-                    </p>
-                  )}
-                </div>
+                    {/* Client */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        اسم العميل *
+                      </label>
+                      <Input
+                        value={projectForm.client}
+                        onChange={(e) =>
+                          setProjectForm({
+                            ...projectForm,
+                            client: e.target.value,
+                          })
+                        }
+                        placeholder="مثال: شركة الإسكان الحديث"
+                        className="h-12 arabic-spacing bg-white"
+                      />
+                    </div>
 
-                {/* Price Per Meter */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    سعر المتر المربع (دينار عراقي)
-                  </label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={projectForm.pricePerMeter}
-                    onChange={(e) =>
-                      setProjectForm({
-                        ...projectForm,
-                        pricePerMeter: e.target.value,
-                      })
-                    }
-                    placeholder="500000"
-                    className="h-12"
-                  />
-                  {projectForm.pricePerMeter && (
-                    <p className="text-blue-600 text-sm font-medium">
-                      🏗️{" "}
-                      {new Intl.NumberFormat("en-US").format(
-                        Number(projectForm.pricePerMeter)
-                      )}{" "}
-                      د.ع/م²
-                    </p>
-                  )}
-                </div>
+                    {/* Location */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        موقع المشروع *
+                      </label>
+                      <Input
+                        value={projectForm.location}
+                        onChange={(e) =>
+                          setProjectForm({
+                            ...projectForm,
+                            location: e.target.value,
+                          })
+                        }
+                        placeholder="مثال: بغداد - حي الكرادة"
+                        className="h-12 arabic-spacing bg-white"
+                      />
+                    </div>
 
-                {/* Owner Deal Price */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    سعر الصفقة مع المالك (دينار عراقي)
-                  </label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={projectForm.ownerDealPrice}
-                    onChange={(e) =>
-                      setProjectForm({
-                        ...projectForm,
-                        ownerDealPrice: e.target.value,
-                      })
-                    }
-                    placeholder="60000000"
-                    className="h-12"
-                  />
-                  {projectForm.ownerDealPrice && (
-                    <p className="text-purple-600 text-sm font-medium">
-                      🤝{" "}
-                      {new Intl.NumberFormat("en-US").format(
-                        Number(projectForm.ownerDealPrice)
-                      )}{" "}
-                      دينار عراقي
-                    </p>
-                  )}
-                </div>
+                    {/* Status */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        حالة المشروع *
+                      </label>
+                      <Select
+                        value={projectForm.status}
+                        onChange={(e) =>
+                          setProjectForm({
+                            ...projectForm,
+                            status: e.target.value as any,
+                          })
+                        }
+                        className="h-12 bg-white"
+                      >
+                        {statusOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
 
-                {/* Owner Paid Amount */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    المبلغ المدفوع من المالك (دينار عراقي)
-                  </label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={projectForm.ownerPaidAmount}
-                    onChange={(e) =>
-                      setProjectForm({
-                        ...projectForm,
-                        ownerPaidAmount: e.target.value,
-                      })
-                    }
-                    placeholder="20000000"
-                    className="h-12"
-                  />
-                  {projectForm.ownerPaidAmount && (
-                    <p className="text-green-600 text-sm font-medium">
-                      💳{" "}
-                      {new Intl.NumberFormat("en-US").format(
-                        Number(projectForm.ownerPaidAmount)
-                      )}{" "}
-                      دينار عراقي
-                    </p>
-                  )}
-                </div>
+                    {/* Start Date */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        تاريخ البدء *
+                      </label>
+                      <Input
+                        type="date"
+                        value={projectForm.startDate}
+                        onChange={(e) =>
+                          setProjectForm({
+                            ...projectForm,
+                            startDate: e.target.value,
+                          })
+                        }
+                        className="h-12 bg-white"
+                      />
+                    </div>
 
-                {/* Status */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    حالة المشروع *
-                  </label>
-                  <Select
-                    value={projectForm.status}
-                    onChange={(e) =>
-                      setProjectForm({
-                        ...projectForm,
-                        status: e.target.value as any,
-                      })
-                    }
-                    className="h-12"
-                  >
-                    {statusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-
-                {/* Start Date */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    تاريخ البدء *
-                  </label>
-                  <Input
-                    type="date"
-                    value={projectForm.startDate}
-                    onChange={(e) =>
-                      setProjectForm({
-                        ...projectForm,
-                        startDate: e.target.value,
-                      })
-                    }
-                    className="h-12"
-                  />
-                </div>
-
-                {/* End Date */}
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700 arabic-spacing">
-                    تاريخ الانتهاء المتوقع *
-                  </label>
-                  <Input
-                    type="date"
-                    value={projectForm.endDate}
-                    onChange={(e) =>
-                      setProjectForm({
-                        ...projectForm,
-                        endDate: e.target.value,
-                      })
-                    }
-                    className="h-12"
-                  />
+                    {/* End Date */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        تاريخ الانتهاء المتوقع *
+                      </label>
+                      <Input
+                        type="date"
+                        value={projectForm.endDate}
+                        onChange={(e) =>
+                          setProjectForm({
+                            ...projectForm,
+                            endDate: e.target.value,
+                          })
+                        }
+                        className="h-12 bg-white"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Financial Calculations Display */}
-              {projectForm.area &&
-                projectForm.pricePerMeter &&
-                projectForm.ownerDealPrice && (
-                  <div className="mt-8 p-6 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl">
-                    <div className="flex items-start space-x-3 space-x-reverse mb-4">
-                      <div className="bg-green-100 p-2 rounded-lg">
-                        <DollarSign className="h-5 w-5 text-green-600 no-flip" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-green-900 arabic-spacing text-lg">
-                          الحسابات المالية التلقائية
-                        </h4>
-                        <p className="text-green-700 arabic-spacing text-sm mt-1">
-                          يتم حساب هذه القيم تلقائياً بناءً على البيانات المدخلة
+              {/* Right Column - Financial Information */}
+              <div className="lg:col-span-1 space-y-6">
+                <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-6 rounded-xl border border-green-200">
+                  <h3 className="text-lg font-bold text-gray-900 arabic-spacing mb-4 flex items-center">
+                    <DollarSign className="h-5 w-5 text-green-600 ml-2 no-flip" />
+                    المعلومات المالية
+                  </h3>
+
+                  <div className="space-y-4">
+                    {/* Area */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        مساحة البناء الفعلية (متر مربع) *
+                      </label>
+                      <Input
+                        type="text"
+                        value={formatNumber(projectForm.area)}
+                        onChange={(e) =>
+                          handleNumberInput(e.target.value, "area")
+                        }
+                        placeholder="1,000"
+                        className="h-12 bg-white text-right"
+                      />
+                      {projectForm.area && (
+                        <p className="text-blue-600 text-sm font-medium">
+                          📐 {formatNumber(projectForm.area)} متر مربع
                         </p>
-                      </div>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="bg-white p-4 rounded-lg border border-green-200">
-                        <h5 className="text-sm text-gray-600 arabic-spacing mb-1">
-                          تكلفة الإنشاء
-                        </h5>
-                        <p className="text-lg font-bold text-blue-600">
-                          {new Intl.NumberFormat("en-US").format(
-                            Number(projectForm.area) *
-                              Number(projectForm.pricePerMeter)
-                          )}{" "}
-                          د.ع
-                        </p>
-                        <p className="text-xs text-gray-500 arabic-spacing mt-1">
-                          {projectForm.area} م² ×{" "}
-                          {new Intl.NumberFormat("en-US").format(
-                            Number(projectForm.pricePerMeter)
-                          )}{" "}
-                          د.ع
-                        </p>
-                      </div>
+                    {/* Total Site Area */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        المساحة الكلية للموقع (متر مربع)
+                        {isEditMode && !isAdmin() && (
+                          <span className="text-xs text-amber-600 mr-2">
+                            (يتطلب صلاحيات المدير للتعديل)
+                          </span>
+                        )}
+                      </label>
+                      <Input
+                        type="text"
+                        value={formatNumber(projectForm.totalSiteArea)}
+                        onChange={(e) =>
+                          handleNumberInput(e.target.value, "totalSiteArea")
+                        }
+                        placeholder="1,500"
+                        className="h-12 bg-white text-right"
+                        disabled={isEditMode && !isAdmin()}
+                        readOnly={isEditMode && !isAdmin()}
+                      />
+                      {projectForm.totalSiteArea && projectForm.area && (
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <p className="text-sm text-blue-800 arabic-spacing">
+                            📊 نسبة البناء:{" "}
+                            {(
+                              (cleanNumber(projectForm.area) /
+                                cleanNumber(projectForm.totalSiteArea)) *
+                              100
+                            ).toFixed(1)}
+                            %
+                          </p>
+                        </div>
+                      )}
+                    </div>
 
-                      <div className="bg-white p-4 rounded-lg border border-green-200">
-                        <h5 className="text-sm text-gray-600 arabic-spacing mb-1">
-                          الربح المتوقع
-                        </h5>
-                        <p className="text-lg font-bold text-green-600">
-                          {new Intl.NumberFormat("en-US").format(
-                            Number(projectForm.ownerDealPrice) -
-                              Number(projectForm.area) *
-                                Number(projectForm.pricePerMeter)
-                          )}{" "}
-                          د.ع
+                    {/* Price Per Meter */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        سعر المتر المربع - للعميل (دينار عراقي) *
+                        {isEditMode && !isAdmin() && (
+                          <span className="text-xs text-amber-600 mr-2">
+                            (يتطلب صلاحيات المدير للتعديل)
+                          </span>
+                        )}
+                      </label>
+                      <Input
+                        type="text"
+                        value={formatNumber(projectForm.pricePerMeter)}
+                        onChange={(e) =>
+                          handleNumberInput(e.target.value, "pricePerMeter")
+                        }
+                        placeholder="500,000"
+                        className="h-12 bg-white text-right"
+                        disabled={isEditMode && !isAdmin()}
+                        readOnly={isEditMode && !isAdmin()}
+                      />
+                      {projectForm.pricePerMeter && (
+                        <p className="text-blue-600 text-sm font-medium">
+                          💰 سعر البيع:{" "}
+                          {formatNumber(projectForm.pricePerMeter)} د.ع/م²
                         </p>
-                      </div>
+                      )}
+                    </div>
 
-                      <div className="bg-white p-4 rounded-lg border border-green-200">
-                        <h5 className="text-sm text-gray-600 arabic-spacing mb-1">
-                          هامش الربح
-                        </h5>
-                        <p className="text-lg font-bold text-purple-600">
-                          {(
-                            ((Number(projectForm.ownerDealPrice) -
-                              Number(projectForm.area) *
-                                Number(projectForm.pricePerMeter)) /
-                              Number(projectForm.ownerDealPrice)) *
-                            100
-                          ).toFixed(2)}
-                          %
+                    {/* Real Cost Per Meter */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        التكلفة الفعلية للمتر المربع (دينار عراقي) *
+                        {isEditMode && !isAdmin() && (
+                          <span className="text-xs text-amber-600 mr-2">
+                            (يتطلب صلاحيات المدير للتعديل)
+                          </span>
+                        )}
+                      </label>
+                      <Input
+                        type="text"
+                        value={formatNumber(projectForm.realCostPerMeter)}
+                        onChange={(e) =>
+                          handleNumberInput(e.target.value, "realCostPerMeter")
+                        }
+                        placeholder="400,000"
+                        className="h-12 bg-white text-right"
+                        disabled={isEditMode && !isAdmin()}
+                        readOnly={isEditMode && !isAdmin()}
+                      />
+                      {projectForm.realCostPerMeter && (
+                        <p className="text-red-600 text-sm font-medium">
+                          🏗️ التكلفة الفعلية:{" "}
+                          {formatNumber(projectForm.realCostPerMeter)} د.ع/م²
                         </p>
-                      </div>
+                      )}
+                    </div>
+
+                    {/* Budget Estimate - Auto calculated */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        الميزانية المقدرة (دينار عراقي) *
+                        {isEditMode && !isAdmin() && (
+                          <span className="text-xs text-amber-600 mr-2">
+                            (يتطلب صلاحيات المدير للتعديل)
+                          </span>
+                        )}
+                      </label>
+                      <Input
+                        type="text"
+                        value={formatNumber(projectForm.budgetEstimate)}
+                        onChange={(e) =>
+                          handleNumberInput(e.target.value, "budgetEstimate")
+                        }
+                        placeholder={formatNumber(
+                          calculateRevenue().toString()
+                        )}
+                        className="h-12 bg-white text-right"
+                        disabled={isEditMode && !isAdmin()}
+                        readOnly={isEditMode && !isAdmin()}
+                      />
+                      {projectForm.area && projectForm.pricePerMeter && (
+                        <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                          <p className="text-sm text-green-800 arabic-spacing">
+                            💡 الحساب التلقائي:{" "}
+                            {formatNumber(calculateRevenue())} د.ع
+                          </p>
+                          <p className="text-xs text-green-600 arabic-spacing mt-1">
+                            ({formatNumber(projectForm.area)} م² ×{" "}
+                            {formatNumber(projectForm.pricePerMeter)} د.ع)
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Owner Deal Price - Auto calculated */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        سعر الصفقة مع المالك (دينار عراقي)
+                        {isEditMode && !isAdmin() && (
+                          <span className="text-xs text-amber-600 mr-2">
+                            (يتطلب صلاحيات المدير للتعديل)
+                          </span>
+                        )}
+                      </label>
+                      <Input
+                        type="text"
+                        value={formatNumber(projectForm.ownerDealPrice)}
+                        onChange={(e) =>
+                          handleNumberInput(e.target.value, "ownerDealPrice")
+                        }
+                        placeholder={formatNumber(
+                          calculateRevenue().toString()
+                        )}
+                        className="h-12 bg-white text-right"
+                        disabled={isEditMode && !isAdmin()}
+                        readOnly={isEditMode && !isAdmin()}
+                      />
+                      {projectForm.area && projectForm.pricePerMeter && (
+                        <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                          <p className="text-sm text-purple-800 arabic-spacing">
+                            🤝 القيمة المقترحة:{" "}
+                            {formatNumber(calculateRevenue())} د.ع
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Owner Paid Amount */}
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700 arabic-spacing">
+                        المبلغ المدفوع من المالك (دينار عراقي)
+                      </label>
+                      <Input
+                        type="text"
+                        value={formatNumber(projectForm.ownerPaidAmount)}
+                        onChange={(e) =>
+                          handleNumberInput(e.target.value, "ownerPaidAmount")
+                        }
+                        placeholder="20,000,000"
+                        className="h-12 bg-white text-right"
+                      />
+                      {projectForm.ownerPaidAmount && (
+                        <p className="text-green-600 text-sm font-medium">
+                          💳 المبلغ المستلم:{" "}
+                          {formatNumber(projectForm.ownerPaidAmount)} د.ع
+                        </p>
+                      )}
                     </div>
                   </div>
-                )}
+                </div>
+              </div>
+
+              {/* Real-time Financial Calculations Display */}
+              {(projectForm.area ||
+                projectForm.pricePerMeter ||
+                projectForm.realCostPerMeter) && (
+                <div className="lg:col-span-2">
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-6 rounded-xl border border-amber-200">
+                    <h3 className="text-lg font-bold text-gray-900 arabic-spacing mb-4 flex items-center">
+                      <Sparkles className="h-5 w-5 text-amber-600 ml-2 no-flip" />
+                      الحسابات المالية المباشرة
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Total Revenue */}
+                      <div className="bg-white p-4 rounded-lg border border-blue-200 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <h5 className="text-sm font-medium text-gray-600 arabic-spacing">
+                            إجمالي الإيرادات
+                          </h5>
+                          <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                        </div>
+                        <p className="text-xl font-bold text-blue-600 mb-1">
+                          {formatNumber(calculateRevenue())}
+                        </p>
+                        <p className="text-xs text-gray-500 arabic-spacing">
+                          دينار عراقي
+                        </p>
+                        {projectForm.area && projectForm.pricePerMeter && (
+                          <p className="text-xs text-blue-600 arabic-spacing mt-2">
+                            {formatNumber(projectForm.area)} ×{" "}
+                            {formatNumber(projectForm.pricePerMeter)}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Total Costs */}
+                      <div className="bg-white p-4 rounded-lg border border-red-200 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <h5 className="text-sm font-medium text-gray-600 arabic-spacing">
+                            إجمالي التكاليف
+                          </h5>
+                          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                        </div>
+                        <p className="text-xl font-bold text-red-600 mb-1">
+                          {formatNumber(calculateCosts())}
+                        </p>
+                        <p className="text-xs text-gray-500 arabic-spacing">
+                          دينار عراقي
+                        </p>
+                        {projectForm.area && projectForm.realCostPerMeter && (
+                          <p className="text-xs text-red-600 arabic-spacing mt-2">
+                            {formatNumber(projectForm.area)} ×{" "}
+                            {formatNumber(projectForm.realCostPerMeter)}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Net Profit */}
+                      <div className="bg-white p-4 rounded-lg border border-green-200 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <h5 className="text-sm font-medium text-gray-600 arabic-spacing">
+                            صافي الربح
+                          </h5>
+                          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                        </div>
+                        <p
+                          className={`text-xl font-bold mb-1 ${
+                            calculateProfit() >= 0
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {formatNumber(calculateProfit())}
+                        </p>
+                        <p className="text-xs text-gray-500 arabic-spacing">
+                          دينار عراقي
+                        </p>
+                        <p className="text-xs text-gray-600 arabic-spacing mt-2">
+                          الإيرادات - التكاليف
+                        </p>
+                      </div>
+
+                      {/* Profit Margin */}
+                      <div className="bg-white p-4 rounded-lg border border-purple-200 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <h5 className="text-sm font-medium text-gray-600 arabic-spacing">
+                            هامش الربح
+                          </h5>
+                          <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                        </div>
+                        <p
+                          className={`text-xl font-bold mb-1 ${
+                            calculateProfitMargin() >= 0
+                              ? "text-purple-600"
+                              : "text-red-600"
+                          }`}
+                        >
+                          {calculateProfitMargin().toFixed(2)}%
+                        </p>
+                        <p className="text-xs text-gray-500 arabic-spacing">
+                          نسبة مئوية
+                        </p>
+                        <p className="text-xs text-gray-600 arabic-spacing mt-2">
+                          من إجمالي الإيرادات
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Profit Analysis */}
+                    {projectForm.area &&
+                      projectForm.pricePerMeter &&
+                      projectForm.realCostPerMeter && (
+                        <div className="mt-6 p-4 bg-white rounded-lg border border-gray-200">
+                          <h4 className="text-md font-semibold text-gray-800 arabic-spacing mb-3">
+                            📊 تحليل الربحية التفصيلي
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                            <div className="text-center">
+                              <p className="text-gray-600 arabic-spacing mb-1">
+                                الربح لكل متر مربع
+                              </p>
+                              <p
+                                className={`font-bold text-lg ${
+                                  cleanNumber(projectForm.pricePerMeter) -
+                                    cleanNumber(projectForm.realCostPerMeter) >=
+                                  0
+                                    ? "text-green-600"
+                                    : "text-red-600"
+                                }`}
+                              >
+                                {formatNumber(
+                                  (
+                                    cleanNumber(projectForm.pricePerMeter) -
+                                    cleanNumber(projectForm.realCostPerMeter)
+                                  ).toString()
+                                )}{" "}
+                                د.ع
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-gray-600 arabic-spacing mb-1">
+                                نسبة التكلفة للإيرادات
+                              </p>
+                              <p className="font-bold text-lg text-blue-600">
+                                {calculateRevenue() > 0
+                                  ? (
+                                      (calculateCosts() / calculateRevenue()) *
+                                      100
+                                    ).toFixed(1)
+                                  : 0}
+                                %
+                              </p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-gray-600 arabic-spacing mb-1">
+                                العائد على الاستثمار
+                              </p>
+                              <p
+                                className={`font-bold text-lg ${
+                                  calculateCosts() > 0
+                                    ? (calculateProfit() / calculateCosts()) *
+                                        100 >=
+                                      0
+                                      ? "text-green-600"
+                                      : "text-red-600"
+                                    : "text-gray-400"
+                                }`}
+                              >
+                                {calculateCosts() > 0
+                                  ? (
+                                      (calculateProfit() / calculateCosts()) *
+                                      100
+                                    ).toFixed(1)
+                                  : 0}
+                                %
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                </div>
+              )}
 
               {/* Note about categories */}
               <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -948,24 +1139,40 @@ export default function CreateProjectPage() {
                       الميزانية المقدرة
                     </label>
                     <p className="font-medium text-green-600 text-lg">
-                      {new Intl.NumberFormat("en-US").format(
-                        Number(projectForm.budgetEstimate)
-                      )}{" "}
-                      د.ع
+                      {formatNumber(projectForm.budgetEstimate)} د.ع
                     </p>
                   </div>
 
                   {/* NEW FINANCIAL FIELDS DISPLAY */}
+                  {projectForm.area && (
+                    <div>
+                      <label className="text-sm text-gray-600 arabic-spacing">
+                        مساحة البناء الفعلية
+                      </label>
+                      <p className="font-medium text-blue-600">
+                        {formatNumber(projectForm.area)} متر مربع
+                      </p>
+                    </div>
+                  )}
+
                   {projectForm.pricePerMeter && (
                     <div>
                       <label className="text-sm text-gray-600 arabic-spacing">
-                        سعر المتر المربع
+                        سعر المتر المربع - للعميل
                       </label>
                       <p className="font-medium text-blue-600">
-                        {new Intl.NumberFormat("en-US").format(
-                          Number(projectForm.pricePerMeter)
-                        )}{" "}
-                        د.ع/م²
+                        {formatNumber(projectForm.pricePerMeter)} د.ع/م²
+                      </p>
+                    </div>
+                  )}
+
+                  {projectForm.realCostPerMeter && (
+                    <div>
+                      <label className="text-sm text-gray-600 arabic-spacing">
+                        التكلفة الفعلية للمتر المربع
+                      </label>
+                      <p className="font-medium text-red-600">
+                        {formatNumber(projectForm.realCostPerMeter)} د.ع/م²
                       </p>
                     </div>
                   )}
@@ -976,10 +1183,7 @@ export default function CreateProjectPage() {
                         سعر الصفقة مع المالك
                       </label>
                       <p className="font-medium text-purple-600 text-lg">
-                        {new Intl.NumberFormat("en-US").format(
-                          Number(projectForm.ownerDealPrice)
-                        )}{" "}
-                        د.ع
+                        {formatNumber(projectForm.ownerDealPrice)} د.ع
                       </p>
                     </div>
                   )}
@@ -990,10 +1194,7 @@ export default function CreateProjectPage() {
                         المبلغ المدفوع من المالك
                       </label>
                       <p className="font-medium text-green-600">
-                        {new Intl.NumberFormat("en-US").format(
-                          Number(projectForm.ownerPaidAmount)
-                        )}{" "}
-                        د.ع
+                        {formatNumber(projectForm.ownerPaidAmount)} د.ع
                       </p>
                     </div>
                   )}
@@ -1037,7 +1238,7 @@ export default function CreateProjectPage() {
             {/* Financial Summary Card */}
             {projectForm.area &&
               projectForm.pricePerMeter &&
-              projectForm.ownerDealPrice && (
+              projectForm.realCostPerMeter && (
                 <Card className="p-6 bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
                   <h3 className="text-xl font-bold text-gray-900 arabic-spacing mb-4 flex items-center">
                     <DollarSign className="h-6 w-6 text-green-600 ml-2 no-flip" />
@@ -1045,15 +1246,24 @@ export default function CreateProjectPage() {
                   </h3>
 
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="bg-white p-4 rounded-lg border border-green-200 text-center">
+                    <div className="bg-white p-4 rounded-lg border border-blue-200 text-center">
                       <h5 className="text-sm text-gray-600 arabic-spacing mb-2">
-                        تكلفة الإنشاء
+                        إجمالي الإيرادات
                       </h5>
                       <p className="text-xl font-bold text-blue-600">
-                        {new Intl.NumberFormat("en-US").format(
-                          Number(projectForm.area) *
-                            Number(projectForm.pricePerMeter)
-                        )}
+                        {formatNumber(calculateRevenue())}
+                      </p>
+                      <p className="text-xs text-gray-500 arabic-spacing">
+                        د.ع
+                      </p>
+                    </div>
+
+                    <div className="bg-white p-4 rounded-lg border border-red-200 text-center">
+                      <h5 className="text-sm text-gray-600 arabic-spacing mb-2">
+                        إجمالي التكاليف
+                      </h5>
+                      <p className="text-xl font-bold text-red-600">
+                        {formatNumber(calculateCosts())}
                       </p>
                       <p className="text-xs text-gray-500 arabic-spacing">
                         د.ع
@@ -1062,33 +1272,34 @@ export default function CreateProjectPage() {
 
                     <div className="bg-white p-4 rounded-lg border border-green-200 text-center">
                       <h5 className="text-sm text-gray-600 arabic-spacing mb-2">
-                        الربح المتوقع
+                        صافي الربح
                       </h5>
-                      <p className="text-xl font-bold text-green-600">
-                        {new Intl.NumberFormat("en-US").format(
-                          Number(projectForm.ownerDealPrice) -
-                            Number(projectForm.area) *
-                              Number(projectForm.pricePerMeter)
-                        )}
+                      <p
+                        className={`text-xl font-bold ${
+                          calculateProfit() >= 0
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {formatNumber(calculateProfit())}
                       </p>
                       <p className="text-xs text-gray-500 arabic-spacing">
                         د.ع
                       </p>
                     </div>
 
-                    <div className="bg-white p-4 rounded-lg border border-green-200 text-center">
+                    <div className="bg-white p-4 rounded-lg border border-purple-200 text-center">
                       <h5 className="text-sm text-gray-600 arabic-spacing mb-2">
                         هامش الربح
                       </h5>
-                      <p className="text-xl font-bold text-purple-600">
-                        {(
-                          ((Number(projectForm.ownerDealPrice) -
-                            Number(projectForm.area) *
-                              Number(projectForm.pricePerMeter)) /
-                            Number(projectForm.ownerDealPrice)) *
-                          100
-                        ).toFixed(2)}
-                        %
+                      <p
+                        className={`text-xl font-bold ${
+                          calculateProfitMargin() >= 0
+                            ? "text-purple-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {calculateProfitMargin().toFixed(2)}%
                       </p>
                     </div>
 
@@ -1098,9 +1309,7 @@ export default function CreateProjectPage() {
                           المبلغ المستلم
                         </h5>
                         <p className="text-xl font-bold text-green-600">
-                          {new Intl.NumberFormat("en-US").format(
-                            Number(projectForm.ownerPaidAmount)
-                          )}
+                          {formatNumber(projectForm.ownerPaidAmount)}
                         </p>
                         <p className="text-xs text-gray-500 arabic-spacing">
                           د.ع

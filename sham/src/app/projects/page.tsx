@@ -36,7 +36,7 @@ import { apiRequest } from "@/lib/api";
 import { useUIPermissions } from "@/hooks/useUIPermissions";
 import { FinancialDisplay } from "@/components/ui/FinancialDisplay";
 import { PermissionButton } from "@/components/ui/PermissionButton";
-import RoleBasedNavigation from "@/components/ui/RoleBasedNavigation";
+import { useResponsive } from "@/hooks/useResponsive";
 
 // Status configurations with modern colors
 const statusConfig: Record<
@@ -77,6 +77,7 @@ const statusConfig: Record<
 export default function ProjectsPage() {
   const router = useRouter();
   const { addToast } = useToast();
+  const { isMobile, isTablet } = useResponsive();
 
   // State management
   const [projects, setProjects] = useState<Project[]>([]);
@@ -201,26 +202,56 @@ export default function ProjectsPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       {/* Header Section */}
       <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
+        <div
+          className={`max-w-7xl mx-auto ${
+            isMobile ? "px-3" : "px-4 sm:px-6 lg:px-8"
+          }`}
+        >
+          <div
+            className={`flex justify-between items-center ${
+              isMobile ? "h-16" : "h-20"
+            }`}
+          >
             {/* Title and Stats */}
-            <div className="flex items-center space-x-6 space-x-reverse">
+            <div
+              className={`flex items-center ${
+                isMobile
+                  ? "space-x-3 space-x-reverse"
+                  : "space-x-6 space-x-reverse"
+              }`}
+            >
               <div className="flex items-center space-x-3 space-x-reverse">
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-3 rounded-2xl shadow-lg">
-                  <Building2 className="h-8 w-8 text-white no-flip" />
+                <div
+                  className={`bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl shadow-lg ${
+                    isMobile ? "p-2" : "p-3"
+                  }`}
+                >
+                  <Building2
+                    className={`text-white no-flip ${
+                      isMobile ? "h-6 w-6" : "h-8 w-8"
+                    }`}
+                  />
                 </div>
                 <div>
-                  <h1 className="text-3xl font-bold text-gray-900 arabic-spacing pr-4">
-                    إدارة المشاريع
+                  <h1
+                    className={`font-bold text-gray-900 arabic-spacing ${
+                      isMobile ? "text-xl pr-2" : "text-3xl pr-4"
+                    }`}
+                  >
+                    {isMobile ? "المشاريع" : "إدارة المشاريع"}
                   </h1>
-                  <p className="text-gray-600 arabic-spacing pr-4">
+                  <p
+                    className={`text-gray-600 arabic-spacing ${
+                      isMobile ? "text-sm pr-2" : "pr-4"
+                    }`}
+                  >
                     {loading ? "جاري التحميل..." : `${projects.length} مشروع`}
                   </p>
                 </div>
               </div>
 
               {/* Quick Stats */}
-              {!loading && (
+              {!loading && !isMobile && (
                 <div className="hidden lg:flex items-center space-x-6 space-x-reverse">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-green-600">
@@ -244,70 +275,99 @@ export default function ProjectsPage() {
               )}
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-center space-x-3 space-x-reverse">
-              <Button
-                variant="outline"
-                onClick={fetchProjects}
-                className="p-3"
-                disabled={loading}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 no-flip ${loading ? "animate-spin" : ""}`}
-                />
-              </Button>
+            {/* Action Buttons - Hidden on Mobile */}
+            {!isMobile && (
+              <div className="flex items-center space-x-3 space-x-reverse">
+                <Button
+                  variant="outline"
+                  onClick={fetchProjects}
+                  className="p-3"
+                  disabled={loading}
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 no-flip ${
+                      loading ? "animate-spin" : ""
+                    }`}
+                  />
+                </Button>
 
-              <PermissionButton
-                permission="canCreateProjects"
-                onClick={handleCreateProject}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 px-6 py-3 shadow-lg m-4"
-                viewOnlyTooltip="غير متاح - وضع العرض فقط"
-              >
-                <Plus className="h-5 w-5 ml-2 no-flip" />
-                <span className="arabic-spacing">مشروع جديد</span>
-              </PermissionButton>
-            </div>
+                <PermissionButton
+                  permission="canCreateProjects"
+                  onClick={handleCreateProject}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 px-6 py-3 shadow-lg m-4"
+                  viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                >
+                  <Plus className="h-5 w-5 ml-2 no-flip" />
+                  <span className="arabic-spacing">مشروع جديد</span>
+                </PermissionButton>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Role-Based Navigation Bar */}
-      <RoleBasedNavigation />
+      {/* Role-Based Navigation is now handled globally in MainLayout */}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div
+        className={`max-w-7xl mx-auto py-8 ${
+          isMobile ? "px-3" : "px-4 sm:px-6 lg:px-8"
+        }`}
+      >
         {/* Filters and Search Section */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
-          <div className="flex flex-col lg:flex-row gap-6">
+        <div
+          className={`bg-white rounded-2xl shadow-sm border border-gray-200 mb-8 ${
+            isMobile ? "p-4" : "p-6"
+          }`}
+        >
+          <div
+            className={`flex gap-6 ${
+              isMobile ? "flex-col gap-4" : "flex-col lg:flex-row"
+            }`}
+          >
             {/* Search Bar */}
             <div className="flex-1">
               <div className="relative">
-                <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5 no-flip" />
+                <Search
+                  className={`absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 no-flip ${
+                    isMobile ? "h-4 w-4" : "h-5 w-5"
+                  }`}
+                />
                 <Input
                   type="text"
-                  placeholder="البحث في المشاريع (الاسم، العميل، الموقع...)"
+                  placeholder={
+                    isMobile
+                      ? "البحث في المشاريع..."
+                      : "البحث في المشاريع (الاسم، العميل، الموقع...)"
+                  }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-12 pr-12 h-12 text-lg arabic-spacing border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+                  className={`pl-12 pr-12 arabic-spacing border-gray-300 focus:border-blue-500 focus:ring-blue-500 ${
+                    isMobile ? "h-10 text-base" : "h-12 text-lg"
+                  }`}
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery("")}
                     className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    <X className="h-5 w-5 no-flip" />
+                    <X
+                      className={`no-flip ${isMobile ? "h-4 w-4" : "h-5 w-5"}`}
+                    />
                   </button>
                 )}
               </div>
             </div>
 
             {/* Filters */}
-            <div className="flex flex-wrap gap-4">
+            <div
+              className={`flex gap-4 ${isMobile ? "flex-col" : "flex-wrap"}`}
+            >
               {/* Status Filter */}
-              <div className="min-w-[160px]">
+              <div className={isMobile ? "w-full" : "min-w-[160px]"}>
                 <Select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="h-12"
+                  className={isMobile ? "h-10" : "h-12"}
                 >
                   <option value="all">جميع الحالات</option>
                   <option value="planning">قيد التخطيط</option>
@@ -318,11 +378,11 @@ export default function ProjectsPage() {
               </div>
 
               {/* Client Filter */}
-              <div className="min-w-[160px]">
+              <div className={isMobile ? "w-full" : "min-w-[160px]"}>
                 <Select
                   value={clientFilter}
                   onChange={(e) => setClientFilter(e.target.value)}
-                  className="h-12"
+                  className={isMobile ? "h-10" : "h-12"}
                 >
                   <option value="all">جميع العملاء</option>
                   {uniqueClients.map((client) => (
@@ -334,7 +394,7 @@ export default function ProjectsPage() {
               </div>
 
               {/* Sort Options */}
-              <div className="min-w-[140px]">
+              <div className={isMobile ? "w-full" : "min-w-[140px]"}>
                 <Select
                   value={`${sortBy}-${sortOrder}`}
                   onChange={(e) => {
@@ -342,7 +402,7 @@ export default function ProjectsPage() {
                     setSortBy(sort as typeof sortBy);
                     setSortOrder(order as typeof sortOrder);
                   }}
-                  className="h-12"
+                  className={isMobile ? "h-10" : "h-12"}
                 >
                   <option value="date-desc">الأحدث أولاً</option>
                   <option value="date-asc">الأقدم أولاً</option>
@@ -353,29 +413,31 @@ export default function ProjectsPage() {
                 </Select>
               </div>
 
-              {/* View Mode Toggle */}
-              <div className="flex bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setViewMode("table")}
-                  className={`p-2 rounded-md transition-colors ${
-                    viewMode === "table"
-                      ? "bg-white text-blue-600 shadow-sm"
-                      : "text-gray-600 hover:text-gray-800"
-                  }`}
-                >
-                  <List className="h-5 w-5 no-flip" />
-                </button>
-                <button
-                  onClick={() => setViewMode("grid")}
-                  className={`p-2 rounded-md transition-colors ${
-                    viewMode === "grid"
-                      ? "bg-white text-blue-600 shadow-sm"
-                      : "text-gray-600 hover:text-gray-800"
-                  }`}
-                >
-                  <Grid3X3 className="h-5 w-5 no-flip" />
-                </button>
-              </div>
+              {/* View Mode Toggle - Hidden on Mobile */}
+              {!isMobile && (
+                <div className="flex bg-gray-100 rounded-lg p-1">
+                  <button
+                    onClick={() => setViewMode("table")}
+                    className={`p-2 rounded-md transition-colors ${
+                      viewMode === "table"
+                        ? "bg-white text-blue-600 shadow-sm"
+                        : "text-gray-600 hover:text-gray-800"
+                    }`}
+                  >
+                    <List className="h-5 w-5 no-flip" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`p-2 rounded-md transition-colors ${
+                      viewMode === "grid"
+                        ? "bg-white text-blue-600 shadow-sm"
+                        : "text-gray-600 hover:text-gray-800"
+                    }`}
+                  >
+                    <Grid3X3 className="h-5 w-5 no-flip" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -429,15 +491,25 @@ export default function ProjectsPage() {
         </div>
 
         {/* Results Summary */}
-        <div className="flex justify-between items-center mb-6">
-          <div className="text-gray-600 arabic-spacing">
+        <div
+          className={`flex justify-between items-center mb-6 ${
+            isMobile ? "flex-col space-y-2 text-center" : ""
+          }`}
+        >
+          <div
+            className={`text-gray-600 arabic-spacing ${
+              isMobile ? "text-sm" : ""
+            }`}
+          >
             {loading
               ? "جاري التحميل..."
               : `عرض ${filteredAndSortedProjects.length} من ${projects.length} مشروع`}
           </div>
-          <div className="text-sm text-gray-500">
-            آخر تحديث: {formatDate(new Date().toISOString())}
-          </div>
+          {!isMobile && (
+            <div className="text-sm text-gray-500">
+              آخر تحديث: {formatDate(new Date().toISOString())}
+            </div>
+          )}
         </div>
 
         {/* Projects Content */}
@@ -477,6 +549,11 @@ export default function ProjectsPage() {
               )}
             </div>
           </div>
+        ) : isMobile ? (
+          <MobileProjectCards
+            projects={filteredAndSortedProjects}
+            statusConfig={statusConfig}
+          />
         ) : viewMode === "table" ? (
           <ProjectsTable
             projects={filteredAndSortedProjects}
@@ -789,6 +866,90 @@ function ProjectsGrid({
                 <Edit3 className="h-4 w-4 ml-1 no-flip" />
                 <span className="arabic-spacing">تعديل</span>
               </PermissionButton>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Mobile Project Cards Component - No Action Buttons
+function MobileProjectCards({
+  projects,
+  statusConfig,
+}: {
+  projects: Project[];
+  statusConfig: Record<
+    string,
+    {
+      label: string;
+      color: string;
+      dot: string;
+      icon: React.ComponentType<any>;
+    }
+  >;
+}) {
+  return (
+    <div className="space-y-4">
+      {projects.map((project) => {
+        const status =
+          statusConfig[project.status as keyof typeof statusConfig];
+
+        return (
+          <div
+            key={project.id}
+            className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
+          >
+            {/* Mobile Card Header */}
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-4 text-white">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold arabic-spacing truncate">
+                    {project.name}
+                  </h3>
+                  <p className="text-blue-100 text-sm arabic-spacing flex items-center mt-1">
+                    <MapPin className="h-3 w-3 ml-1 no-flip" />
+                    {project.location || "غير محدد"}
+                  </p>
+                </div>
+                <div className="px-2 py-1 rounded-full text-xs font-medium bg-white/20 border-white/30 text-white">
+                  {status?.label}
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile Card Content - Minimal Details */}
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                {/* Client */}
+                <div className="flex items-center text-gray-600">
+                  <User className="h-4 w-4 ml-2 no-flip flex-shrink-0" />
+                  <span className="arabic-spacing truncate">
+                    {project.client || "غير محدد"}
+                  </span>
+                </div>
+
+                {/* Budget */}
+                <div className="flex items-center text-gray-600">
+                  <DollarSign className="h-4 w-4 ml-2 no-flip flex-shrink-0" />
+                  <span className="font-semibold truncate">
+                    <FinancialDisplay
+                      value={
+                        project.budgetEstimate || project.budget_estimate || 0
+                      }
+                    />
+                  </span>
+                </div>
+
+                {/* Date */}
+                <div className="flex items-center text-gray-500 col-span-2">
+                  <Calendar className="h-4 w-4 ml-2 no-flip flex-shrink-0" />
+                  <span className="text-xs">
+                    {formatDate(project.created_at || project.createdAt || "")}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         );

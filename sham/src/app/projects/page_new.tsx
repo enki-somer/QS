@@ -459,7 +459,17 @@ export default function ProjectsPage() {
             onViewProject={handleViewProject}
             onEditProject={handleEditProject}
             getProjectStatusInfo={getProjectStatusInfo}
-            statusConfig={statusConfig}
+            statusConfig={
+              statusConfig as unknown as Record<
+                string,
+                {
+                  label: string;
+                  color: string;
+                  bg: string;
+                  icon: React.ElementType;
+                }
+              >
+            }
           />
         ) : (
           <ProjectsGrid
@@ -467,7 +477,17 @@ export default function ProjectsPage() {
             onViewProject={handleViewProject}
             onEditProject={handleEditProject}
             getProjectStatusInfo={getProjectStatusInfo}
-            statusConfig={statusConfig}
+            statusConfig={
+              statusConfig as unknown as Record<
+                string,
+                {
+                  label: string;
+                  color: string;
+                  bg: string;
+                  icon: React.ElementType;
+                }
+              >
+            }
           />
         )}
       </div>
@@ -481,7 +501,7 @@ function ProjectsTable({
   onViewProject,
   onEditProject,
   getProjectStatusInfo,
-  statusConfig,
+  statusConfig: statusConfig,
 }: {
   projects: Project[];
   onViewProject: (project: Project) => void;
@@ -491,7 +511,15 @@ function ProjectsTable({
     completion: number;
     canEdit: boolean;
   };
-  statusConfig: typeof statusConfig;
+  statusConfig: Record<
+    string,
+    {
+      label: string;
+      color: string;
+      bg: string;
+      icon: React.ElementType;
+    }
+  >;
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
@@ -561,7 +589,7 @@ function ProjectsTable({
                       className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${status?.color}`}
                     >
                       <span
-                        className={`w-2 h-2 rounded-full ml-2 ${status?.dot}`}
+                        className={`w-2 h-2 rounded-full ml-2 ${status?.bg}`}
                       ></span>
                       {status?.label}
                     </span>
@@ -633,7 +661,7 @@ function ProjectsGrid({
   onViewProject,
   onEditProject,
   getProjectStatusInfo,
-  statusConfig,
+  statusConfig: statusConfig,
 }: {
   projects: Project[];
   onViewProject: (project: Project) => void;
@@ -643,7 +671,15 @@ function ProjectsGrid({
     completion: number;
     canEdit: boolean;
   };
-  statusConfig: typeof statusConfig;
+  statusConfig: Record<
+    string,
+    {
+      label: string;
+      color: string;
+      bg: string;
+      icon: React.ElementType;
+    }
+  >;
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

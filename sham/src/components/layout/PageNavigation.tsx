@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useResponsive } from "@/hooks/useResponsive";
 
 const navigationItems = [
   {
@@ -67,6 +68,7 @@ interface PageNavigationProps {
 export default function PageNavigation({ currentPage }: PageNavigationProps) {
   const pathname = usePathname();
   const { user, hasPermission, isLoading, permissions } = useAuth();
+  const { isMobile } = useResponsive();
 
   // Filter navigation items based on user permissions
   const getVisibleItems = () => {
@@ -95,10 +97,18 @@ export default function PageNavigation({ currentPage }: PageNavigationProps) {
     });
   };
 
-  const visibleItems = getVisibleItems();
+  let visibleItems = getVisibleItems();
 
-  // Don't render navigation if no items are visible
-  if (visibleItems.length === 0) {
+  // Filter out general expenses and reports pages on mobile
+  if (isMobile) {
+    visibleItems = visibleItems.filter(
+      (item) =>
+        item.href !== "/general-expenses" && item.href !== "/financial-reports"
+    );
+  }
+
+  // Don't render navigation if no items are visible or on mobile (use hamburger menu instead)
+  if (visibleItems.length === 0 || isMobile) {
     return null;
   }
 

@@ -59,12 +59,15 @@ export interface Project {
   updated_at: Date;
   
   // NEW FINANCIAL FIELDS
-  price_per_meter?: number;    // Price per square meter for construction calculation
-  owner_deal_price?: number;   // Total deal price agreed with project owner
-  owner_paid_amount?: number;  // Amount paid by owner so far (updated from safe transactions)
-  construction_cost?: number;  // Calculated: area * price_per_meter
-  profit_margin?: number;      // Calculated: (owner_deal_price - construction_cost) / owner_deal_price * 100
-  total_site_area?: number;    // Total area of the site (for comparison with construction area)
+  price_per_meter?: number;      // Deal price per square meter (what we charge client)
+  real_cost_per_meter?: number;  // Actual cost per square meter (our expenses)
+  owner_deal_price?: number;     // Total deal price agreed with project owner
+  owner_paid_amount?: number;    // Amount paid by owner so far (updated from safe transactions)
+  construction_cost?: number;    // Calculated: area * price_per_meter (revenue)
+  real_construction_cost?: number; // Calculated: area * real_cost_per_meter (our costs)
+  gross_profit?: number;         // Calculated: construction_cost - real_construction_cost
+  profit_margin?: number;        // Calculated: (price_per_meter - real_cost_per_meter) / price_per_meter * 100
+  total_site_area?: number;      // Total area of the site (for comparison with construction area)
 }
 
 // Invoice entity
@@ -178,18 +181,30 @@ export interface ProjectCategory {
 export interface Employee {
   id: string;
   name: string;
-  role?: string;
+  position?: string;
+  department?: string;
+  phone?: string;
+  mobile_number?: string;
+  age?: number;
+  hire_date?: Date;
+  salary?: number;
+  monthly_salary?: number;
   status: EmployeeStatus;
-  base_salary: number;
-  daily_bonus: number;
-  overtime_pay: number;
-  deductions: number;
-  join_date: Date;
   assigned_project_id?: string;
+  last_payment_date?: Date;
+  payment_status?: string;
   notes?: string;
   created_by?: string;
   created_at: Date;
   updated_at: Date;
+  
+  // Legacy fields for backward compatibility
+  role?: string;
+  base_salary?: number;
+  daily_bonus?: number;
+  overtime_pay?: number;
+  deductions?: number;
+  join_date?: Date;
 }
 
 // General expense entity
@@ -379,7 +394,8 @@ export interface CreateProjectData {
   notes?: string;
   
   // NEW FINANCIAL FIELDS
-  price_per_meter?: number;
+  price_per_meter?: number;      // Deal price per square meter (what we charge client)
+  real_cost_per_meter?: number;  // Actual cost per square meter (our expenses)
   owner_deal_price?: number;
   owner_paid_amount?: number;
 }
@@ -408,14 +424,34 @@ export interface CreateContractorData {
 
 export interface CreateEmployeeData {
   name: string;
-  role?: string;
-  base_salary: number;
-  daily_bonus?: number;
-  overtime_pay?: number;
-  deductions?: number;
-  join_date: Date;
+  position?: string;
+  department?: string;
+  mobile_number?: string;
+  age?: number;
+  monthly_salary?: number;
+  status?: EmployeeStatus;
   assigned_project_id?: string;
   notes?: string;
+}
+
+export interface UpdateEmployeeData {
+  name?: string;
+  position?: string;
+  department?: string;
+  mobile_number?: string;
+  age?: number;
+  monthly_salary?: number;
+  status?: EmployeeStatus;
+  assigned_project_id?: string;
+  notes?: string;
+}
+
+export interface SalaryPaymentData {
+  amount: number;
+  payment_type: 'full' | 'installment';
+  installment_amount?: number;
+  reason?: string;
+  is_full_payment: boolean;
 }
 
 export interface CreateExpenseData {

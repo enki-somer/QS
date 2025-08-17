@@ -210,7 +210,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   const isDataEntry = (): boolean => {
-    return user?.role === "data_entry";
+    return user?.role === "data_entry" || user?.role === "dataentry";
   };
 
   const isAuthenticated = !!user && !!getAuthToken();

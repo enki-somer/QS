@@ -2008,7 +2008,7 @@ export default function ProjectDetailClient() {
                       )}
 
                       {/* Safe Funding Integration Placeholder */}
-                      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      {/* <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                         <div className="flex items-center space-x-2 space-x-reverse">
                           <AlertCircle className="h-5 w-5 text-blue-600 no-flip" />
                           <p className="text-sm text-blue-800 font-medium arabic-spacing">
@@ -2020,6 +2020,7 @@ export default function ProjectDetailClient() {
                           الدفعات والتحويلات من وإلى المشروع
                         </p>
                       </div>
+                      */}
                     </div>
                   )}
 
