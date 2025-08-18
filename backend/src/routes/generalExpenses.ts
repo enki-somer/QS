@@ -108,6 +108,32 @@ router.get('/project/:projectId', async (req, res) => {
 });
 
 /**
+ * GET /api/general-expenses
+ * Get all general expenses across all projects
+ */
+router.get('/', async (req, res) => {
+  try {
+    console.log('GET /api/general-expenses - Getting all expenses');
+
+    const expenses = await generalExpenseService.getAllGeneralExpenses();
+
+    res.json({
+      success: true,
+      expenses,
+      count: expenses.length
+    });
+
+  } catch (error: any) {
+    console.error('Error fetching all general expenses:', error);
+    res.status(500).json({
+      error: 'Failed to fetch general expenses',
+      userMessage: 'فشل في جلب المصروفات',
+      details: error.message
+    });
+  }
+});
+
+/**
  * GET /api/general-expenses/pending-count
  * Get count of all pending project expenses (for notifications)
  */

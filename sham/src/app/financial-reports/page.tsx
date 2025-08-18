@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Activity,
   Target,
+  AlertTriangle,
   PieChart,
   LineChart,
   AreaChart,
@@ -95,6 +96,25 @@ interface ProjectPerformanceData {
   spent: number;
   remaining: number;
   completion: number;
+  completionPercentage: number;
+  estimatedCompletion: string;
+  daysRemaining: number;
+  status: "on_track" | "delayed" | "ahead" | "completed";
+}
+
+interface BudgetVarianceData {
+  projectName: string;
+  budgetEstimate: number;
+  actualSpent: number;
+  variance: number;
+  variancePercentage: number;
+  status: "under_budget" | "over_budget" | "on_budget";
+  categoryBreakdown: {
+    category: string;
+    budgeted: number;
+    actual: number;
+    variance: number;
+  }[];
 }
 
 // Chart color palette
@@ -133,6 +153,9 @@ export default function FinancialReportsPage() {
   const [expenseBreakdown, setExpenseBreakdown] = useState<ChartDataPoint[]>(
     []
   );
+  const [fundingSourcesData, setFundingSourcesData] = useState<
+    ChartDataPoint[]
+  >([]);
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [projectPerformance, setProjectPerformance] = useState<
     ProjectPerformanceData[]
@@ -141,6 +164,12 @@ export default function FinancialReportsPage() {
     []
   );
   const [monthlyComparison, setMonthlyComparison] = useState<any[]>([]);
+  const [budgetVarianceData, setBudgetVarianceData] = useState<
+    BudgetVarianceData[]
+  >([]);
+  const [costBreakdownData, setCostBreakdownData] = useState<ChartDataPoint[]>(
+    []
+  );
 
   const { safeState } = useSafe();
   const { hasPermission, user, isAuthenticated } = useAuth();
@@ -198,17 +227,22 @@ export default function FinancialReportsPage() {
   const fetchGeneralExpensesData = async () => {
     try {
       console.log("💰 Fetching general expenses from API...");
+      // Get all general expenses from the new endpoint
       const response = await apiRequest("/general-expenses");
       if (response.ok) {
         const data = await response.json();
         console.log("✅ Expenses API success:", data.expenses?.length || 0);
-        return data.expenses || [];
+        console.log("📊 Sample expense data:", data.expenses?.[0]);
+        return Array.isArray(data.expenses) ? data.expenses : [];
       }
       throw new Error("API failed");
     } catch (error) {
       console.warn("⚠️ Expenses API failed, using localStorage:", error);
       const stored = localStorage.getItem("generalExpenses");
-      return stored ? JSON.parse(stored) : [];
+      const parsedData = stored ? JSON.parse(stored) : [];
+      console.log("📦 LocalStorage expenses data:", parsedData);
+      console.log("📊 Sample localStorage expense:", parsedData[0]);
+      return parsedData;
     }
   };
 
@@ -220,9 +254,9 @@ export default function FinancialReportsPage() {
         const data = await response.json();
         console.log(
           "✅ Category invoices API success:",
-          Array.isArray(data) ? data.length : 0
+          data.invoices?.length || 0
         );
-        return Array.isArray(data) ? data : [];
+        return Array.isArray(data.invoices) ? data.invoices : [];
       }
       throw new Error("API failed");
     } catch (error) {
@@ -326,7 +360,7 @@ export default function FinancialReportsPage() {
               0
             ),
             totalGeneralExpenses: expensesData.reduce(
-              (sum: number, exp: any) => sum + (exp.amount || exp.cost || 0),
+              (sum: number, exp: any) => sum + parseFloat(exp.cost || 0),
               0
             ),
             netCashFlow: safeState.currentBalance,
@@ -342,7 +376,8 @@ export default function FinancialReportsPage() {
             employeesData,
             expensesData,
             categoryInvoicesData,
-            summary
+            summary,
+            { factory: 0, rental: 0, contracts: 0, general: 0, project: 0 } // Empty funding sources for localStorage fallback
           );
           return;
         }
@@ -375,69 +410,164 @@ export default function FinancialReportsPage() {
           (p: any) => p.status === "completed"
         ).length;
 
+        // 🏗️ CONSTRUCTION BUSINESS MODEL CALCULATIONS
+
+        // 1. SAFE FUNDING SOURCES (Revenue to Safe)
+        const fundingSources = {
+          factory: 0,
+          rental: 0,
+          contracts: 0,
+          general: 0,
+          project: 0,
+        };
+
+        // Analyze safe transactions to categorize funding sources
+        safeState.transactions
+          .filter((transaction: any) => transaction.type === "funding")
+          .forEach((transaction: any) => {
+            const amount = parseFloat(transaction.amount || 0);
+            const description = transaction.description?.toLowerCase() || "";
+
+            // Categorize based on description keywords
+            if (
+              description.includes("مصنع") ||
+              description.includes("factory")
+            ) {
+              fundingSources.factory += amount;
+            } else if (
+              description.includes("إيجار") ||
+              description.includes("rent")
+            ) {
+              fundingSources.rental += amount;
+            } else if (
+              description.includes("عقد") ||
+              description.includes("contract")
+            ) {
+              fundingSources.contracts += amount;
+            } else if (
+              description.includes("مشروع") ||
+              description.includes("project") ||
+              transaction.projectId
+            ) {
+              fundingSources.project += amount;
+            } else {
+              fundingSources.general += amount;
+            }
+          });
+
+        const totalSafeFunding = Object.values(fundingSources).reduce(
+          (sum, amount) => sum + amount,
+          0
+        );
+
+        // 2. PROJECT REVENUE (What clients pay us)
+        const totalProjectRevenue = projectsData.reduce(
+          (sum: number, project: any) => {
+            // Revenue = area * price_per_meter (what we charge client)
+            const area = parseFloat(project.area || 0);
+            const pricePerMeter = parseFloat(project.price_per_meter || 0);
+            const revenue = area * pricePerMeter;
+            return sum + revenue;
+          },
+          0
+        );
+
+        // 3. PROJECT COSTS (What projects actually cost us)
+        const totalProjectCosts = projectsData.reduce(
+          (sum: number, project: any) => {
+            // Real construction cost = area * real_cost_per_meter
+            const area = parseFloat(project.area || 0);
+            const realCostPerMeter = parseFloat(
+              project.real_cost_per_meter || 0
+            );
+            const realCost = area * realCostPerMeter;
+            return sum + realCost;
+          },
+          0
+        );
+
+        // 4. ACTUAL SPENDING ON PROJECTS (Invoices + Assignments)
+        const totalProjectSpending = projectsData.reduce(
+          (sum: number, project: any) => {
+            // Assignment spending (contractor payments)
+            const assignmentSpending =
+              project.categoryAssignments?.reduce(
+                (assignmentSum: number, assignment: any) => {
+                  return (
+                    assignmentSum + parseFloat(assignment.actual_amount || 0)
+                  );
+                },
+                0
+              ) || 0;
+
+            // Project-specific expenses (from general_expenses table where project_id matches)
+            const projectExpenses = expensesData
+              .filter((exp: any) => exp.project_id === project.id)
+              .reduce((expSum: number, exp: any) => {
+                return expSum + parseFloat(exp.cost || 0);
+              }, 0);
+
+            return sum + assignmentSpending + projectExpenses;
+          },
+          0
+        );
+
+        // 5. ESTIMATED PROJECT BUDGETS
         const totalProjectBudgets = projectsData.reduce(
           (sum: number, p: any) => sum + parseFloat(p.budget_estimate || 0),
           0
         );
 
-        // Calculate REAL revenue using construction business model
-        // Revenue = area * price_per_meter (stored as construction_cost)
-        const totalConstructionRevenue = projectsData.reduce(
-          (sum: number, project: any) => {
-            return sum + parseFloat(project.construction_cost || 0);
-          },
-          0
-        );
+        // 6. EMPLOYEE SALARIES (Cut directly from safe balance)
+        const totalEmployeeSalaries = employeesData
+          .filter((emp: any) => emp.status === "active")
+          .reduce((sum: number, emp: any) => {
+            return sum + parseFloat(emp.monthly_salary || emp.salary || 0);
+          }, 0);
 
-        // Calculate REAL project costs using construction business model
-        // Project Costs = area * real_cost_per_meter (stored as real_construction_cost)
-        const totalConstructionCosts = projectsData.reduce(
-          (sum: number, project: any) => {
-            return sum + parseFloat(project.real_construction_cost || 0);
-          },
-          0
-        );
+        // 7. GENERAL EXPENSES (Independent, cut directly from safe balance)
 
-        // Calculate contractor payments (actual invoices paid)
-        const totalContractorPayments = projectsData.reduce(
-          (sum: number, project: any) => {
-            const contractorCosts =
-              project.categoryAssignments?.reduce(
-                (assignmentSum: number, assignment: any) => {
-                  return assignmentSum + (assignment.actual_amount || 0);
-                },
-                0
-              ) || 0;
-            return sum + contractorCosts;
-          },
-          0
-        );
+        const totalGeneralExpenses = expensesData
+          .filter((exp: any) => !exp.project_id) // Only expenses NOT tied to projects
+          .reduce((sum: number, exp: any) => {
+            const cost = parseFloat(exp.cost || 0);
+            // Safeguard against extremely large values (over 100 million)
+            if (cost > 100000000) {
+              console.warn(
+                `⚠️ Suspiciously large expense detected: ${exp.expense_name} - ${cost}`
+              );
+              return sum; // Skip this expense
+            }
+            console.log(
+              `💰 General Expense: ${exp.expense_name} - Cost: ${cost}`
+            );
+            return sum + cost;
+          }, 0);
+
+        // 8. CALCULATE PROFITS AND MARGINS
+        const grossProjectProfit = totalProjectRevenue - totalProjectCosts; // Smart profit calculation
+        const netProfit =
+          totalSafeFunding -
+          totalEmployeeSalaries -
+          totalGeneralExpenses -
+          totalProjectSpending; // What's left after all expenses
 
         console.log("🏗️ Construction Business Model Analysis:", {
-          constructionRevenue: totalConstructionRevenue, // area * price_per_meter
-          constructionCosts: totalConstructionCosts, // area * real_cost_per_meter
-          contractorPayments: totalContractorPayments, // actual invoices paid
-          grossProfitFromPricing:
-            totalConstructionRevenue - totalConstructionCosts,
-          revenueFormula: "area * price_per_meter",
-          costFormula: "area * real_cost_per_meter",
+          safeFunding: totalSafeFunding,
+          fundingSources: fundingSources,
+          projectRevenue: totalProjectRevenue,
+          projectCosts: totalProjectCosts,
+          projectSpending: totalProjectSpending,
+          employeeSalaries: totalEmployeeSalaries,
+          generalExpenses: totalGeneralExpenses,
+          grossProjectProfit: grossProjectProfit,
+          netProfit: netProfit,
+          profitMargin:
+            totalProjectRevenue > 0
+              ? ((grossProjectProfit / totalProjectRevenue) * 100).toFixed(2) +
+                "%"
+              : "0%",
         });
-
-        const totalEmployeeSalaries = employeesData.reduce(
-          (sum: number, emp: any) => {
-            // Only count active employees
-            if (emp.status === "active") {
-              return sum + parseFloat(emp.monthly_salary || emp.salary || 0);
-            }
-            return sum;
-          },
-          0
-        );
-
-        const totalGeneralExpenses = expensesData.reduce(
-          (sum: number, exp: any) => sum + (exp.amount || exp.cost || 0),
-          0
-        );
 
         // Calculate pending invoices from category invoices
         const pendingInvoices = categoryInvoicesData.filter(
@@ -462,26 +592,15 @@ export default function FinancialReportsPage() {
           projectPendingInvoices
         );
 
-        // Calculate total costs using construction business model
-        // Total Costs = Construction Costs + Employee Salaries + General Expenses + Contractor Payments
-        const totalCosts =
-          totalConstructionCosts +
-          totalEmployeeSalaries +
-          totalGeneralExpenses +
-          totalContractorPayments;
-        const netProfit = totalConstructionRevenue - totalCosts;
-
-        // Calculate gross profit from pricing (before operational costs)
-        const grossProfitFromPricing =
-          totalConstructionRevenue - totalConstructionCosts;
+        // Summary calculations are already done above
 
         const summary: ReportSummary = {
-          safeBalance: safeState.currentBalance,
-          totalProjectBudgets,
-          totalInvoicesAmount: totalConstructionRevenue, // Construction revenue (area * price_per_meter)
-          totalEmployeeSalaries,
-          totalGeneralExpenses,
-          netCashFlow: netProfit, // Net profit after all costs
+          safeBalance: safeState.currentBalance, // Current safe balance
+          totalProjectBudgets, // Estimated project budgets
+          totalInvoicesAmount: totalProjectRevenue, // What clients pay us (area * price_per_meter)
+          totalEmployeeSalaries, // Monthly salaries (cut from safe)
+          totalGeneralExpenses, // General expenses (cut from safe, not project-specific)
+          netCashFlow: netProfit, // Net profit after all expenses
           activeProjects,
           completedProjects,
           totalEmployees: employeesData.filter(
@@ -491,30 +610,18 @@ export default function FinancialReportsPage() {
         };
 
         console.log("🏗️ Construction Business Model Financial Summary:", {
-          constructionRevenue: totalConstructionRevenue, // area * price_per_meter
-          constructionCosts: totalConstructionCosts, // area * real_cost_per_meter
-          grossProfitFromPricing: grossProfitFromPricing, // Revenue - Construction Costs
-          contractorPayments: totalContractorPayments, // Actual invoices paid
+          projectRevenue: totalProjectRevenue, // area * price_per_meter (what clients pay)
+          projectCosts: totalProjectCosts, // area * real_cost_per_meter (what it costs us)
+          projectSpending: totalProjectSpending, // actual spending on projects (invoices + assignments)
+          grossProjectProfit: grossProjectProfit, // Revenue - Real Costs
           employeeSalaries: totalEmployeeSalaries,
           generalExpenses: totalGeneralExpenses,
-          totalCosts: totalCosts,
           netProfit: netProfit,
           profitMargin:
-            totalConstructionRevenue > 0
-              ? ((netProfit / totalConstructionRevenue) * 100).toFixed(2) + "%"
+            totalProjectRevenue > 0
+              ? ((grossProjectProfit / totalProjectRevenue) * 100).toFixed(2) +
+                "%"
               : "0%",
-          grossProfitMargin:
-            totalConstructionRevenue > 0
-              ? (
-                  (grossProfitFromPricing / totalConstructionRevenue) *
-                  100
-                ).toFixed(2) + "%"
-              : "0%",
-          activeProjects,
-          totalEmployees: employeesData.filter(
-            (emp: any) => emp.status === "active"
-          ).length,
-          safeBalance: safeState.currentBalance,
         });
 
         setReportSummary(summary);
@@ -525,7 +632,8 @@ export default function FinancialReportsPage() {
           employeesData,
           expensesData,
           categoryInvoicesData,
-          summary
+          summary,
+          fundingSources
         );
       } catch (error) {
         console.error("Error loading report data:", error);
@@ -539,7 +647,8 @@ export default function FinancialReportsPage() {
       employeesData: any[],
       expensesData: any[],
       categoryInvoicesData: any[],
-      summary: ReportSummary
+      summary: ReportSummary,
+      fundingSources: any
     ) => {
       // 1. Expense Breakdown Pie Chart
       const expenseCategories = new Map<string, number>();
@@ -606,7 +715,38 @@ export default function FinancialReportsPage() {
 
       setExpenseBreakdown(expenseChartData);
 
-      // 2. Revenue vs Expenses Trend (from SAFE transactions)
+      // 2. Funding Sources Breakdown
+      const fundingChartData: ChartDataPoint[] = [
+        {
+          name: "إيرادات المصنع",
+          value: fundingSources.factory,
+          label: formatCurrency(fundingSources.factory),
+        },
+        {
+          name: "إيرادات الإيجارات",
+          value: fundingSources.rental,
+          label: formatCurrency(fundingSources.rental),
+        },
+        {
+          name: "عقود المشاريع",
+          value: fundingSources.contracts,
+          label: formatCurrency(fundingSources.contracts),
+        },
+        {
+          name: "دفعات المشاريع",
+          value: fundingSources.project,
+          label: formatCurrency(fundingSources.project),
+        },
+        {
+          name: "تمويل عام",
+          value: fundingSources.general,
+          label: formatCurrency(fundingSources.general),
+        },
+      ].filter((item) => item.value > 0); // Only show sources with funding
+
+      setFundingSourcesData(fundingChartData);
+
+      // 3. Revenue vs Expenses Trend (from SAFE transactions)
       const monthlyMap = new Map<
         string,
         { revenue: number; expenses: number; balance: number }
@@ -669,6 +809,55 @@ export default function FinancialReportsPage() {
           const completion =
             budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
 
+          // Calculate project progress based on dates and spending
+          const startDate = project.start_date
+            ? new Date(project.start_date)
+            : new Date();
+          const endDate = project.end_date
+            ? new Date(project.end_date)
+            : new Date(Date.now() + 90 * 24 * 60 * 60 * 1000); // Default 90 days
+          const currentDate = new Date();
+
+          const totalDuration = endDate.getTime() - startDate.getTime();
+          const elapsedTime = currentDate.getTime() - startDate.getTime();
+          const timeProgress =
+            totalDuration > 0
+              ? Math.min((elapsedTime / totalDuration) * 100, 100)
+              : 0;
+
+          // Calculate completion percentage (average of budget completion and time progress)
+          const completionPercentage =
+            project.status === "completed"
+              ? 100
+              : Math.min((completion + timeProgress) / 2, 100);
+
+          // Calculate days remaining
+          const daysRemaining = Math.max(
+            0,
+            Math.ceil(
+              (endDate.getTime() - currentDate.getTime()) /
+                (24 * 60 * 60 * 1000)
+            )
+          );
+
+          // Determine project status
+          let status: "on_track" | "delayed" | "ahead" | "completed" =
+            "on_track";
+          if (project.status === "completed") {
+            status = "completed";
+          } else if (completion > timeProgress + 10) {
+            status = "ahead";
+          } else if (timeProgress > completion + 15) {
+            status = "delayed";
+          }
+
+          // Estimate completion date based on current progress
+          const progressRate = elapsedTime > 0 ? completion / timeProgress : 1;
+          const estimatedDuration = totalDuration / Math.max(progressRate, 0.1);
+          const estimatedCompletion = new Date(
+            startDate.getTime() + estimatedDuration
+          ).toLocaleDateString("ar-IQ");
+
           return {
             name:
               project.name.length > 15
@@ -678,6 +867,10 @@ export default function FinancialReportsPage() {
             spent,
             remaining,
             completion,
+            completionPercentage,
+            estimatedCompletion,
+            daysRemaining,
+            status,
           };
         })
         .filter((p) => p.budget > 0) // Only show projects with budgets
@@ -686,7 +879,102 @@ export default function FinancialReportsPage() {
 
       setProjectPerformance(projectPerfData);
 
-      // 4. Revenue by Project (construction revenue: area * price_per_meter)
+      // 4. Budget Variance Analysis
+      const budgetVarianceAnalysis: BudgetVarianceData[] = projectsData
+        .filter((p) => p.budget_estimate && parseFloat(p.budget_estimate) > 0)
+        .map((project) => {
+          const budgetEstimate = parseFloat(project.budget_estimate || 0);
+          const actualSpent = parseFloat(project.spent_budget || 0);
+          const variance = budgetEstimate - actualSpent;
+          const variancePercentage =
+            budgetEstimate > 0 ? (variance / budgetEstimate) * 100 : 0;
+
+          let status: "under_budget" | "over_budget" | "on_budget" =
+            "on_budget";
+          if (Math.abs(variancePercentage) <= 5) {
+            status = "on_budget";
+          } else if (variancePercentage > 0) {
+            status = "under_budget";
+          } else {
+            status = "over_budget";
+          }
+
+          // Calculate category breakdown from assignments
+          const categoryBreakdown = (project.categoryAssignments || []).map(
+            (assignment: any) => ({
+              category: `${assignment.main_category} - ${assignment.subcategory}`,
+              budgeted: parseFloat(assignment.estimated_amount || 0),
+              actual: parseFloat(assignment.actual_amount || 0),
+              variance:
+                parseFloat(assignment.estimated_amount || 0) -
+                parseFloat(assignment.actual_amount || 0),
+            })
+          );
+
+          return {
+            projectName: project.name,
+            budgetEstimate,
+            actualSpent,
+            variance,
+            variancePercentage,
+            status,
+            categoryBreakdown,
+          };
+        })
+        .sort(
+          (a, b) =>
+            Math.abs(b.variancePercentage) - Math.abs(a.variancePercentage)
+        )
+        .slice(0, 10); // Top 10 projects by variance
+
+      setBudgetVarianceData(budgetVarianceAnalysis);
+
+      // 5. Cost Breakdown Analysis by Category
+      const categorySpendingMap = new Map<string, number>();
+
+      // Aggregate spending from category assignments
+      projectsData.forEach((project) => {
+        (project.categoryAssignments || []).forEach((assignment: any) => {
+          const category = assignment.main_category || "غير محدد";
+          const amount = parseFloat(assignment.actual_amount || 0);
+          const existing = categorySpendingMap.get(category) || 0;
+          categorySpendingMap.set(category, existing + amount);
+        });
+      });
+
+      // Add general expenses by category
+      expensesData.forEach((expense: any) => {
+        const category = expense.category || "مصروفات عامة";
+        const amount = parseFloat(expense.cost || expense.amount || 0);
+        const existing = categorySpendingMap.get(category) || 0;
+        categorySpendingMap.set(category, existing + amount);
+      });
+
+      const costBreakdownData = Array.from(categorySpendingMap.entries())
+        .map(([category, amount]) => ({
+          name: category,
+          value: amount,
+          label: formatCurrency(amount),
+          percentage: 0, // Will be calculated after sorting
+        }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 8); // Top 8 categories
+
+      // Calculate percentages
+      const totalCategorySpending = costBreakdownData.reduce(
+        (sum, item) => sum + item.value,
+        0
+      );
+      costBreakdownData.forEach((item) => {
+        item.percentage =
+          totalCategorySpending > 0
+            ? (item.value / totalCategorySpending) * 100
+            : 0;
+      });
+
+      setCostBreakdownData(costBreakdownData);
+
+      // 6. Revenue by Project (construction revenue: area * price_per_meter)
       const revenueChartData: ChartDataPoint[] = projectsData
         .map((project, index) => {
           const revenue = parseFloat(project.construction_cost || 0);
@@ -807,6 +1095,15 @@ export default function FinancialReportsPage() {
   const refreshData = () => {
     setIsLoading(true);
     window.location.reload();
+  };
+
+  const clearCachedData = () => {
+    console.log("🗑️ Clearing cached data...");
+    localStorage.removeItem("generalExpenses");
+    localStorage.removeItem("projects");
+    localStorage.removeItem("employees");
+    localStorage.removeItem("categoryInvoices");
+    refreshData();
   };
 
   // Comprehensive Excel Export Function
@@ -1189,6 +1486,14 @@ export default function FinancialReportsPage() {
             <Printer className="h-4 w-4 ml-2 no-flip" />
             <span className="arabic-spacing">طباعة</span>
           </Button>
+          <Button
+            variant="outline"
+            onClick={clearCachedData}
+            className="bg-yellow-50 hover:bg-yellow-100 border-yellow-200 text-yellow-700"
+          >
+            <RefreshCw className="h-4 w-4 ml-2 no-flip" />
+            <span className="arabic-spacing">مسح البيانات المؤقتة</span>
+          </Button>
         </div>
       </div>
 
@@ -1457,9 +1762,130 @@ export default function FinancialReportsPage() {
                   : "0%"}
               </p>
             </div>
+
+            <div className="text-center p-4 bg-orange-50 rounded-lg">
+              <p className="text-sm text-gray-600 arabic-spacing mb-2">
+                متوسط نسبة الإنجاز
+              </p>
+              <p className="text-2xl font-bold text-orange-600 arabic-nums">
+                {projectPerformance.length > 0
+                  ? `${(
+                      projectPerformance.reduce(
+                        (sum, p) => sum + p.completionPercentage,
+                        0
+                      ) / projectPerformance.length
+                    ).toFixed(1)}%`
+                  : "0%"}
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Performance Alerts Section */}
+      {(budgetVarianceData.filter((p) => p.status === "over_budget").length >
+        0 ||
+        projectPerformance.filter((p) => p.status === "delayed").length >
+          0) && (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="arabic-spacing flex items-center text-red-700">
+              <AlertTriangle className="h-5 w-5 ml-2 no-flip" />
+              تنبيهات الأداء
+            </CardTitle>
+            <CardDescription className="arabic-spacing text-red-600">
+              مشاريع تحتاج إلى انتباه فوري
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Over Budget Projects */}
+              {budgetVarianceData.filter((p) => p.status === "over_budget")
+                .length > 0 && (
+                <div className="p-4 bg-white rounded-lg border border-red-200">
+                  <h4 className="font-semibold text-red-700 arabic-spacing mb-3">
+                    🚨 مشاريع تجاوزت الميزانية
+                  </h4>
+                  <div className="space-y-2">
+                    {budgetVarianceData
+                      .filter((p) => p.status === "over_budget")
+                      .slice(0, 3)
+                      .map((project, index) => (
+                        <div
+                          key={index}
+                          className="flex justify-between items-center p-2 bg-red-50 rounded"
+                        >
+                          <span className="font-medium arabic-spacing">
+                            {project.projectName}
+                          </span>
+                          <span className="text-red-600 font-bold arabic-nums">
+                            {project.variancePercentage.toFixed(1)}% تجاوز
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Delayed Projects */}
+              {projectPerformance.filter((p) => p.status === "delayed").length >
+                0 && (
+                <div className="p-4 bg-white rounded-lg border border-orange-200">
+                  <h4 className="font-semibold text-orange-700 arabic-spacing mb-3">
+                    ⏰ مشاريع متأخرة عن الجدول الزمني
+                  </h4>
+                  <div className="space-y-2">
+                    {projectPerformance
+                      .filter((p) => p.status === "delayed")
+                      .slice(0, 3)
+                      .map((project, index) => (
+                        <div
+                          key={index}
+                          className="flex justify-between items-center p-2 bg-orange-50 rounded"
+                        >
+                          <span className="font-medium arabic-spacing text-black">
+                            {project.name}
+                          </span>
+                          <span className="text-orange-600 font-bold arabic-nums">
+                            {project.daysRemaining} يوم متبقي
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Projects Ahead of Schedule */}
+              {projectPerformance.filter((p) => p.status === "ahead").length >
+                0 && (
+                <div className="p-4 bg-white rounded-lg border border-green-200">
+                  <h4 className="font-semibold text-green-700 arabic-spacing mb-3">
+                    ✅ مشاريع متقدمة عن الجدول
+                  </h4>
+                  <div className="space-y-2">
+                    {projectPerformance
+                      .filter((p) => p.status === "ahead")
+                      .slice(0, 2)
+                      .map((project, index) => (
+                        <div
+                          key={index}
+                          className="flex justify-between items-center p-2 bg-green-50 rounded"
+                        >
+                          <span className="font-medium arabic-spacing text-black">
+                            {project.name}
+                          </span>
+                          <span className="text-green-600 font-bold arabic-nums">
+                            {project.completionPercentage.toFixed(1)}% مكتمل
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -1515,6 +1941,99 @@ export default function FinancialReportsPage() {
                 />
               </RechartsLineChart>
             </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Funding Sources Breakdown */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="arabic-spacing flex items-center">
+              <DollarSign className="h-5 w-5 ml-2 no-flip" />
+              مصادر تمويل الخزنة
+            </CardTitle>
+            <CardDescription className="arabic-spacing">
+              توزيع مصادر الأموال الواردة للخزنة
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <RechartsPieChart>
+                <Pie
+                  data={fundingSourcesData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }: any) =>
+                    `${name} ${(percent * 100).toFixed(1)}%`
+                  }
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {fundingSourcesData.map((entry: any, index: number) => (
+                    <Cell
+                      key={`funding-cell-${index}`}
+                      fill={CHART_COLORS[index % CHART_COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: any) => [formatCurrency(value), "المبلغ"]}
+                  labelStyle={{ direction: "rtl" }}
+                />
+                <Legend />
+              </RechartsPieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Cost Breakdown by Category */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="arabic-spacing flex items-center">
+              <BarChart3 className="h-5 w-5 ml-2 no-flip" />
+              تفصيل التكاليف حسب الفئة
+            </CardTitle>
+            <CardDescription className="arabic-spacing">
+              أعلى فئات الإنفاق في المشاريع والمصروفات العامة
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <RechartsBarChart
+                data={costBreakdownData}
+                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="name"
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                  interval={0}
+                />
+                <YAxis />
+                <Tooltip
+                  formatter={(value: any) => [formatCurrency(value), "المبلغ"]}
+                  labelStyle={{ direction: "rtl" }}
+                />
+                <Bar dataKey="value" fill={COLORS.primary} />
+              </RechartsBarChart>
+            </ResponsiveContainer>
+
+            {/* Category Summary */}
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+              {costBreakdownData.slice(0, 4).map((category, index) => (
+                <div key={index} className="text-center p-2 bg-gray-50 rounded">
+                  <p className="text-xs text-gray-600 arabic-spacing truncate">
+                    {category.name}
+                  </p>
+                  <p className="text-sm font-bold text-gray-800 arabic-nums">
+                    {(category.percentage || 0).toFixed(1)}%
+                  </p>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 
@@ -1634,6 +2153,98 @@ export default function FinancialReportsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Budget Variance Analysis Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="arabic-spacing flex items-center">
+            <TrendingUp className="h-5 w-5 ml-2 no-flip" />
+            تحليل انحراف الميزانية
+          </CardTitle>
+          <CardDescription className="arabic-spacing">
+            مقارنة الميزانية المقدرة مع المصروف الفعلي لكل مشروع
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={400}>
+            <RechartsBarChart
+              data={budgetVarianceData}
+              margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="projectName"
+                angle={-45}
+                textAnchor="end"
+                height={80}
+                interval={0}
+              />
+              <YAxis />
+              <Tooltip
+                formatter={(value: any, name: string) => {
+                  if (name === "budgetEstimate")
+                    return [formatCurrency(value), "الميزانية المقدرة"];
+                  if (name === "actualSpent")
+                    return [formatCurrency(value), "المصروف الفعلي"];
+                  if (name === "variance")
+                    return [formatCurrency(value), "الانحراف"];
+                  return [value, name];
+                }}
+                labelStyle={{ direction: "rtl" }}
+              />
+              <Legend />
+              <Bar
+                dataKey="budgetEstimate"
+                fill={COLORS.primary}
+                name="الميزانية المقدرة"
+              />
+              <Bar
+                dataKey="actualSpent"
+                fill={COLORS.warning}
+                name="المصروف الفعلي"
+              />
+              <Bar dataKey="variance" fill={COLORS.info} name="الانحراف" />
+            </RechartsBarChart>
+          </ResponsiveContainer>
+
+          {/* Budget Status Summary */}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <p className="text-sm text-gray-600 arabic-spacing mb-2">
+                تحت الميزانية
+              </p>
+              <p className="text-2xl font-bold text-green-600 arabic-nums">
+                {
+                  budgetVarianceData.filter((p) => p.status === "under_budget")
+                    .length
+                }
+              </p>
+            </div>
+            <div className="text-center p-4 bg-yellow-50 rounded-lg">
+              <p className="text-sm text-gray-600 arabic-spacing mb-2">
+                ضمن الميزانية
+              </p>
+              <p className="text-2xl font-bold text-yellow-600 arabic-nums">
+                {
+                  budgetVarianceData.filter((p) => p.status === "on_budget")
+                    .length
+                }
+              </p>
+            </div>
+            <div className="text-center p-4 bg-red-50 rounded-lg">
+              <p className="text-sm text-gray-600 arabic-spacing mb-2">
+                تجاوز الميزانية
+              </p>
+              <p className="text-2xl font-bold text-red-600 arabic-nums">
+                {
+                  budgetVarianceData.filter((p) => p.status === "over_budget")
+                    .length
+                }
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Monthly Comparison Chart */}
       <Card>

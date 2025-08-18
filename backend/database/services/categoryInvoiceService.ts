@@ -473,6 +473,66 @@ class CategoryInvoiceService {
   }
 
   /**
+   * Get all category invoices across all projects (for export/reporting)
+   */
+  async getAllCategoryInvoices(): Promise<any[]> {
+    const query = `
+      SELECT 
+        i.*,
+        pca.main_category as category_name,
+        pca.subcategory as subcategory_name,
+        pca.contractor_name,
+        pca.estimated_amount,
+        pca.has_approved_invoice,
+        p.name as project_name,
+        creator.full_name as submitted_by_name,
+        approver.full_name as approved_by_name
+      FROM invoices i
+      JOIN project_category_assignments pca ON i.category_assignment_id = pca.id
+      JOIN projects p ON i.project_id = p.id
+      LEFT JOIN users creator ON i.submitted_by = creator.id
+      LEFT JOIN users approver ON i.approved_by = approver.id
+      ORDER BY i.created_at DESC
+    `;
+
+    const result = await getPool().query(query);
+    
+    const mappedRows = result.rows.map((row: any) => {
+      const mappedRow = {
+        id: row.id,
+        projectId: row.project_id,
+        categoryAssignmentId: row.category_assignment_id,
+        categoryName: row.category_name,
+        subcategoryName: row.subcategory_name,
+        contractorName: row.contractor_name,
+        invoiceNumber: row.invoice_number,
+        amount: parseFloat(row.amount),
+        subtotal: parseFloat(row.subtotal),
+        date: row.date,
+        dueDate: row.due_date,
+        notes: row.notes,
+        status: row.status,
+        submittedBy: row.submitted_by,
+        approvedBy: row.approved_by,
+        approvedAt: row.approved_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        // Additional fields for reporting
+        projectName: row.project_name,
+        submittedByName: row.submitted_by_name,
+        approvedByName: row.approved_by_name,
+        estimatedAmount: parseFloat(row.estimated_amount || 0),
+        hasApprovedInvoice: row.has_approved_invoice
+      };
+      
+      return mappedRow;
+    });
+    
+    console.log(`📋 getAllCategoryInvoices returning ${mappedRows.length} invoices`);
+    return mappedRows;
+  }
+
+  /**
    * Check if a category assignment can be edited (financial protection)
    */
   async canEditCategoryAssignment(assignmentId: string): Promise<boolean> {

@@ -241,6 +241,28 @@ router.get('/project/:projectId/status', async (req, res) => {
 });
 
 /**
+ * GET /api/category-invoices
+ * Get all category invoices across all projects
+ */
+router.get('/', async (req, res) => {
+  try {
+    const allInvoices = await categoryInvoiceService.getAllCategoryInvoices();
+
+    res.json({
+      success: true,
+      invoices: allInvoices
+    });
+
+  } catch (error: any) {
+    console.error('Error fetching all category invoices:', error);
+    res.status(500).json({
+      error: 'Failed to fetch all category invoices',
+      details: error.message
+    });
+  }
+});
+
+/**
  * GET /api/category-invoices/pending
  * Get all pending category invoices across all projects (for approval modal)
  */

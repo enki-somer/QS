@@ -228,7 +228,7 @@ export class GeneralExpenseService {
 
     try {
       const result = await this.pool.query(query, [expenseId]);
-      const deleted = result.rowCount > 0;
+      const deleted = (result.rowCount || 0) > 0;
       console.log('General expense deletion result:', deleted);
       return deleted;
     } catch (error) {
@@ -445,6 +445,35 @@ export class GeneralExpenseService {
       return result.rows;
     } catch (error) {
       console.error('Error getting all pending expenses:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get all general expenses across all projects (for export/reporting)
+   */
+  async getAllGeneralExpenses(): Promise<GeneralExpense[]> {
+    console.log('Getting all general expenses');
+
+    const query = `
+      SELECT 
+        ge.*,
+        creator.full_name as submitted_by_name,
+        approver.full_name as approved_by_name,
+        p.name as project_name
+      FROM general_expenses ge
+      LEFT JOIN users creator ON ge.submitted_by = creator.id
+      LEFT JOIN users approver ON ge.approved_by = approver.id
+      LEFT JOIN projects p ON ge.project_id = p.id
+      ORDER BY ge.created_at DESC
+    `;
+
+    try {
+      const result = await this.pool.query(query);
+      console.log(`Found ${result.rows.length} total expenses`);
+      return result.rows;
+    } catch (error) {
+      console.error('Error getting all general expenses:', error);
       throw error;
     }
   }

@@ -1,7 +1,15 @@
 "use client";
 
 import React from "react";
-import { Menu, Search, Bell, User, ChevronDown } from "lucide-react";
+import {
+  Menu,
+  Search,
+  Bell,
+  User,
+  ChevronDown,
+  WifiOff,
+  Wifi,
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +23,8 @@ export default function TopBar({
   sidebarCollapsed,
 }: TopBarProps) {
   const [currentTime, setCurrentTime] = React.useState(new Date());
+  const [isOnline, setIsOnline] = React.useState(true);
+  const [showOfflineAlert, setShowOfflineAlert] = React.useState(false);
 
   React.useEffect(() => {
     const timer = setInterval(() => {
@@ -22,6 +32,31 @@ export default function TopBar({
     }, 1000);
 
     return () => clearInterval(timer);
+  }, []);
+
+  // Network status monitoring
+  React.useEffect(() => {
+    // Check initial online status
+    setIsOnline(navigator.onLine);
+    setShowOfflineAlert(!navigator.onLine);
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      setShowOfflineAlert(false);
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      setShowOfflineAlert(true);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
   }, []);
 
   return (
@@ -57,6 +92,26 @@ export default function TopBar({
 
         {/* Left Section */}
         <div className="flex items-center space-x-4 space-x-reverse">
+          {/* Network Status Indicator */}
+          <div className="flex items-center space-x-2 space-x-reverse">
+            {!isOnline ? (
+              <div className="flex items-center space-x-1 space-x-reverse px-2 py-1 rounded-full bg-red-50 border border-red-200">
+                <WifiOff className="h-3 w-3 text-red-600 animate-pulse no-flip" />
+                <span className="text-xs font-medium text-red-700 arabic-spacing">
+                  غير متصل
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-1 space-x-reverse px-2 py-1 rounded-full bg-green-50 border border-green-200 transition-all duration-300">
+                <Wifi className="h-3 w-3 text-green-600 no-flip" />
+                <span className="text-xs font-medium text-green-700 arabic-spacing">
+                  متصل
+                </span>
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
+              </div>
+            )}
+          </div>
+
           {/* Current Time */}
           <div className="hidden md:block text-sm text-gray-600 arabic-nums">
             {currentTime.toLocaleString("ar-EG", {

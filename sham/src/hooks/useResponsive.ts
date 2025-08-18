@@ -30,7 +30,15 @@ export const useResponsive = (): ResponsiveState => {
     height: 768,
   });
 
+  const [isHydrated, setIsHydrated] = useState(false);
+
   useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+
     const checkScreenSize = () => {
       const width = window.innerWidth;
       const height = window.innerHeight;
@@ -61,7 +69,7 @@ export const useResponsive = (): ResponsiveState => {
       });
     };
 
-    // Initial check
+    // Initial check after hydration
     checkScreenSize();
 
     // Add event listener
@@ -69,7 +77,7 @@ export const useResponsive = (): ResponsiveState => {
 
     // Cleanup
     return () => window.removeEventListener("resize", checkScreenSize);
-  }, []);
+  }, [isHydrated]);
 
   return screenState;
 };

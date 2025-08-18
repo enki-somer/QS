@@ -1240,16 +1240,16 @@ export const Card = ({ children, className, ...props }: CardProps) => {
 
 ### Phase 1: Core Infrastructure (Week 1-2)
 
-- [ ] **useResponsive Hook**: Create responsive detection hook
-- [ ] **Offline/Sync Manager**: Implement sync system
-- [ ] **PWA Configuration**: Set up service worker and manifest
+- [x] **useResponsive Hook**: ✅ Created responsive detection hook
+- [x] **Offline/Sync Manager**: ✅ Implemented sync system with service worker
+- [x] **PWA Configuration**: ✅ Set up service worker and manifest
 - [ ] **Base Components**: Adapt Button, Input, Card components
 
 ### Phase 2: Layout Adaptation (Week 3-4)
 
 - [ ] **MainLayout**: Implement adaptive layout system
 - [ ] **Navigation**: Create bottom navigation for mobile
-- [ ] **TopBar**: Adapt header for different screen sizes
+- [x] **TopBar**: ✅ Enhanced with network status indicator
 - [ ] **Modal System**: Create mobile-friendly modals
 
 ### Phase 3: Page Implementation (Week 5-8)
@@ -1259,7 +1259,7 @@ export const Card = ({ children, className, ...props }: CardProps) => {
 - [ ] **Projects Management** (`/projects`): Create mobile project list
 - [ ] **Project Details** (`/projects/[id]`): Implement tabbed mobile view
 - [ ] **Project Creation** (`/projects/create`): Mobile wizard interface
-- [ ] **Safe Management** (`/safe`): Mobile financial dashboard
+- [x] **Safe Management** (`/safe`): ✅ Completed mobile financial dashboard
 - [ ] **Contractors** (`/contractors`): Mobile contractor management
 - [ ] **General Expenses** (`/general-expenses`): Mobile expense tracking
 - [ ] **Resources/HR** (`/resources`): Mobile employee management
@@ -1284,16 +1284,36 @@ export const Card = ({ children, className, ...props }: CardProps) => {
 
 ## 🔄 OFFLINE/SYNC INTEGRATION
 
-### Global Sync Status
+### Global Sync Status ✅ **NETWORK STATUS COMPLETED**
 
 ```typescript
-// To be added to every page/component
-const { isOnline, pendingCount, syncInProgress } = useSyncStatus();
+// ✅ IMPLEMENTED: Network status monitoring
+const [isOnline, setIsOnline] = useState(true);
+const [showIndicator, setShowIndicator] = useState(false);
 
-// Show sync indicators
-{
-  !isOnline && <OfflineBanner />;
-}
+useEffect(() => {
+  const handleOnline = () => {
+    setIsOnline(true);
+    setShowIndicator(true);
+    setTimeout(() => setShowIndicator(false), 3000);
+  };
+
+  const handleOffline = () => {
+    setIsOnline(false);
+    setShowIndicator(true);
+  };
+
+  window.addEventListener("online", handleOnline);
+  window.addEventListener("offline", handleOffline);
+}, []);
+
+// ✅ IMPLEMENTED: Visual indicators
+// - Top floating indicator (desktop/tablet)
+// - Bottom banner (mobile)
+// - TopBar integration
+// - Automatic show/hide logic
+
+// 🔄 TODO: Sync queue indicators
 {
   pendingCount > 0 && <PendingSyncIndicator count={pendingCount} />;
 }
