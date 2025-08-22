@@ -61,24 +61,8 @@ const nextConfig: NextConfig = {
     ];
   },
   
-  // Redirect HTTP to HTTPS in production
+  // Disable redirects for now to fix the deployment
   async redirects() {
-    if (process.env.NODE_ENV === 'production') {
-      return [
-        {
-          source: '/:path*',
-          has: [
-            {
-              type: 'header',
-              key: 'x-forwarded-proto',
-              value: 'http'
-            }
-          ],
-          destination: 'https://:host/:path*',
-          permanent: true
-        }
-      ];
-    }
     return [];
   }
 };
