@@ -37,6 +37,7 @@ import { useContractors } from "@/contexts/ContractorContext";
 import { useToast } from "@/components/ui/Toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useUIPermissions } from "@/hooks/useUIPermissions";
 import { Contractor, ContractorFormData } from "@/types";
 
 // Contractor categories - English values for database, Arabic labels for display
@@ -79,6 +80,7 @@ export default function ContractorsPage() {
   const { addToast } = useToast();
   const { user } = useAuth();
   const { isMobile, isTablet } = useResponsive();
+  const permissions = useUIPermissions();
   const {
     contractors,
     isLoading,
@@ -319,13 +321,15 @@ export default function ContractorsPage() {
           {/* Action Buttons - Hidden on Mobile */}
           {!isMobile && (
             <div className="flex items-center space-x-4 gap-2 space-x-reverse">
-              <Button
-                onClick={() => setShowAddModal(true)}
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-              >
-                <Plus className="h-4 w-4 ml-2 no-flip" />
-                <span className="arabic-spacing">إضافة مقاول جديد</span>
-              </Button>
+              {!permissions.isViewOnlyMode && (
+                <Button
+                  onClick={() => setShowAddModal(true)}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                >
+                  <Plus className="h-4 w-4 ml-2 no-flip" />
+                  <span className="arabic-spacing">إضافة مقاول جديد</span>
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -473,22 +477,28 @@ export default function ContractorsPage() {
                         >
                           <Eye className="h-4 w-4 no-flip" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => openEditModal(contractor)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Edit2 className="h-4 w-4 no-flip" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteContractor(contractor)}
-                          className="h-8 w-8 p-0 text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 className="h-4 w-4 no-flip" />
-                        </Button>
+                        {!permissions.isDataEntryMode &&
+                          !permissions.isViewOnlyMode && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditModal(contractor)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Edit2 className="h-4 w-4 no-flip" />
+                            </Button>
+                          )}
+                        {!permissions.isDataEntryMode &&
+                          !permissions.isViewOnlyMode && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteContractor(contractor)}
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 className="h-4 w-4 no-flip" />
+                            </Button>
+                          )}
                       </div>
                     </div>
 
@@ -533,15 +543,18 @@ export default function ContractorsPage() {
                   ? "جرب تعديل معايير البحث أو الفلاتر"
                   : "ابدأ بإضافة مقاولين جدد إلى قاعدة البيانات"}
               </p>
-              {!searchQuery && categoryFilter === "all" && !isMobile && (
-                <Button
-                  onClick={() => setShowAddModal(true)}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
-                >
-                  <Plus className="h-5 w-5 ml-2 no-flip" />
-                  <span className="arabic-spacing">إضافة مقاول جديد</span>
-                </Button>
-              )}
+              {!searchQuery &&
+                categoryFilter === "all" &&
+                !isMobile &&
+                !permissions.isViewOnlyMode && (
+                  <Button
+                    onClick={() => setShowAddModal(true)}
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+                  >
+                    <Plus className="h-5 w-5 ml-2 no-flip" />
+                    <span className="arabic-spacing">إضافة مقاول جديد</span>
+                  </Button>
+                )}
             </div>
           )}
         </CardContent>

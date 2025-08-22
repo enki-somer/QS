@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Clock,
   Bell,
+  UserCheck,
 } from "lucide-react";
 import {
   Card,
@@ -24,73 +25,95 @@ import {
 } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { useAuth } from "@/contexts/AuthContext";
+import { useContractors } from "@/contexts/ContractorContext";
+import { useEmployee } from "@/contexts/EmployeeContext";
+import {
+  ActionButtonGate,
+  ReadOnlyIndicator,
+} from "@/components/ui/RoleBasedNavigation";
+import { useUIPermissions } from "@/hooks/useUIPermissions";
 import { EnhancedInvoice, EnhancedGeneralExpense } from "@/types/shared";
 import { formatCurrency } from "@/lib/utils";
 
-const moduleCards = [
-  {
-    id: "projects",
-    title: "المشاريع",
-    description: "إدارة مشاريع البناء والتشييد وتتبع الفواتير والمدفوعات",
-    href: "/projects",
-    icon: Building2,
-    color: "from-[#182C61] to-blue-600",
-    iconBg: "bg-blue-100",
-    iconColor: "text-[#182C61]",
-    stats: "8 مشاريع نشطة",
-  },
-  {
-    id: "safe",
-    title: "الخزينة",
-    description:
-      "إدارة التدفق النقدي وتسجيل جميع المعاملات المالية الواردة والصادرة",
-    href: "/safe",
-    icon: Wallet,
-    color: "from-green-500 to-emerald-600",
-    iconBg: "bg-green-100",
-    iconColor: "text-green-600",
-    stats: "دفعات آمنة",
-  },
-  {
-    id: "resources",
-    title: "الموارد البشرية",
-    description: "إدارة الموظفين والرواتب وكشوف الأجور الشهرية والعلاوات",
-    href: "/resources",
-    icon: Users,
-    color: "from-purple-500 to-violet-600",
-    iconBg: "bg-purple-100",
-    iconColor: "text-purple-600",
-    stats: "25 موظف",
-  },
-  {
-    id: "expenses",
-    title: "المصروفات العامة",
-    description:
-      "تسجيل وإدارة التكاليف التشغيلية العامة غير المرتبطة بالمشاريع",
-    href: "/general-expenses",
-    icon: Receipt,
-    color: "from-orange-500 to-red-600",
-    iconBg: "bg-orange-100",
-    iconColor: "text-orange-600",
-    stats: "تتبع دقيق",
-  },
-  {
-    id: "reports",
-    title: "التقارير المالية",
-    description: "إنشاء وتصدير التقارير المالية التفصيلية والملخصة",
-    href: "/financial-reports",
-    icon: BarChart3,
-    color: "from-teal-500 to-cyan-600",
-    iconBg: "bg-teal-100",
-    iconColor: "text-teal-600",
-    stats: "تحليل شامل",
-  },
-];
-
 export default function HomePage() {
   const { hasPermission, isDataEntry, user } = useAuth();
+  const { contractors } = useContractors();
+  const { employees, projects } = useEmployee();
+  const permissions = useUIPermissions();
   const [pendingCount, setPendingCount] = useState(0);
   const [pendingAmount, setPendingAmount] = useState(0);
+
+  // Create dynamic module cards with real-time stats
+  const dynamicModuleCards = [
+    {
+      id: "projects",
+      title: "المشاريع",
+      description: "إدارة مشاريع البناء والتشييد وتتبع الفواتير والمدفوعات",
+      href: "/projects",
+      icon: Building2,
+      color: "from-[#182C61] to-blue-600",
+      iconBg: "bg-blue-100",
+      iconColor: "text-[#182C61]",
+      stats: `${projects?.length || 0} مشروع`,
+    },
+    {
+      id: "safe",
+      title: "الخزينة",
+      description:
+        "إدارة التدفق النقدي وتسجيل جميع المعاملات المالية الواردة والصادرة",
+      href: "/safe",
+      icon: Wallet,
+      color: "from-green-500 to-emerald-600",
+      iconBg: "bg-green-100",
+      iconColor: "text-green-600",
+      stats: "دفعات آمنة",
+    },
+    {
+      id: "resources",
+      title: "الموارد البشرية",
+      description: "إدارة الموظفين والرواتب وكشوف الأجور الشهرية والعلاوات",
+      href: "/resources",
+      icon: Users,
+      color: "from-purple-500 to-violet-600",
+      iconBg: "bg-purple-100",
+      iconColor: "text-purple-600",
+      stats: `${employees?.length || 0} موظف`,
+    },
+    {
+      id: "contractors",
+      title: "المقاولين",
+      description: "إدارة المقاولين والموردين والخدمات المتخصصة للمشاريع",
+      href: "/contractors",
+      icon: UserCheck,
+      color: "from-indigo-500 to-blue-600",
+      iconBg: "bg-indigo-100",
+      iconColor: "text-indigo-600",
+      stats: `${contractors?.length || 0} مقاول`,
+    },
+    {
+      id: "expenses",
+      title: "المصروفات العامة",
+      description:
+        "تسجيل وإدارة التكاليف التشغيلية العامة غير المرتبطة بالمشاريع",
+      href: "/general-expenses",
+      icon: Receipt,
+      color: "from-orange-500 to-red-600",
+      iconBg: "bg-orange-100",
+      iconColor: "text-orange-600",
+      stats: "تتبع دقيق",
+    },
+    {
+      id: "reports",
+      title: "التقارير المالية",
+      description: "إنشاء وتصدير التقارير المالية التفصيلية والملخصة",
+      href: "/financial-reports",
+      icon: BarChart3,
+      color: "from-teal-500 to-cyan-600",
+      iconBg: "bg-teal-100",
+      iconColor: "text-teal-600",
+      stats: "تحليل شامل",
+    },
+  ];
 
   // Load pending items count for summary display (Admin only)
   useEffect(() => {
@@ -149,10 +172,10 @@ export default function HomePage() {
   }, [hasPermission]);
 
   // Filter modules based on user permissions
-  const visibleModules = moduleCards.filter((module) => {
+  const visibleModules = dynamicModuleCards.filter((module) => {
     if (isDataEntry()) {
-      // Data entry users cannot access SAFE and HR modules
-      return !["safe", "resources"].includes(module.id);
+      // Data entry users cannot access SAFE, HR modules, and financial reports
+      return !["safe", "resources", "reports"].includes(module.id);
     }
     return hasPermission("canViewSafe") || module.id !== "safe";
   });
@@ -205,48 +228,53 @@ export default function HomePage() {
           </div>
         </div>
 
+        {/* Read-Only Indicator for Partners */}
+        <ReadOnlyIndicator />
+
         {/* Pending Approvals Summary - Admin Only */}
-        {hasPermission("canMakePayments") && pendingCount > 0 && (
-          <Card className="shadow-lg border-0 bg-gradient-to-r from-amber-50 to-orange-50 border-l-4 border-l-amber-500 mb-8">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3 space-x-reverse">
-                  <div className="bg-amber-100 p-3 rounded-full">
-                    <Clock className="h-6 w-6 text-amber-600 no-flip animate-pulse" />
+        <ActionButtonGate>
+          {hasPermission("canMakePayments") && pendingCount > 0 && (
+            <Card className="shadow-lg border-0 bg-gradient-to-r from-amber-50 to-orange-50 border-l-4 border-l-amber-500 mb-8">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3 space-x-reverse">
+                    <div className="bg-amber-100 p-3 rounded-full">
+                      <Clock className="h-6 w-6 text-amber-600 no-flip animate-pulse" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-amber-800 arabic-spacing mb-1">
+                        {pendingCount} عنصر بانتظار الاعتماد
+                      </h3>
+                      <p className="text-sm text-amber-700 arabic-spacing">
+                        فواتير ومصروفات تحتاج موافقتك •
+                        <span className="font-medium">
+                          {" "}
+                          انقر على جرس الإشعارات للمراجعة والاعتماد
+                        </span>
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-amber-800 arabic-spacing mb-1">
-                      {pendingCount} عنصر بانتظار الاعتماد
-                    </h3>
-                    <p className="text-sm text-amber-700 arabic-spacing">
-                      فواتير ومصروفات تحتاج موافقتك •
-                      <span className="font-medium">
-                        {" "}
-                        انقر على جرس الإشعارات للمراجعة والاعتماد
+                  <div className="flex items-center space-x-3 space-x-reverse">
+                    <div className="text-right">
+                      <div className="text-xl font-bold text-green-600 arabic-nums">
+                        {formatCurrency(pendingAmount)}
+                      </div>
+                      <div className="text-xs text-amber-600 arabic-spacing">
+                        المبلغ الإجمالي المطلوب
+                      </div>
+                    </div>
+                    <div className="bg-amber-500 text-white px-3 py-2 rounded-full flex items-center space-x-1 space-x-reverse">
+                      <Bell className="h-4 w-4 no-flip" />
+                      <span className="text-sm font-bold arabic-nums">
+                        {pendingCount}
                       </span>
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3 space-x-reverse">
-                  <div className="text-right">
-                    <div className="text-xl font-bold text-green-600 arabic-nums">
-                      {formatCurrency(pendingAmount)}
-                    </div>
-                    <div className="text-xs text-amber-600 arabic-spacing">
-                      المبلغ الإجمالي المطلوب
                     </div>
                   </div>
-                  <div className="bg-amber-500 text-white px-3 py-2 rounded-full flex items-center space-x-1 space-x-reverse">
-                    <Bell className="h-4 w-4 no-flip" />
-                    <span className="text-sm font-bold arabic-nums">
-                      {pendingCount}
-                    </span>
-                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+              </CardContent>
+            </Card>
+          )}
+        </ActionButtonGate>
 
         {/* Modules Grid */}
         <div>
@@ -282,23 +310,31 @@ export default function HomePage() {
                       </div>
                       <CardDescription className="text-gray-600 text-sm leading-relaxed arabic-spacing mb-4">
                         {isDataEntry() &&
-                        (module.id === "projects" || module.id === "expenses")
+                        (module.id === "projects" ||
+                          module.id === "expenses" ||
+                          module.id === "contractors")
                           ? module.description
                               .replace("إدارة", "إدخال بيانات")
                               .replace("وتتبع", "ومتابعة")
                           : module.description}
                       </CardDescription>
                       <div className="flex items-center justify-end">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-gray-500 hover:text-gray-700 group-hover:text-blue-600 transition-colors"
-                        >
-                          <span className="arabic-spacing ml-2">
-                            {isDataEntry() ? "إدخال البيانات" : "إدارة"}
-                          </span>
-                          <ArrowLeft className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                        </Button>
+                        {permissions.isViewOnlyMode ? (
+                          <div className="text-gray-400 text-sm arabic-spacing">
+                            عرض فقط
+                          </div>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-gray-500 hover:text-gray-700 group-hover:text-blue-600 transition-colors"
+                          >
+                            <span className="arabic-spacing ml-2">
+                              {isDataEntry() ? "إدخال البيانات" : "إدارة"}
+                            </span>
+                            <ArrowLeft className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </CardContent>

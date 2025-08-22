@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useUIPermissions } from "@/hooks/useUIPermissions";
 
 const navigationItems = [
   {
@@ -69,6 +70,7 @@ export default function PageNavigation({ currentPage }: PageNavigationProps) {
   const pathname = usePathname();
   const { user, hasPermission, isLoading, permissions } = useAuth();
   const { isMobile } = useResponsive();
+  const uiPermissions = useUIPermissions();
 
   // Filter navigation items based on user permissions
   const getVisibleItems = () => {
@@ -84,12 +86,16 @@ export default function PageNavigation({ currentPage }: PageNavigationProps) {
           // Available to all authenticated users
           return true;
         case "resources":
-          // Completely hide for data entry users
-          return hasPermission("canManageEmployees");
+          // Allow admin and partners (view-only), hide from data entry
+          return (
+            hasPermission("canManageEmployees") || uiPermissions.isViewOnlyMode
+          );
+        case "reports":
+          // Hide financial reports from data entry users
+          return uiPermissions.canAccessReports;
         case "home":
         case "projects":
         case "expenses":
-        case "reports":
           return true; // Always visible
         default:
           return true;

@@ -1719,14 +1719,6 @@ export default function FinancialReportsPage() {
             <Printer className="h-4 w-4 ml-2 no-flip" />
             <span className="arabic-spacing">طباعة</span>
           </Button>
-          <Button
-            variant="outline"
-            onClick={clearCachedData}
-            className="bg-yellow-50 hover:bg-yellow-100 border-yellow-200 text-yellow-700"
-          >
-            <RefreshCw className="h-4 w-4 ml-2 no-flip" />
-            <span className="arabic-spacing">مسح البيانات المؤقتة</span>
-          </Button>
         </div>
       </div>
 

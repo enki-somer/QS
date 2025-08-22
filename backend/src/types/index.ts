@@ -78,8 +78,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canMakePayments: false, // Cannot pay anything
     canManageProjects: true, // Can enter invoices for projects
     canManageEmployees: false, // Cannot manage employees
-    canViewReports: true, // Can generate reports
-    canExportReports: true, // Can export reports
+    canViewReports: false, // Cannot access financial reports
+    canExportReports: false, // Cannot export reports
     canManageExpenses: true, // Can enter general expenses
   },
   partners: {

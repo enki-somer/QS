@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/Button";
 import { Employee } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { useEmployee } from "@/contexts/EmployeeContext";
+import { useUIPermissions } from "@/hooks/useUIPermissions";
 
 interface EnhancedEmployeesTableProps {
   employees: Employee[];
@@ -53,6 +54,7 @@ export function EnhancedEmployeesTable({
     getPaymentStatusColor,
     calculateRemainingSalary,
   } = useEmployee();
+  const permissions = useUIPermissions();
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [remainingSalaries, setRemainingSalaries] = useState<
@@ -73,7 +75,7 @@ export function EnhancedEmployeesTable({
     [employees]
   );
 
-  // Calculate remaining salaries for all employees
+  // Calculate remaining salaries for all employees (only for users with payment permissions)
   React.useEffect(() => {
     let isCancelled = false;
 
@@ -81,6 +83,19 @@ export function EnhancedEmployeesTable({
       if (isCancelled) return;
 
       const remainingMap: Record<string, number> = {};
+
+      // Skip salary calculations for view-only users (partners)
+      if (permissions.isViewOnlyMode) {
+        // For view-only users, just show the full monthly salary as remaining
+        for (const employee of employees) {
+          if (isCancelled) break;
+          remainingMap[employee.id] = calculateMonthlySalary(employee);
+        }
+        if (!isCancelled) {
+          setRemainingSalaries(remainingMap);
+        }
+        return;
+      }
 
       for (const employee of employees) {
         if (isCancelled) break;
@@ -128,7 +143,7 @@ export function EnhancedEmployeesTable({
     return () => {
       isCancelled = true;
     };
-  }, [employeeDependency]);
+  }, [employeeDependency, permissions.isViewOnlyMode]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -547,18 +562,21 @@ export function EnhancedEmployeesTable({
                         >
                           <Eye className="h-3 w-3 no-flip" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onEditEmployee(employee)}
-                          className="text-slate-600 hover:text-slate-700 hover:bg-slate-50 rounded p-1 transition-all duration-200"
-                          title="تعديل"
-                        >
-                          <Edit className="h-3 w-3 no-flip" />
-                        </Button>
+                        {!permissions.isViewOnlyMode && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onEditEmployee(employee)}
+                            className="text-slate-600 hover:text-slate-700 hover:bg-slate-50 rounded p-1 transition-all duration-200"
+                            title="تعديل"
+                          >
+                            <Edit className="h-3 w-3 no-flip" />
+                          </Button>
+                        )}
                       </div>
                       <div className="flex gap-1">
-                        {employee.status === "active" &&
+                        {!permissions.isViewOnlyMode &&
+                          employee.status === "active" &&
                           hasRemainingBalance && (
                             <Button
                               variant="ghost"
@@ -584,15 +602,17 @@ export function EnhancedEmployeesTable({
                               <Wallet className="h-3 w-3 no-flip" />
                             </Button>
                           )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onDeleteEmployee(employee)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded p-1 transition-all duration-200"
-                          title="حذف"
-                        >
-                          <Trash2 className="h-3 w-3 no-flip" />
-                        </Button>
+                        {!permissions.isViewOnlyMode && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onDeleteEmployee(employee)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded p-1 transition-all duration-200"
+                            title="حذف"
+                          >
+                            <Trash2 className="h-3 w-3 no-flip" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </td>

@@ -38,8 +38,11 @@ export default function LoginPage() {
 
     if (!credentials.password.trim()) {
       newErrors.password = "كلمة المرور مطلوبة";
-    } else if (credentials.password.length < 3) {
-      newErrors.password = "كلمة المرور قصيرة جداً";
+    } else if (credentials.password.length < 8) {
+      newErrors.password = "كلمة المرور يجب أن تكون 8 أحرف على الأقل";
+    } else if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(credentials.password)) {
+      newErrors.password =
+        "كلمة المرور يجب أن تحتوي على أحرف كبيرة وصغيرة وأرقام";
     }
 
     setErrors(newErrors);
@@ -221,19 +224,23 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Demo Credentials */}
-          <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <h4 className="text-sm font-semibold text-blue-800 mb-3 arabic-spacing">
-              بيانات تجريبية للاختبار:
+          {/* Security Notice */}
+          <div className="mt-8 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h4 className="text-sm font-semibold text-gray-800 mb-3 arabic-spacing">
+              ملاحظات أمنية:
             </h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-blue-700">المدير:</span>
-                <span className="font-mono">admin / admin123</span>
+            <div className="space-y-2 text-sm text-gray-600">
+              <div className="flex items-start gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                <span>تأكد من إغلاق المتصفح عند الانتهاء من العمل</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-blue-700">إدخال البيانات:</span>
-                <span className="font-mono">dataentry / dataentry123</span>
+              <div className="flex items-start gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                <span>لا تشارك بيانات الدخول مع أي شخص</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
+                <span>استخدم كلمة مرور قوية وفريدة</span>
               </div>
             </div>
           </div>

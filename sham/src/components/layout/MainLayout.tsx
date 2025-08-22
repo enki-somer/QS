@@ -22,6 +22,8 @@ import RoleBasedNavigation from "@/components/ui/RoleBasedNavigation";
 import { useResponsive } from "@/hooks/useResponsive";
 import { apiRequest } from "@/lib/api";
 import { NetworkMonitor } from "./NetworkMonitor";
+import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface MainLayoutProps {
   children: React.ReactNode;
@@ -38,6 +40,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const [isOnline, setIsOnline] = useState(false); // Start with false, will be updated by NetworkMonitor
   const [isHydrated, setIsHydrated] = useState(false);
   const [networkStatusChanged, setNetworkStatusChanged] = useState(false);
+  const [isWatermarkHovered, setIsWatermarkHovered] = useState(false);
   const { isMobile } = useResponsive();
 
   // Handle hydration
@@ -249,7 +252,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
           dir="rtl"
         >
           {/* Top Header */}
-          <header className="bg-white shadow-sm border-b border-gray-200">
+          <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 md:py-4">
               {!isHydrated ? (
                 /* Loading/Default Header during hydration */
@@ -271,14 +274,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       <p className="text-sm text-gray-600 arabic-spacing">
                         نظام إدارة المشاريع والمقاولين
                       </p>
-                      <div className="flex items-center gap-1 mt-1 text-[20px] text-gray-400">
-                        <span>بواسطة</span>
-                        <img
-                          src="/q.png"
-                          alt="Connected"
-                          className="h-6 w-auto"
-                        />
-                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
@@ -329,14 +324,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
                             width={28}
                             height={28}
                             style={{ display: "block" }}
-                          />
-                        </div>
-                        <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-400">
-                          <span>بواسطة</span>
-                          <img
-                            src="/q.png"
-                            alt="Connected"
-                            className="h-3 w-auto"
                           />
                         </div>
                       </div>
@@ -467,14 +454,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       <p className="text-sm text-gray-500 arabic-spacing">
                         نظام الإدارة المالية المتكامل
                       </p>
-                      <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-400">
-                        <span>بواسطة</span>
-                        <img
-                          src="/q.png"
-                          alt="Connected"
-                          className="h-3 w-auto"
-                        />
-                      </div>
                     </div>
                   </div>
 
@@ -593,6 +572,62 @@ export default function MainLayout({ children }: MainLayoutProps) {
           {/* Main Content */}
           <main className="max-w-7xl mx-auto px-6 py-8">{children}</main>
         </div>
+
+        {/* QonnectED Academy Branding - Fixed floating watermark */}
+
+        <motion.button
+          onClick={() => {
+            window.open("https://qonnectedacademy.com/", "_blank");
+          }}
+          onMouseEnter={() => setIsWatermarkHovered(true)}
+          onMouseLeave={() => setIsWatermarkHovered(false)}
+          className="fixed bottom-4 left-4 z-40 flex items-center bg-gradient-to-r from-blue-900 to-blue-800 backdrop-blur-sm rounded-full border border-blue-700/50 shadow-lg cursor-pointer"
+          initial={{ opacity: 0, y: 10, scale: 0.8 }}
+          animate={{
+            opacity: 1,
+            y: 0,
+            scale: isWatermarkHovered ? 1.05 : 1,
+            boxShadow: isWatermarkHovered
+              ? "0 20px 25px -5px rgb(0 0 0 / 0.15), 0 8px 10px -6px rgb(0 0 0 / 0.15)"
+              : "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+          }}
+          transition={{ duration: 0.5, delay: 1.5 }}
+          whileTap={{ scale: 0.95 }}
+          layout
+        >
+          <motion.div
+            className="flex items-center px-3 py-2"
+            animate={{
+              gap: isWatermarkHovered ? 8 : 0,
+            }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+          >
+            <div className="relative w-6 h-6 md:w-7 md:h-7 flex-shrink-0">
+              <Image
+                src="/Qlogo.png"
+                alt="QonnectED Academy"
+                width={28}
+                height={28}
+                className="object-contain w-full h-full"
+                priority={true}
+                quality={95}
+              />
+            </div>
+            <AnimatePresence>
+              {isWatermarkHovered && (
+                <motion.span
+                  className="text-xs md:text-sm font-semibold text-white arabic-spacing whitespace-nowrap hidden sm:block"
+                  initial={{ opacity: 0, width: 0, x: -10 }}
+                  animate={{ opacity: 1, width: "auto", x: 0 }}
+                  exit={{ opacity: 0, width: 0, x: -10 }}
+                  transition={{ duration: 0.3, ease: "easeInOut" }}
+                >
+                  مطور بواسطة QonnectED Academy
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </motion.button>
 
         {/* Approvals Modal */}
         {hasPermission("canMakePayments") && (

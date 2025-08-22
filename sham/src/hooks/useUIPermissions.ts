@@ -87,7 +87,7 @@ const UI_PERMISSIONS: Record<UserRole, UIPermissions> = {
     
     // Navigation & Access
     canAccessSafePage: false, // Cannot access safe page
-    canAccessReports: true, // Can generate reports (but no numbers)
+    canAccessReports: false, // Cannot access reports
     canAccessEmployeeManagement: false,
     
     // UI States

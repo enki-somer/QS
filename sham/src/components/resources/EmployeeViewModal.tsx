@@ -53,7 +53,7 @@ export function EmployeeViewModal({
         <div className="bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-4 text-white">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3 space-x-reverse">
-              <div className="bg-white bg-opacity-20 p-2 rounded-lg">
+              <div className="bg-transparent bg-opacity-20 p-2 rounded-lg">
                 <User className="h-6 w-6 no-flip" />
               </div>
               <div>
@@ -167,8 +167,8 @@ export function EmployeeViewModal({
                 </div>
               )}
 
-              {/* Email */}
-              {employee.email && (
+              {/* Email  
+               {employee.email && (
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <div className="flex items-center space-x-2 space-x-reverse mb-2">
                     <Mail className="h-4 w-4 text-gray-600 no-flip" />
@@ -181,6 +181,7 @@ export function EmployeeViewModal({
                   </p>
                 </div>
               )}
+              */}
             </div>
           </div>
 
@@ -230,7 +231,7 @@ export function EmployeeViewModal({
                     </span>
                   </div>
                   <p className="text-lg font-semibold text-gray-900">
-                    {new Date(employee.hire_date).toLocaleDateString("ar-SA")}
+                    {new Date(employee.hire_date).toLocaleDateString("en-US")}
                   </p>
                 </div>
               )}
@@ -246,7 +247,7 @@ export function EmployeeViewModal({
                   </div>
                   <p className="text-lg font-semibold text-gray-900">
                     {new Date(employee.last_payment_date).toLocaleDateString(
-                      "ar-SA"
+                      "en-US"
                     )}
                   </p>
                 </div>
@@ -271,18 +272,23 @@ export function EmployeeViewModal({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
-          <Button variant="outline" onClick={onClose}>
-            إغلاق
-          </Button>
-
-          <Button
-            onClick={onEdit}
-            className="bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800"
-          >
-            <User className="h-4 w-4 ml-2 no-flip" />
-            <span className="arabic-spacing">تعديل البيانات</span>
-          </Button>
+        <div className="sticky bottom-0 left-0 right-0 bg-gray-50 border-t border-gray-200 px-4 py-4 z-10">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              className="w-full sm:w-auto"
+            >
+              إغلاق
+            </Button>
+            <Button
+              onClick={onEdit}
+              className="w-full sm:w-auto bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800"
+            >
+              <User className="h-4 w-4 ml-2 no-flip" />
+              <span className="arabic-spacing">تعديل البيانات</span>
+            </Button>
+          </div>
         </div>
       </div>
     </div>

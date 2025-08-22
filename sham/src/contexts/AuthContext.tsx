@@ -15,6 +15,7 @@ import {
   setAuthUser,
   removeAuthToken,
   removeAuthUser,
+  API_BASE_URL,
 } from "@/lib/api";
 
 // Types from backend (keep in sync)
@@ -66,21 +67,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Dynamic API base URL - works for both development and production
-const getApiBaseUrl = () => {
-  if (typeof window !== "undefined") {
-    // Client-side: use current domain for production, localhost for development
-    const { hostname, protocol } = window.location;
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      return "http://localhost:8000/api";
-    }
-    return `${protocol}//${hostname}/api`;
-  }
-  // Server-side: fallback to localhost for SSR
-  return "http://localhost:8000/api";
-};
-
-const API_BASE_URL = getApiBaseUrl();
+console.log("🔍 Debug: AuthContext API_BASE_URL imported =", API_BASE_URL);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   children,
@@ -152,17 +139,52 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     try {
       setIsLoading(true);
 
+      // Add rate limiting check (simple client-side implementation)
+      const loginAttempts = parseInt(
+        localStorage.getItem("login-attempts") || "0"
+      );
+      const lastAttemptTime = parseInt(
+        localStorage.getItem("last-login-attempt") || "0"
+      );
+      const now = Date.now();
+
+      // Reset attempts after 15 minutes
+      if (now - lastAttemptTime > 15 * 60 * 1000) {
+        localStorage.setItem("login-attempts", "0");
+      }
+
+      // Block if too many attempts
+      if (loginAttempts >= 5) {
+        const timeLeft = Math.ceil(
+          (15 * 60 * 1000 - (now - lastAttemptTime)) / 1000 / 60
+        );
+        return {
+          success: false,
+          message: `تم حظر تسجيل الدخول مؤقتاً. حاول مرة أخرى بعد ${timeLeft} دقيقة.`,
+        };
+      }
+
+      console.log("🔍 Debug: API_BASE_URL =", API_BASE_URL);
+      console.log("🔍 Debug: Final login URL =", `${API_BASE_URL}/auth/login`);
+      console.log("🔍 Debug: Credentials being sent =", credentials);
+
       const response = await fetch(`${API_BASE_URL}/auth/login`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),
       });
 
       const result = await response.json();
+      console.log("🔍 Debug: Login response result:", result);
 
       if (result.success && result.user && result.token) {
+        console.log(
+          "🔍 Debug: Login successful, calling setAuthToken with:",
+          result.token
+        );
+        // Reset login attempts on success
+        localStorage.setItem("login-attempts", "0");
+
         // Store auth data
         setAuthToken(result.token);
         setAuthUser(result.user);
@@ -173,6 +195,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
         return result;
       } else {
+        console.log("🔍 Debug: Login failed - missing required fields:", {
+          success: result.success,
+          hasUser: !!result.user,
+          hasToken: !!result.token,
+        });
+        // Increment failed attempts
+        const newAttempts = loginAttempts + 1;
+        localStorage.setItem("login-attempts", newAttempts.toString());
+        localStorage.setItem("last-login-attempt", now.toString());
+
         return {
           success: false,
           message: result.message || "فشل تسجيل الدخول",
@@ -180,6 +212,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       }
     } catch (error) {
       console.error("Login error:", error);
+
+      // Increment failed attempts
+      const loginAttempts = parseInt(
+        localStorage.getItem("login-attempts") || "0"
+      );
+      const newAttempts = loginAttempts + 1;
+      localStorage.setItem("login-attempts", newAttempts.toString());
+      localStorage.setItem("last-login-attempt", Date.now().toString());
+
       return {
         success: false,
         message: "خطأ في الاتصال بالخادم",
@@ -210,7 +251,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   };
 
   const isDataEntry = (): boolean => {
-    return user?.role === "data_entry" || user?.role === "dataentry";
+    return user?.role === "data_entry";
   };
 
   const isAuthenticated = !!user && !!getAuthToken();

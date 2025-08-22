@@ -37,6 +37,7 @@ import { useUIPermissions } from "@/hooks/useUIPermissions";
 import { FinancialDisplay } from "@/components/ui/FinancialDisplay";
 import { PermissionButton } from "@/components/ui/PermissionButton";
 import { useResponsive } from "@/hooks/useResponsive";
+import PageNavigation from "@/components/layout/PageNavigation";
 
 // Status configurations with modern colors
 const statusConfig: Record<
@@ -306,7 +307,10 @@ export default function ProjectsPage() {
         </div>
       </div>
 
-      {/* Role-Based Navigation is now handled globally in MainLayout */}
+      {/* Quick Access Navigation */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <PageNavigation currentPage="projects" />
+      </div>
 
       <div
         className={`max-w-7xl mx-auto py-8 ${

@@ -5,10 +5,12 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useCallback,
   ReactNode,
 } from "react";
 import { apiRequest } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
+import { useAuth } from "./AuthContext";
 
 // Employee types for frontend
 export interface Employee {
@@ -146,6 +148,7 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { addToast } = useToast();
+  const { isAuthenticated } = useAuth();
 
   // Fetch all employees with optional filtering
   const fetchEmployees = async (filter?: EmployeeFilter) => {
@@ -541,7 +544,7 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({
   };
 
   // Calculate remaining salary amount (considering previous payments) - using backend API
-  const calculateRemainingSalary = React.useCallback(
+  const calculateRemainingSalary = useCallback(
     async (employee: Employee): Promise<number> => {
       const baseSalary = employee.monthly_salary || 0;
 
@@ -624,6 +627,14 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({
   // Load initial data
   useEffect(() => {
     const loadInitialData = async () => {
+      // Don't load if not authenticated
+      if (!isAuthenticated) {
+        console.log(
+          "🔍 Debug: Skipping employee data load - user not authenticated"
+        );
+        return;
+      }
+
       try {
         console.log("🚀 Loading initial data...");
         await fetchEmployees();
@@ -639,13 +650,11 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({
       }
     };
 
-    // Add delay to allow authentication to initialize first
-    const timer = setTimeout(() => {
+    // Only load data if authenticated
+    if (isAuthenticated) {
       loadInitialData();
-    }, 2000); // 2 second delay to allow auth to complete
-
-    return () => clearTimeout(timer);
-  }, []);
+    }
+  }, [isAuthenticated]); // Depend on authentication status instead of timer
 
   const contextValue: EmployeeContextType = {
     // State

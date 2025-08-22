@@ -28,7 +28,7 @@ export function AddEmployeeModal({ onClose, onSave }: AddEmployeeModalProps) {
   const { addToast } = useToast();
   const [formData, setFormData] = useState<Partial<Employee>>({
     status: "active",
-    joinDate: new Date().toISOString().split("T")[0],
+    hire_date: new Date().toISOString().split("T")[0],
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -38,11 +38,9 @@ export function AddEmployeeModal({ onClose, onSave }: AddEmployeeModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const calculateMonthlySalary = (data: Partial<Employee>) => {
-    const baseSalary = Number(data.baseSalary) || 0;
-    const dailyBonus = (Number(data.dailyBonus) || 0) * 22; // 22 working days
-    const overtime = (Number(data.overtimePay) || 0) * 10; // 10 hours
-    const deductions = Number(data.deductions) || 0;
-    return baseSalary + dailyBonus + overtime - deductions;
+    const baseSalary = Number(data.monthly_salary) || 0;
+    // For now, just return the monthly salary as the Employee type doesn't have bonus/overtime fields
+    return baseSalary;
   };
 
   const validateForm = () => {
@@ -52,22 +50,22 @@ export function AddEmployeeModal({ onClose, onSave }: AddEmployeeModalProps) {
       newErrors.name = "اسم الموظف مطلوب";
     }
 
-    if (!formData.role?.trim()) {
-      newErrors.role = "المنصب الوظيفي مطلوب";
+    if (!formData.position?.trim()) {
+      newErrors.position = "المنصب الوظيفي مطلوب";
     }
 
-    if (!formData.baseSalary || formData.baseSalary <= 0) {
-      newErrors.baseSalary = "الراتب الأساسي يجب أن يكون أكبر من صفر";
+    if (!formData.monthly_salary || formData.monthly_salary <= 0) {
+      newErrors.monthly_salary = "الراتب الأساسي يجب أن يكون أكبر من صفر";
     }
 
-    if (!formData.joinDate) {
-      newErrors.joinDate = "تاريخ الانضمام مطلوب";
+    if (!formData.hire_date) {
+      newErrors.hire_date = "تاريخ الانضمام مطلوب";
     }
 
     // Validate salary can be paid from safe
     const monthlySalary = calculateMonthlySalary(formData);
     if (!hasBalance(monthlySalary)) {
-      newErrors.baseSalary = `الراتب الشهري (${formatCurrency(
+      newErrors.monthly_salary = `الراتب الشهري (${formatCurrency(
         monthlySalary
       )}) أكبر من رصيد الخزينة (${formatCurrency(safeState.currentBalance)})`;
     }
@@ -82,7 +80,7 @@ export function AddEmployeeModal({ onClose, onSave }: AddEmployeeModalProps) {
     if (isSubmitting) return;
 
     if (!validateForm()) {
-      if (currentSection === "basic" && errors.baseSalary) {
+      if (currentSection === "basic" && errors.monthly_salary) {
         setCurrentSection("salary");
       }
       return;
@@ -94,22 +92,13 @@ export function AddEmployeeModal({ onClose, onSave }: AddEmployeeModalProps) {
       const newEmployee: Employee = {
         id: generateEmployeeId(),
         name: formData.name!,
-        role: formData.role!,
+        position: formData.position!,
         status: formData.status as "active" | "inactive",
-        baseSalary: Number(formData.baseSalary!),
-        joinDate: formData.joinDate!,
-        dailyBonus: formData.dailyBonus
-          ? Number(formData.dailyBonus)
-          : undefined,
-        overtimePay: formData.overtimePay
-          ? Number(formData.overtimePay)
-          : undefined,
-        deductions: formData.deductions
-          ? Number(formData.deductions)
-          : undefined,
-        assignedProjectId: formData.assignedProjectId,
-        createdAt: now,
-        updatedAt: now,
+        monthly_salary: Number(formData.monthly_salary!),
+        hire_date: formData.hire_date!,
+        assigned_project_id: formData.assigned_project_id,
+        created_at: now,
+        updated_at: now,
       };
 
       onSave(newEmployee);
@@ -220,11 +209,11 @@ export function AddEmployeeModal({ onClose, onSave }: AddEmployeeModalProps) {
 
                   <Input
                     label="المنصب الوظيفي"
-                    value={formData.role || ""}
+                    value={formData.position || ""}
                     onChange={(e) =>
-                      setFormData({ ...formData, role: e.target.value })
+                      setFormData({ ...formData, position: e.target.value })
                     }
-                    error={errors.role}
+                    error={errors.position}
                     placeholder="مثال: مهندس برمجيات"
                   />
                 </div>
@@ -247,21 +236,21 @@ export function AddEmployeeModal({ onClose, onSave }: AddEmployeeModalProps) {
                   <Input
                     type="date"
                     label="تاريخ الانضمام"
-                    value={formData.joinDate || ""}
+                    value={formData.hire_date || ""}
                     onChange={(e) =>
-                      setFormData({ ...formData, joinDate: e.target.value })
+                      setFormData({ ...formData, hire_date: e.target.value })
                     }
-                    error={errors.joinDate}
+                    error={errors.hire_date}
                   />
                 </div>
 
                 <Input
                   label="رقم المشروع المخصص (اختياري)"
-                  value={formData.assignedProjectId || ""}
+                  value={formData.assigned_project_id || ""}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      assignedProjectId: e.target.value,
+                      assigned_project_id: e.target.value,
                     })
                   }
                   placeholder="أدخل رقم المشروع إذا كان الموظف مخصصاً لمشروع محدد"
@@ -291,99 +280,15 @@ export function AddEmployeeModal({ onClose, onSave }: AddEmployeeModalProps) {
                     step="1"
                     min="0"
                     label="الراتب الأساسي"
-                    value={formData.baseSalary || ""}
+                    value={formData.monthly_salary || ""}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        baseSalary: parseInt(e.target.value) || 0,
+                        monthly_salary: parseInt(e.target.value) || 0,
                       })
                     }
-                    error={errors.baseSalary}
+                    error={errors.monthly_salary}
                     placeholder="أدخل الراتب الأساسي"
-                    className="bg-white"
-                  />
-                </div>
-
-                <div className="bg-green-50/50 border border-green-100 rounded-xl p-6">
-                  <div className="flex items-center space-x-3 space-x-reverse mb-6">
-                    <div className="bg-green-100 p-2 rounded-lg">
-                      <Award className="h-5 w-5 text-green-700 no-flip" />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-green-900 arabic-spacing">
-                        العلاوات والمكافآت
-                      </h4>
-                      <p className="text-sm text-green-700 arabic-spacing mt-0.5">
-                        إضافات اختيارية على الراتب الأساسي
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <Input
-                      type="number"
-                      step="1"
-                      min="0"
-                      label="العلاوة اليومية"
-                      value={formData.dailyBonus || ""}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          dailyBonus: parseInt(e.target.value) || 0,
-                        })
-                      }
-                      helperText="يتم احتساب 22 يوم في الشهر"
-                      placeholder="أدخل قيمة العلاوة اليومية"
-                      className="bg-white"
-                    />
-
-                    <Input
-                      type="number"
-                      step="1"
-                      min="0"
-                      label="أجر الساعة الإضافية"
-                      value={formData.overtimePay || ""}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          overtimePay: parseInt(e.target.value) || 0,
-                        })
-                      }
-                      helperText="يتم احتساب 10 ساعات في الشهر"
-                      placeholder="أدخل أجر الساعة الإضافية"
-                      className="bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div className="bg-red-50/50 border border-red-100 rounded-xl p-6">
-                  <div className="flex items-center space-x-3 space-x-reverse mb-6">
-                    <div className="bg-red-100 p-2 rounded-lg">
-                      <Wallet className="h-5 w-5 text-red-700 no-flip" />
-                    </div>
-                    <div>
-                      <h4 className="font-semibold text-red-900 arabic-spacing">
-                        الخصومات
-                      </h4>
-                      <p className="text-sm text-red-700 arabic-spacing mt-0.5">
-                        خصومات ثابتة من الراتب الشهري
-                      </p>
-                    </div>
-                  </div>
-
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    label="الخصومات"
-                    value={formData.deductions || ""}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        deductions: parseInt(e.target.value) || 0,
-                      })
-                    }
-                    placeholder="أدخل قيمة الخصومات إن وجدت"
                     className="bg-white"
                   />
                 </div>
@@ -408,54 +313,19 @@ export function AddEmployeeModal({ onClose, onSave }: AddEmployeeModalProps) {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600 arabic-spacing">
-                        الراتب الأساسي:
+                        الراتب الشهري:
                       </span>
                       <span className="font-medium">
-                        {formatCurrency(Number(formData.baseSalary) || 0)}
+                        {formatCurrency(Number(formData.monthly_salary) || 0)}
                       </span>
                     </div>
-                    {formData.dailyBonus && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-600 arabic-spacing">
-                          العلاوات (22 يوم):
-                        </span>
-                        <span className="font-medium text-green-600">
-                          +{formatCurrency(Number(formData.dailyBonus) * 22)}
-                        </span>
-                      </div>
-                    )}
-                    {formData.overtimePay && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-600 arabic-spacing">
-                          ساعات إضافية (10 ساعات):
-                        </span>
-                        <span className="font-medium text-blue-600">
-                          +{formatCurrency(Number(formData.overtimePay) * 10)}
-                        </span>
-                      </div>
-                    )}
-                    {formData.deductions && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-gray-600 arabic-spacing">
-                          الخصومات:
-                        </span>
-                        <span className="font-medium text-red-600">
-                          -{formatCurrency(Number(formData.deductions))}
-                        </span>
-                      </div>
-                    )}
                     <div className="pt-3 mt-3 border-t border-gray-200">
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-gray-900 arabic-spacing">
                           إجمالي الراتب:
                         </span>
                         <span className="text-xl font-bold text-gray-900">
-                          {formatCurrency(
-                            (Number(formData.baseSalary) || 0) +
-                              (Number(formData.dailyBonus) || 0) * 22 +
-                              (Number(formData.overtimePay) || 0) * 10 -
-                              (Number(formData.deductions) || 0)
-                          )}
+                          {formatCurrency(Number(formData.monthly_salary) || 0)}
                         </span>
                       </div>
                     </div>

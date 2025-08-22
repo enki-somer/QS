@@ -406,6 +406,13 @@ export default function ProjectDetailClient() {
     "info" | "categories" | "expenses" | "employees"
   >("info");
 
+  // Reset to info tab if dataentry user tries to access employees tab
+  useEffect(() => {
+    if (permissions.isDataEntryMode && activeTab === "employees") {
+      setActiveTab("info");
+    }
+  }, [permissions.isDataEntryMode, activeTab]);
+
   // Simple Edit Modal State
   const [showSimpleEditModal, setShowSimpleEditModal] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
@@ -2589,22 +2596,24 @@ export default function ProjectDetailClient() {
                 )}
               </button>
 
-              <button
-                onClick={() => setActiveTab("employees")}
-                className={`flex-1 px-6 py-5 text-center font-semibold transition-all duration-300 relative group ${
-                  activeTab === "employees"
-                    ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg"
-                    : "text-gray-600 hover:text-gray-800 hover:bg-white/50"
-                }`}
-              >
-                <div className="flex items-center justify-center space-x-3 space-x-reverse">
-                  <Users className="h-5 w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
-                  <span className="arabic-spacing">موظفو المشروع</span>
-                </div>
-                {activeTab === "employees" && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-green-400 rounded-full"></div>
-                )}
-              </button>
+              {!permissions.isDataEntryMode && (
+                <button
+                  onClick={() => setActiveTab("employees")}
+                  className={`flex-1 px-6 py-5 text-center font-semibold transition-all duration-300 relative group ${
+                    activeTab === "employees"
+                      ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg"
+                      : "text-gray-600 hover:text-gray-800 hover:bg-white/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-center space-x-3 space-x-reverse">
+                    <Users className="h-5 w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
+                    <span className="arabic-spacing">موظفو المشروع</span>
+                  </div>
+                  {activeTab === "employees" && (
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-green-400 rounded-full"></div>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>

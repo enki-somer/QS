@@ -60,7 +60,7 @@ const navigationItems: NavItem[] = [
   },
   {
     icon: Users,
-    label: "الموارد",
+    label: "الموارد البشرية",
     href: "/resources",
     adminOnly: true,
   },
@@ -84,6 +84,18 @@ export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({
   const { isMobile } = useResponsive();
 
   const filteredNavItems = navigationItems.filter((item) => {
+    // Partners can only see basic navigation (no admin features)
+    if (permissions.isViewOnlyMode) {
+      return [
+        "/",
+        "/projects",
+        "/contractors",
+        "/safe",
+        "/resources",
+        "/financial-reports",
+      ].includes(item.href);
+    }
+
     // Hide admin-only items from non-admins
     if (item.adminOnly && !permissions.isAdminMode) {
       return false;
@@ -91,6 +103,11 @@ export const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({
 
     // Hide specific items from data entry users
     if (item.dataEntryHidden && permissions.isDataEntryMode) {
+      return false;
+    }
+
+    // Hide financial reports from data entry users
+    if (item.href === "/financial-reports" && permissions.isDataEntryMode) {
       return false;
     }
 
@@ -221,6 +238,46 @@ const RoleBasedNavButton: React.FC<RoleBasedNavButtonProps> = ({
         <span className="text-xs opacity-60">(عرض)</span>
       )}
     </button>
+  );
+};
+
+/**
+ * Utility component to conditionally render elements based on user role
+ * Partners (view-only) will not see action buttons
+ */
+export const ActionButtonGate: React.FC<{
+  children: React.ReactNode;
+  fallback?: React.ReactNode;
+}> = ({ children, fallback = null }) => {
+  const permissions = useUIPermissions();
+
+  // Partners cannot see any action buttons
+  if (permissions.isViewOnlyMode) {
+    return <>{fallback}</>;
+  }
+
+  return <>{children}</>;
+};
+
+/**
+ * Utility component to show read-only indicator for partners
+ */
+export const ReadOnlyIndicator: React.FC = () => {
+  const permissions = useUIPermissions();
+
+  if (!permissions.isViewOnlyMode) {
+    return null;
+  }
+
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+      <div className="flex items-center space-x-2 space-x-reverse text-blue-700">
+        <Shield className="h-4 w-4" />
+        <span className="text-sm font-medium">
+          وضع القراءة فقط - لا يمكن التعديل
+        </span>
+      </div>
+    </div>
   );
 };
 

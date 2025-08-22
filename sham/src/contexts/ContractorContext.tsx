@@ -1,8 +1,15 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
 import { Contractor, ContractorFormData } from "@/types";
 import { apiRequest } from "@/lib/api";
+import { useAuth } from "./AuthContext";
 
 interface ContractorContextType {
   contractors: Contractor[];
@@ -25,20 +32,31 @@ const ContractorContext = createContext<ContractorContextType | undefined>(
   undefined
 );
 
-export const ContractorProvider: React.FC<{ children: React.ReactNode }> = ({
+export const ContractorProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const [contractors, setContractors] = useState<Contractor[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { isAuthenticated } = useAuth();
 
-  // Load contractors from API on component mount
+  // Load contractors from API on component mount, but only if authenticated
   useEffect(() => {
-    refreshContractors();
-  }, []);
+    if (isAuthenticated) {
+      refreshContractors();
+    }
+  }, [isAuthenticated]);
 
   // Refresh contractors from API
   const refreshContractors = async (): Promise<void> => {
+    // Don't try to load if not authenticated
+    if (!isAuthenticated) {
+      console.log(
+        "🔍 Debug: Skipping contractor load - user not authenticated"
+      );
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);

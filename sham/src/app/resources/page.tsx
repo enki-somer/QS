@@ -35,12 +35,14 @@ import { MonthlyPayrollStatus } from "@/components/resources/MonthlyPayrollStatu
 import { useAuth } from "@/contexts/AuthContext";
 import { useEmployee } from "@/contexts/EmployeeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useUIPermissions } from "@/hooks/useUIPermissions";
 
 export default function ResourcesPage() {
   const { addToast } = useToast();
   const { safeState, deductForSalary, hasBalance } = useSafe();
   const { hasPermission, isDataEntry } = useAuth();
   const { isMobile } = useResponsive();
+  const permissions = useUIPermissions();
   const {
     employees,
     positions,
@@ -57,12 +59,12 @@ export default function ResourcesPage() {
   } = useEmployee();
   const router = useRouter();
 
-  // Redirect silently if user doesn't have employee management access (navigation should prevent this)
+  // Allow access for admin and partners (view-only), block data entry
   useEffect(() => {
-    if (!hasPermission("canManageEmployees")) {
+    if (!hasPermission("canManageEmployees") && !permissions.isViewOnlyMode) {
       router.replace("/");
     }
-  }, [hasPermission, router]);
+  }, [hasPermission, permissions.isViewOnlyMode, router]);
 
   // Permission check moved after hooks to satisfy Rules of Hooks
 
@@ -76,8 +78,8 @@ export default function ResourcesPage() {
     null
   );
 
-  // Guard rendering after all hooks are declared
-  if (!hasPermission("canManageEmployees")) {
+  // Guard rendering after all hooks are declared - allow view-only access for partners
+  if (!hasPermission("canManageEmployees") && !permissions.isViewOnlyMode) {
     return null;
   }
 
@@ -182,13 +184,15 @@ export default function ResourcesPage() {
               <Calendar className="h-4 w-4 ml-2 no-flip" />
               <span className="arabic-spacing">كشف الرواتب</span>
             </Button>
-            <Button
-              onClick={() => setShowEmployeeModal(true)}
-              className="bg-white text-blue-950 hover:bg-gray-100"
-            >
-              <Plus className="h-4 w-4 ml-2 no-flip" />
-              <span className="arabic-spacing">موظف جديد</span>
-            </Button>
+            {!permissions.isViewOnlyMode && (
+              <Button
+                onClick={() => setShowEmployeeModal(true)}
+                className="bg-white text-blue-950 hover:bg-gray-100"
+              >
+                <Plus className="h-4 w-4 ml-2 no-flip" />
+                <span className="arabic-spacing">موظف جديد</span>
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -325,10 +329,12 @@ export default function ResourcesPage() {
             </p>
             <div className="space-y-4">
               {/* Add Employee Button */}
-              <Button onClick={() => setShowEmployeeModal(true)}>
-                <Plus className="h-4 w-4 ml-2 no-flip" />
-                <span className="arabic-spacing">إضافة موظف جديد</span>
-              </Button>
+              {!permissions.isViewOnlyMode && (
+                <Button onClick={() => setShowEmployeeModal(true)}>
+                  <Plus className="h-4 w-4 ml-2 no-flip" />
+                  <span className="arabic-spacing">إضافة موظف جديد</span>
+                </Button>
+              )}
 
               {/* HR Flow Explanation */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-lg mx-auto mt-6">

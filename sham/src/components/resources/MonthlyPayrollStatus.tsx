@@ -16,6 +16,7 @@ import { formatCurrency } from "@/lib/utils";
 import { Employee } from "@/types";
 import { useEmployee } from "@/contexts/EmployeeContext";
 import { useResponsive } from "@/hooks/useResponsive";
+import { useUIPermissions } from "@/hooks/useUIPermissions";
 
 interface MonthlyPayrollStatusProps {
   employees: Employee[];
@@ -42,6 +43,7 @@ export function MonthlyPayrollStatus({
 }: MonthlyPayrollStatusProps) {
   const { calculateMonthlySalary, calculateRemainingSalary } = useEmployee();
   const { isMobile } = useResponsive();
+  const permissions = useUIPermissions();
   const [monthlyStatus, setMonthlyStatus] = useState<MonthlyStatus | null>(
     null
   );
@@ -75,12 +77,26 @@ export function MonthlyPayrollStatus({
         0
       );
 
-      // Calculate actual remaining amounts for each employee using API
+      // Calculate actual remaining amounts for each employee using API (skip for view-only users)
       const employeeRemainingSalaries = await Promise.all(
         activeEmployees.map(async (emp) => {
+          const baseSalary = calculateMonthlySalary(emp);
+
+          // For view-only users (partners), show full salary as remaining (no API calls)
+          if (permissions.isViewOnlyMode) {
+            return {
+              employee: emp,
+              baseSalary,
+              remainingSalary: baseSalary, // Show full salary for partners
+              paidAmount: 0,
+              isFullyPaid: false,
+              isPartiallyPaid: false,
+              isUnpaid: true,
+            };
+          }
+
           try {
             const remainingSalary = await calculateRemainingSalary(emp);
-            const baseSalary = calculateMonthlySalary(emp);
             const paidAmount = baseSalary - remainingSalary;
             return {
               employee: emp,
@@ -96,7 +112,6 @@ export function MonthlyPayrollStatus({
               `Error calculating remaining salary for ${emp.name}:`,
               error
             );
-            const baseSalary = calculateMonthlySalary(emp);
             return {
               employee: emp,
               baseSalary,
