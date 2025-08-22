@@ -26,6 +26,9 @@ interface SalaryPaymentInvoiceProps {
     is_full_payment: boolean;
     payment_date: string;
     invoice_number: string;
+    base_salary?: number;
+    total_due?: number;
+    remaining_balance?: number;
   };
   onClose: () => void;
 }
@@ -296,7 +299,9 @@ export function SalaryPaymentInvoice({
                     الراتب الشهري:
                   </span>
                   <span className="font-semibold">
-                    {formatCurrency(employee.monthly_salary || 0)}
+                    {formatCurrency(
+                      paymentData.base_salary ?? (employee.monthly_salary || 0)
+                    )}
                   </span>
                 </div>
 
@@ -325,7 +330,9 @@ export function SalaryPaymentInvoice({
                     <span className="font-medium">المبلغ المتبقي:</span>
                     <span className="font-semibold">
                       {formatCurrency(
-                        (employee.monthly_salary || 0) - paymentData.amount
+                        paymentData.remaining_balance ??
+                          (paymentData.base_salary ??
+                            (employee.monthly_salary || 0)) - paymentData.amount
                       )}
                     </span>
                   </div>

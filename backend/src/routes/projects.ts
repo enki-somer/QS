@@ -518,4 +518,69 @@ router.delete('/:id', authenticate, requirePermission('canDeleteRecords'), async
   }
 });
 
+// Project Employees CRUD and Salary Payments
+router.get('/:id/employees', authenticate, requirePermission('canManageProjects'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await projectService.getProjectEmployees(id);
+    if (result.success) {
+      res.json({ success: true, data: result.data });
+    } else {
+      res.status(400).json({ success: false, message: result.error || 'Failed to fetch project employees' });
+    }
+  } catch (error) {
+    console.error('Error fetching project employees:', error);
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+  }
+});
+
+router.post('/:id/employees', authenticate, requirePermission('canManageProjects'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await projectService.createProjectEmployee(id, req.body);
+    if (result.success) {
+      res.status(201).json({ success: true, data: result.data });
+    } else {
+      res.status(400).json({ success: false, message: result.error || 'Failed to create project employee' });
+    }
+  } catch (error) {
+    console.error('Error creating project employee:', error);
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+  }
+});
+
+router.post('/:projectId/employees/:employeeId/pay-salary', authenticate, requirePermission('canManageProjects'), async (req, res) => {
+  try {
+    const { projectId, employeeId } = req.params;
+    const userId = (req as any).user?.id;
+    const result = await projectService.processProjectEmployeeSalaryPayment(projectId, employeeId, req.body, userId);
+    if (result.success) {
+      res.json({ success: true, data: result.data });
+    } else {
+      res.status(400).json({ success: false, message: result.error || 'Failed to process project salary payment' });
+    }
+  } catch (error) {
+    console.error('Error processing project salary payment:', error);
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+  }
+});
+
+// Monthly summary for project employees (paid totals and last payment)
+router.get('/:projectId/employees/monthly-summary', authenticate, requirePermission('canManageProjects'), async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const { month } = req.query as { month?: string };
+    const monthYear = month || new Date().toISOString().slice(0,7);
+    const result = await projectService.getProjectEmployeeMonthlySummary(projectId, monthYear);
+    if (result.success) {
+      res.json({ success: true, data: result.data });
+    } else {
+      res.status(400).json({ success: false, message: result.error || 'Failed to fetch summary' });
+    }
+  } catch (error) {
+    console.error('Error fetching project employee monthly summary:', error);
+    res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+  }
+});
+
 export default router;

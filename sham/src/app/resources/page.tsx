@@ -64,10 +64,7 @@ export default function ResourcesPage() {
     }
   }, [hasPermission, router]);
 
-  // Don't render if user doesn't have access
-  if (!hasPermission("canManageEmployees")) {
-    return null;
-  }
+  // Permission check moved after hooks to satisfy Rules of Hooks
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -78,6 +75,11 @@ export default function ResourcesPage() {
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(
     null
   );
+
+  // Guard rendering after all hooks are declared
+  if (!hasPermission("canManageEmployees")) {
+    return null;
+  }
 
   const filteredEmployees = employees.filter((employee) => {
     const matchesSearch =
@@ -172,22 +174,21 @@ export default function ResourcesPage() {
 
         {!isMobile && (
           <div className="flex items-center space-x-4 gap-2 space-x-reverse">
-            {/* All buttons hidden to prevent overflow */}
-            {/* <Button
+            <Button
               variant="outline"
               onClick={() => setShowPayrollReportModal(true)}
               className="border-white text-black hover:bg-white hover:text-blue-950"
             >
               <Calendar className="h-4 w-4 ml-2 no-flip" />
               <span className="arabic-spacing">كشف الرواتب</span>
-            </Button> */}
-            {/* <Button
+            </Button>
+            <Button
               onClick={() => setShowEmployeeModal(true)}
               className="bg-white text-blue-950 hover:bg-gray-100"
             >
               <Plus className="h-4 w-4 ml-2 no-flip" />
               <span className="arabic-spacing">موظف جديد</span>
-            </Button> */}
+            </Button>
           </div>
         )}
       </div>
@@ -259,8 +260,8 @@ export default function ResourcesPage() {
                   <option value="inactive">غير النشطين</option>
                 </Select>
               </div>
-              {/* Payroll Report Button - Hidden to prevent overflow */}
-              {/* {!isMobile && (
+              {/* Extra payroll report button (kept hidden on mobile to avoid overflow) */}
+              {!isMobile && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -269,7 +270,7 @@ export default function ResourcesPage() {
                   <Calendar className="h-4 w-4 ml-2 no-flip" />
                   <span className="arabic-spacing">إنشاء كشف راتب</span>
                 </Button>
-              )} */}
+              )}
             </div>
           </div>
         </CardContent>
@@ -323,11 +324,11 @@ export default function ResourcesPage() {
                 : "أضف الموظفين لإدارة الرواتب. الرواتب ستُدفع مباشرة من الخزينة مع تسجيل كامل"}
             </p>
             <div className="space-y-4">
-              {/* Add Employee Button - Hidden to prevent overflow */}
-              {/* <Button onClick={() => setShowEmployeeModal(true)}>
+              {/* Add Employee Button */}
+              <Button onClick={() => setShowEmployeeModal(true)}>
                 <Plus className="h-4 w-4 ml-2 no-flip" />
                 <span className="arabic-spacing">إضافة موظف جديد</span>
-              </Button> */}
+              </Button>
 
               {/* HR Flow Explanation */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-lg mx-auto mt-6">

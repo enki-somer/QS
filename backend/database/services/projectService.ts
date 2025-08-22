@@ -1,5 +1,6 @@
 import { getPool } from '../config';
 import { Project, ProjectStatus, CreateProjectCategoryAssignmentData } from '../types';
+import { safeService } from './safeService';
 
 export interface CreateProjectData {
   name: string;
@@ -736,6 +737,146 @@ class ProjectService {
     } catch (error) {
       console.error('❌ Error in enhanced delete assignment:', error);
       throw error;
+    }
+  }
+
+  // Project Employees
+  async getProjectEmployees(projectId: string): Promise<any> {
+    try {
+      const result = await getPool().query(`
+        SELECT pe.*, c.full_name as contractor_full_name
+        FROM project_employees pe
+        LEFT JOIN contractors c ON c.id = pe.contractor_id
+        WHERE pe.project_id = $1
+        ORDER BY pe.created_at DESC
+      `, [projectId]);
+      return { success: true, data: result.rows };
+    } catch (error) {
+      console.error('Error fetching project employees:', error);
+      return { success: false, error: 'Failed to fetch project employees' };
+    }
+  }
+
+  async createProjectEmployee(projectId: string, data: any): Promise<any> {
+    try {
+      // Sanitize salary to handle formatted inputs like "1,200,000"
+      const salaryNumber = parseFloat(String(data.monthly_salary ?? data.monthlySalary ?? 0).replace(/[^0-9.]/g, '')) || 0;
+
+      // Source of truth is contractor_id; employee name resolved from contractors table
+      let employeeName = '';
+      if (data.contractor_id) {
+        const contractorRes = await getPool().query(`SELECT full_name FROM contractors WHERE id = $1`, [data.contractor_id]);
+        employeeName = contractorRes.rows[0]?.full_name || '';
+      }
+
+      const result = await getPool().query(`
+        INSERT INTO project_employees (project_id, contractor_id, name, position, department, monthly_salary, status, notes)
+        VALUES ($1,$2,NULLIF($3, ''),$4,$5,$6,$7,$8)
+        RETURNING *
+      `, [
+        projectId,
+        data.contractor_id || null,
+        employeeName,
+        data.position || null,
+        data.department || null,
+        salaryNumber,
+        data.status || 'active',
+        data.notes || null
+      ]);
+      
+      return { success: true, data: result.rows[0] };
+    } catch (error) {
+      console.error('Error creating project employee:', error);
+      // Unique constraint friendly message
+      if ((error as any).code === '23505') {
+        return { success: false, error: 'هذا الموظف (المقاول) موجود بالفعل ضمن هذا المشروع' };
+      }
+      return { success: false, error: 'Failed to create project employee' };
+    }
+  }
+
+  async processProjectEmployeeSalaryPayment(
+    projectId: string,
+    projectEmployeeId: string,
+    paymentData: { amount: number; payment_type: 'full'|'installment'; installment_amount?: number; reason?: string; is_full_payment: boolean; },
+    userId: string
+  ): Promise<any> {
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+
+      // Get project and employee data
+      const projResult = await client.query(`SELECT id, name, budget_estimate FROM projects WHERE id = $1`, [projectId]);
+      if (projResult.rows.length === 0) throw new Error('Project not found');
+      const project = projResult.rows[0];
+
+      const empResult = await client.query(`SELECT * FROM project_employees WHERE id = $1 AND project_id = $2`, [projectEmployeeId, projectId]);
+      if (empResult.rows.length === 0) throw new Error('Project employee not found');
+      const employee = empResult.rows[0];
+
+      const currentDate = new Date();
+      const monthYear = currentDate.toISOString().slice(0,7);
+
+      // Record payment
+      const payResult = await client.query(`
+        INSERT INTO project_employee_salary_payments (
+          project_employee_id, project_id, payment_amount, payment_type, installment_amount, month_year, is_full_payment, notes, payment_date
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        RETURNING *
+      `, [
+        projectEmployeeId,
+        projectId,
+        paymentData.amount,
+        paymentData.payment_type,
+        paymentData.installment_amount || null,
+        monthYear,
+        paymentData.is_full_payment,
+        paymentData.reason || null,
+        currentDate
+      ]);
+
+      // Deduct from safe and link to project with description
+      const description = `راتب موظف مشروع: ${employee.name} - ${paymentData.reason || ''}`.trim();
+      const safeResult = await safeService.deductForProjectSalary(
+        parseFloat(paymentData.amount as any),
+        projectId,
+        project.name,
+        projectEmployeeId,
+        employee.name,
+        description,
+        userId
+      );
+      if (!safeResult.success) throw new Error(safeResult.error || 'Safe deduction failed');
+
+      await client.query('COMMIT');
+      return { success: true, data: { payment: payResult.rows[0], safeTransaction: safeResult.data } };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error processing project employee salary payment:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      client.release();
+    }
+  }
+
+  async getProjectEmployeeMonthlySummary(projectId: string, monthYear: string): Promise<any> {
+    try {
+      const result = await getPool().query(
+        `
+        SELECT 
+          project_employee_id,
+          SUM(payment_amount) AS total_paid,
+          MAX(payment_date) AS last_payment_date
+        FROM project_employee_salary_payments
+        WHERE project_id = $1 AND month_year = $2
+        GROUP BY project_employee_id
+        `,
+        [projectId, monthYear]
+      );
+      return { success: true, data: result.rows };
+    } catch (error) {
+      console.error('Error fetching project employee monthly summary:', error);
+      return { success: false, error: 'Failed to fetch monthly summary' };
     }
   }
 }

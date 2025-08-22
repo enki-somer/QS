@@ -73,9 +73,9 @@ export default function ViewProjectModal({
   onPrintInvoice,
   onPreviewInvoice,
 }: ViewProjectModalProps) {
-  if (!isOpen) return null;
-
   const { safeState } = useSafe();
+
+  if (!isOpen) return null;
 
   // Calculate actual amounts from category assignments (approved invoices)
   const actualSpent = project.categoryAssignments

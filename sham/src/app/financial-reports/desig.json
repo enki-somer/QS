@@ -1,0 +1,259 @@
+{
+    "dashboard_theme": {
+      "name": "Arabic Analytics Dashboard",
+      "language": "ar",
+      "direction": "rtl",
+      "color_scheme": "dark",
+      "last_updated": "2025/01/18 - 2:10 PM"
+    },
+    "layout": {
+      "container": {
+        "background": "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f172a 100%)",
+        "padding": "24px",
+        "gap": "24px",
+        "grid": "responsive"
+      },
+      "header": {
+        "timestamp": {
+          "text": "آخر تحديث: ١٨/٠١/٢٥ ٢:١٠ م",
+          "position": "top-right",
+          "color": "#94a3b8",
+          "font_size": "14px"
+        }
+      }
+    },
+    "cards": [
+      {
+        "id": "average_request_value",
+        "type": "metric_card",
+        "title": "متوسط قيمة الطلب",
+        "value": "IQD 106,000",
+        "icon": {
+          "type": "target",
+          "color": "#fbbf24",
+          "background": "rgba(251, 191, 36, 0.1)"
+        },
+        "secondary_metric": {
+          "label": "معدل التحويل",
+          "value": "62.5%",
+          "icon": "percentage"
+        },
+        "style": {
+          "background": "linear-gradient(135deg, #78716c 0%, #57534e 100%)",
+          "border_radius": "16px",
+          "padding": "24px",
+          "shadow": "0 8px 32px rgba(0,0,0,0.3)"
+        }
+      },
+      {
+        "id": "total_payments",
+        "type": "metric_card", 
+        "title": "إجمالي المدفوعات",
+        "value": "11",
+        "icon": {
+          "type": "credit_card",
+          "color": "#a855f7",
+          "background": "rgba(168, 85, 247, 0.1)"
+        },
+        "trend": {
+          "value": "0.0%",
+          "period": "من الأسبوع الماضي",
+          "direction": "neutral",
+          "icon": "trending_up"
+        },
+        "style": {
+          "background": "linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)",
+          "border_radius": "16px",
+          "padding": "24px",
+          "shadow": "0 8px 32px rgba(124, 58, 237, 0.2)"
+        }
+      },
+      {
+        "id": "total_users",
+        "type": "metric_card",
+        "title": "إجمالي المستخدمين", 
+        "value": "8",
+        "icon": {
+          "type": "users",
+          "color": "#3b82f6",
+          "background": "rgba(59, 130, 246, 0.1)"
+        },
+        "trend": {
+          "value": "0.0%",
+          "period": "من الأسبوع الماضي",
+          "direction": "neutral",
+          "icon": "trending_up"
+        },
+        "style": {
+          "background": "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+          "border_radius": "16px", 
+          "padding": "24px",
+          "shadow": "0 8px 32px rgba(37, 99, 235, 0.2)"
+        }
+      },
+      {
+        "id": "total_revenue",
+        "type": "metric_card",
+        "title": "إجمالي الإيرادات",
+        "value": "IQD 530,000", 
+        "icon": {
+          "type": "dollar_sign",
+          "color": "#10b981",
+          "background": "rgba(16, 185, 129, 0.1)"
+        },
+        "trend": {
+          "value": "0.0%",
+          "period": "من الأسبوع الماضي", 
+          "direction": "neutral",
+          "icon": "trending_up"
+        },
+        "style": {
+          "background": "linear-gradient(135deg, #059669 0%, #047857 100%)",
+          "border_radius": "16px",
+          "padding": "24px", 
+          "shadow": "0 8px 32px rgba(5, 150, 105, 0.2)"
+        }
+      }
+    ],
+    "charts": [
+      {
+        "id": "payment_status_distribution",
+        "type": "donut_chart",
+        "title": "توزيع حالة المدفوعات",
+        "position": "bottom_left",
+        "data": [
+          {
+            "label": "مقبول",
+            "value": 5,
+            "percentage": 45.5,
+            "color": "#10b981"
+          },
+          {
+            "label": "معلق", 
+            "value": 3,
+            "percentage": 27.3,
+            "color": "#f59e0b"
+          },
+          {
+            "label": "مرفوض",
+            "value": 3, 
+            "percentage": 27.3,
+            "color": "#ef4444"
+          }
+        ],
+        "style": {
+          "background": "rgba(15, 23, 42, 0.8)",
+          "border_radius": "16px",
+          "padding": "24px",
+          "backdrop_filter": "blur(10px)",
+          "border": "1px solid rgba(255, 255, 255, 0.1)"
+        },
+        "legend": {
+          "position": "bottom",
+          "show_percentages": true,
+          "show_counts": true
+        }
+      },
+      {
+        "id": "revenue_trend", 
+        "type": "area_chart",
+        "title": "اتجاه الإيرادات (آخر 30 يوم)",
+        "position": "bottom_right",
+        "data": {
+          "x_axis": {
+            "type": "date",
+            "range": ["07/21", "08/18"],
+            "intervals": ["07/21", "07/24", "07/27", "07/30", "08/02", "08/05", "08/08", "08/11", "08/14", "08/18"]
+          },
+          "y_axis": {
+            "type": "currency", 
+            "max": 500000,
+            "intervals": [0, 150000, 300000, 450000, 500000]
+          },
+          "series": [
+            {
+              "name": "إيرادات يومية",
+              "color": "#10b981",
+              "fill": "rgba(16, 185, 129, 0.2)",
+              "peak_point": {
+                "date": "07/30",
+                "value": 450000
+              }
+            }
+          ]
+        },
+        "style": {
+          "background": "rgba(15, 23, 42, 0.8)", 
+          "border_radius": "16px",
+          "padding": "24px",
+          "backdrop_filter": "blur(10px)",
+          "border": "1px solid rgba(255, 255, 255, 0.1)"
+        },
+        "grid": {
+          "show": true,
+          "color": "rgba(148, 163, 184, 0.1)"
+        }
+      }
+    ],
+    "typography": {
+      "font_family": "system-ui, -apple-system, 'Segoe UI', 'Roboto', sans-serif",
+      "arabic_font": "Tajawal, Cairo, Amiri, system-ui",
+      "sizes": {
+        "title": "24px",
+        "metric_value": "32px", 
+        "metric_label": "16px",
+        "chart_title": "20px",
+        "legend": "14px",
+        "timestamp": "14px"
+      },
+      "weights": {
+        "title": "600",
+        "metric_value": "700",
+        "metric_label": "500", 
+        "chart_title": "600"
+      },
+      "colors": {
+        "primary": "#ffffff",
+        "secondary": "#e2e8f0", 
+        "muted": "#94a3b8",
+        "accent": "#3b82f6"
+      }
+    },
+    "effects": {
+      "glass_morphism": {
+        "backdrop_filter": "blur(10px)",
+        "background": "rgba(15, 23, 42, 0.8)",
+        "border": "1px solid rgba(255, 255, 255, 0.1)"
+      },
+      "shadows": {
+        "card": "0 8px 32px rgba(0, 0, 0, 0.3)",
+        "card_hover": "0 12px 48px rgba(0, 0, 0, 0.4)",
+        "accent": "0 8px 32px rgba(59, 130, 246, 0.2)"
+      },
+      "transitions": {
+        "duration": "300ms",
+        "easing": "cubic-bezier(0.4, 0, 0.2, 1)"
+      },
+      "hover_effects": {
+        "card_lift": "translateY(-4px)",
+        "scale": "scale(1.02)"
+      }
+    },
+    "responsive": {
+      "breakpoints": {
+        "mobile": "768px",
+        "tablet": "1024px", 
+        "desktop": "1280px"
+      },
+      "grid": {
+        "mobile": "1fr",
+        "tablet": "repeat(2, 1fr)",
+        "desktop": "repeat(4, 1fr)"
+      },
+      "chart_layout": {
+        "mobile": "1fr",
+        "tablet": "1fr 1fr", 
+        "desktop": "1fr 1fr"
+      }
+    }
+  }

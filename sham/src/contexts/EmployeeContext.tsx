@@ -535,8 +535,9 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({
 
   // Calculate monthly salary (for display purposes)
   const calculateMonthlySalary = (employee: Employee): number => {
-    const salary = employee.monthly_salary || 0;
-    return isNaN(salary) ? 0 : salary;
+    const raw = (employee as any).monthly_salary;
+    const salary = typeof raw === "string" ? parseFloat(raw) : raw || 0;
+    return isNaN(Number(salary)) ? 0 : Number(salary);
   };
 
   // Calculate remaining salary amount (considering previous payments) - using backend API
@@ -592,19 +593,8 @@ export const EmployeeProvider: React.FC<EmployeeProviderProps> = ({
           error
         );
 
-        // Simple fallback: if there's a payment this month, assume it's partial
-        if (employee.last_payment_date) {
-          const paymentDate = new Date(employee.last_payment_date);
-          const currentMonth = new Date().toISOString().slice(0, 7);
-          const paymentMonth = paymentDate.toISOString().slice(0, 7);
-
-          if (paymentMonth === currentMonth) {
-            // Assume 50% remaining for partial payments when API fails
-            return baseSalary * 0.5;
-          }
-        }
-
-        return baseSalary; // Fallback to full salary if error
+        // Fallback: return full base salary to avoid misleading partial assumptions
+        return baseSalary;
       }
     },
     []

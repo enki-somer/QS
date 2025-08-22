@@ -23,6 +23,7 @@ import {
   Banknote,
   History,
   Eye,
+  Printer,
   FileText,
   Lock,
   Edit3,
@@ -55,6 +56,7 @@ import { PermissionButton } from "@/components/ui/PermissionButton";
 import RoleBasedNavigation from "@/components/ui/RoleBasedNavigation";
 import { PermissionRoute } from "@/components/ui/PermissionRoute";
 import { useResponsive } from "@/hooks/useResponsive";
+import FundingReceiptModal from "@/components/safe/FundingReceiptModal";
 
 const transactionTypeLabels = {
   funding: "تمويل الخزينة",
@@ -92,10 +94,7 @@ export default function SafePage() {
     }
   }, [hasPermission, router]);
 
-  // Don't render if user doesn't have access
-  if (!hasPermission("canViewSafe")) {
-    return null;
-  }
+  // Removed early return to satisfy Rules of Hooks; access is handled via navigation guards
 
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -116,6 +115,10 @@ export default function SafePage() {
     funding_notes: "",
     edit_reason: "",
   });
+
+  // Funding receipt state
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [receiptTransaction, setReceiptTransaction] = useState<any>(null);
 
   // Dynamic funding sources state
   const [fundingSources, setFundingSources] = useState<any[]>([
@@ -182,9 +185,8 @@ export default function SafePage() {
       return;
     }
 
-    const fullDescription = fundingForm.source
-      ? `${fundingForm.description} - ملاحظات: ${fundingForm.source}`
-      : fundingForm.description;
+    // Keep description clean; store notes separately in funding_notes
+    const cleanDescription = fundingForm.description;
 
     try {
       // If a project source is selected, we need to call the API directly with project info
@@ -214,7 +216,10 @@ export default function SafePage() {
         // Refresh safe state manually since we bypassed the context
         window.location.reload();
       } else {
-        await addFunding(amount, fullDescription);
+        await addFunding(amount, cleanDescription, {
+          funding_source: fundingForm.description,
+          funding_notes: fundingForm.source,
+        });
       }
 
       addToast({
@@ -449,6 +454,12 @@ export default function SafePage() {
     }
   };
 
+  // Open funding receipt modal
+  const openReceiptModal = (transaction: any) => {
+    setReceiptTransaction(transaction);
+    setShowReceiptModal(true);
+  };
+
   // Mobile Layout Component
   const MobileLayout = () => (
     <div className="pb-20 min-h-screen bg-gray-50">
@@ -667,11 +678,21 @@ export default function SafePage() {
                     </div>
                   </div>
 
-                  {/* Mobile Edit Button */}
-                  {(hasPermission("canEditSafe") ||
-                    hasPermission("canMakePayments")) &&
-                    transaction.type === "funding" && (
-                      <div className="mt-3 flex justify-end">
+                  {/* Mobile Actions: Print and Edit for funding */}
+                  {transaction.type === "funding" && (
+                    <div className="mt-3 flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openReceiptModal(transaction)}
+                        className="text-green-600 border-green-200 hover:bg-green-50"
+                        title="طباعة سند التمويل"
+                      >
+                        <Printer className="h-3 w-3 ml-1 no-flip" />
+                        <span className="arabic-spacing text-xs">سند</span>
+                      </Button>
+                      {(hasPermission("canEditSafe") ||
+                        hasPermission("canMakePayments")) && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -681,8 +702,9 @@ export default function SafePage() {
                           <Edit3 className="h-3 w-3 ml-1 no-flip" />
                           <span className="arabic-spacing text-xs">تعديل</span>
                         </Button>
-                      </div>
-                    )}
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1011,19 +1033,31 @@ export default function SafePage() {
                         />
                       </p>
                     </div>
-                    {(hasPermission("canEditSafe") ||
-                      hasPermission("canMakePayments")) &&
-                      transaction.type === "funding" && (
+                    {transaction.type === "funding" && (
+                      <div className="flex items-center gap-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => openEditModal(transaction)}
-                          className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                          onClick={() => openReceiptModal(transaction)}
+                          className="text-green-600 border-green-200 hover:bg-green-50"
                         >
-                          <Edit3 className="h-4 w-4 ml-1 no-flip" />
-                          <span className="arabic-spacing">تعديل</span>
+                          <Printer className="h-4 w-4 ml-1 no-flip" />
+                          <span className="arabic-spacing">سند</span>
                         </Button>
-                      )}
+                        {(hasPermission("canEditSafe") ||
+                          hasPermission("canMakePayments")) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEditModal(transaction)}
+                            className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                          >
+                            <Edit3 className="h-4 w-4 ml-1 no-flip" />
+                            <span className="arabic-spacing">تعديل</span>
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1649,6 +1683,13 @@ export default function SafePage() {
           {/* Include modals for mobile */}
           {showFundingModal && <FundingModalContent />}
           {showEditModal && editingTransaction && <EditModalContent />}
+          {showReceiptModal && receiptTransaction && (
+            <FundingReceiptModal
+              isOpen={showReceiptModal}
+              transaction={receiptTransaction}
+              onClose={() => setShowReceiptModal(false)}
+            />
+          )}
         </div>
       </PermissionRoute>
     );
@@ -1662,6 +1703,13 @@ export default function SafePage() {
           {/* Include modals for tablet */}
           {showFundingModal && <FundingModalContent />}
           {showEditModal && editingTransaction && <EditModalContent />}
+          {showReceiptModal && receiptTransaction && (
+            <FundingReceiptModal
+              isOpen={showReceiptModal}
+              transaction={receiptTransaction}
+              onClose={() => setShowReceiptModal(false)}
+            />
+          )}
         </div>
       </PermissionRoute>
     );
@@ -1973,20 +2021,33 @@ export default function SafePage() {
                           />
                         </p>
                       </div>
-                      {(hasPermission("canEditSafe") ||
-                        hasPermission("canMakePayments")) &&
-                        transaction.type === "funding" && (
+                      {transaction.type === "funding" && (
+                        <div className="flex items-center gap-2">
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => openEditModal(transaction)}
-                            className="h-10 px-3 text-blue-600 border-blue-200 hover:text-blue-700 hover:bg-blue-50 hover:border-blue-300 font-medium"
-                            title="تعديل المعاملة"
+                            onClick={() => openReceiptModal(transaction)}
+                            className="h-10 px-3 text-green-600 border-green-200 hover:text-green-700 hover:bg-green-50 hover:border-green-300 font-medium"
+                            title="طباعة سند التمويل"
                           >
-                            <Edit3 className="h-4 w-4 ml-1 no-flip" />
-                            <span className="arabic-spacing">تعديل</span>
+                            <Printer className="h-4 w-4 ml-1 no-flip" />
+                            <span className="arabic-spacing">سند</span>
                           </Button>
-                        )}
+                          {(hasPermission("canEditSafe") ||
+                            hasPermission("canMakePayments")) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openEditModal(transaction)}
+                              className="h-10 px-3 text-blue-600 border-blue-200 hover:text-blue-700 hover:bg-blue-50 hover:border-blue-300 font-medium"
+                              title="تعديل المعاملة"
+                            >
+                              <Edit3 className="h-4 w-4 ml-1 no-flip" />
+                              <span className="arabic-spacing">تعديل</span>
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -2613,6 +2674,15 @@ export default function SafePage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Funding Receipt Modal */}
+        {showReceiptModal && receiptTransaction && (
+          <FundingReceiptModal
+            isOpen={showReceiptModal}
+            transaction={receiptTransaction}
+            onClose={() => setShowReceiptModal(false)}
+          />
         )}
       </div>
     </PermissionRoute>

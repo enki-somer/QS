@@ -58,7 +58,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Project, ProjectCategoryAssignment } from "@/types";
+import { Project, ProjectCategoryAssignment, Contractor } from "@/types";
 
 // Simple interface for assignment modal use
 interface SimpleAssignmentFormData {
@@ -84,6 +84,77 @@ import EnhancedCategoryInvoiceModal from "@/components/projects/EnhancedCategory
 import CategoryAssignmentsTable from "@/components/projects/CategoryAssignmentsTable";
 import CategoryAssignmentModal from "@/components/projects/CategoryAssignmentModal";
 import { apiRequest } from "@/lib/api";
+import { useContractors } from "@/contexts/ContractorContext";
+
+// Stable contractor dropdown component (defined outside to avoid remounts)
+const ContractorDropdown: React.FC<{
+  contractors: { id: string; full_name: string }[];
+  value: string;
+  onChange: (id: string, label?: string) => void;
+}> = React.memo(({ contractors, value, onChange }) => {
+  const [open, setOpen] = React.useState(false);
+  const selected = React.useMemo(
+    () => contractors.find((c) => c.id === value),
+    [contractors, value]
+  );
+
+  return (
+    <div className="space-y-1 relative">
+      <label className="block text-sm font-medium text-gray-900 arabic-spacing">
+        اختر المقاول (الموظف)
+      </label>
+      <button
+        type="button"
+        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 text-right flex items-center justify-between"
+        onClick={() => {
+          const next = !open;
+          setOpen(next);
+          console.log(
+            next ? "🟢 ContractorDropdown open" : "⚪ ContractorDropdown close",
+            { contractorsCount: contractors.length }
+          );
+        }}
+      >
+        <span className="arabic-spacing">
+          {selected ? selected.full_name : "— اختر —"}
+        </span>
+        <ChevronRight
+          className={`h-4 w-4 transition-transform no-flip ${
+            open ? "rotate-90" : "rotate-0"
+          }`}
+        />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full max-h-56 overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+          {contractors.map((c) => (
+            <div
+              key={c.id}
+              className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 ${
+                c.id === value ? "bg-gray-100 font-medium" : ""
+              }`}
+              onClick={() => {
+                console.log("✅ ContractorDropdown selected", {
+                  id: c.id,
+                  label: c.full_name,
+                });
+                onChange(c.id, c.full_name);
+                setOpen(false);
+              }}
+            >
+              {c.full_name}
+            </div>
+          ))}
+          {contractors.length === 0 && (
+            <div className="px-3 py-2 text-sm text-gray-500">
+              لا توجد قائمة مقاولين
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+ContractorDropdown.displayName = "ContractorDropdown";
 
 // Project Expense Interface (for project-specific unstructured expenses)
 interface ProjectExpense {
@@ -144,6 +215,8 @@ const categoryNameToId: Record<string, string> = {
   "أعمال متخصصة وتنفيذ متكامل": "specialized_works",
   "إدارية وتشغيلية": "administrative_operational",
 };
+
+// Project Budget Status Interface
 
 // Lazy Loading Hook
 const useLazyLoad = (
@@ -330,7 +403,7 @@ export default function ProjectDetailClient() {
 
   // Tab System State
   const [activeTab, setActiveTab] = useState<
-    "info" | "categories" | "expenses"
+    "info" | "categories" | "expenses" | "employees"
   >("info");
 
   // Simple Edit Modal State
@@ -338,6 +411,63 @@ export default function ProjectDetailClient() {
   const [editingAssignment, setEditingAssignment] = useState<any>(null);
 
   const projectId = params.id as string;
+
+  // Helper: normalize Arabic-Indic digits and separators to ASCII for reliable parsing
+  const normalizeArabicDigits = (input: any): string => {
+    const s = String(input ?? "");
+    const map = "٠١٢٣٤٥٦٧٨٩";
+    const ascii = "0123456789";
+    const withAscii = s.replace(/[٠-٩]/g, (d) => ascii[map.indexOf(d)]);
+    // Replace Arabic thousands separators and commas with standard comma; remove NBSP
+    return withAscii.replace(/[٬،\u066C\u060C]/g, ",").replace(/\u00A0/g, "");
+  };
+
+  // Safe numeric parser for values coming as strings (e.g., "1000000.00" or "1,000,000")
+  const toNumber = useCallback((value: any): number => {
+    if (typeof value === "number") return isNaN(value) ? 0 : value;
+    if (typeof value === "string") {
+      const normalized = normalizeArabicDigits(value);
+      const cleaned = normalized.replace(/,/g, "");
+      const n = parseFloat(cleaned);
+      return isNaN(n) ? 0 : n;
+    }
+    const n = Number(value);
+    return isNaN(n) ? 0 : n;
+  }, []);
+
+  const getMonthlySalary = useCallback(
+    (emp: any): number => {
+      return toNumber(
+        emp?.monthly_salary ??
+          emp?.monthlySalary ??
+          emp?.base_salary ??
+          emp?.baseSalary ??
+          emp?.salary ??
+          0
+      );
+    },
+    [toNumber]
+  );
+
+  // Project budget helpers (normalized numbers)
+  const projectBudget = useMemo(() => {
+    const estimate =
+      typeof project?.budgetEstimate === "string"
+        ? parseFloat(project.budgetEstimate) || 0
+        : project?.budgetEstimate || (project as any)?.budget_estimate || 0;
+    const available =
+      typeof (project as any)?.availableBudget === "string"
+        ? parseFloat((project as any).availableBudget) || 0
+        : (project as any)?.availableBudget ??
+          (project as any)?.available_budget ??
+          0;
+    const spent =
+      typeof (project as any)?.spentBudget === "string"
+        ? parseFloat((project as any).spentBudget) || 0
+        : (project as any)?.spentBudget ?? (project as any)?.spent_budget ?? 0;
+    const utilization = estimate > 0 ? Math.round((spent / estimate) * 100) : 0;
+    return { estimate, available, spent, utilization };
+  }, [project]);
 
   // Check if category assignment can be edited (has approved/paid invoices)
   const isCategoryAssignmentEditable = (categoryId: string) => {
@@ -1433,6 +1563,923 @@ export default function ProjectDetailClient() {
     return sum;
   }, 0);
 
+  // Project Employees state
+  const [projEmployees, setProjEmployees] = useState<any[]>([]);
+  const [empLoading, setEmpLoading] = useState(false);
+  const [showAddProjEmp, setShowAddProjEmp] = useState(false);
+  const [newProjEmp, setNewProjEmp] = useState({
+    name: "",
+    position: "",
+    department: "",
+    monthly_salary: "",
+    status: "active",
+    notes: "",
+    contractor_id: "",
+  });
+  // Monthly summary per employee (paid, last payment)
+  const [employeeSummary, setEmployeeSummary] = useState<
+    Record<string, { paidThisMonth: number; lastPaymentDate?: string }>
+  >({});
+  // Pay salary modal
+  const [payModal, setPayModal] = useState<{
+    isOpen: boolean;
+    employee: any | null;
+    mode: "full" | "installment";
+  }>({ isOpen: false, employee: null, mode: "full" });
+  const [installmentAmount, setInstallmentAmount] = useState<string>("");
+  const [paymentReason, setPaymentReason] = useState<string>("");
+  const [recentlyUpdatedEmployeeId, setRecentlyUpdatedEmployeeId] = useState<
+    string | null
+  >(null);
+  const [budgetStatus, setBudgetStatus] = useState<{
+    beforeAvailable: number;
+    beforeSpent: number;
+    afterAvailable: number;
+    afterSpent: number;
+    delta: number;
+    at: string;
+  } | null>(null);
+
+  // Invoice modal state
+  const [invoiceModal, setInvoiceModal] = useState<{
+    isOpen: boolean;
+    paymentData: any | null;
+    employee: any | null;
+  }>({ isOpen: false, paymentData: null, employee: null });
+
+  // Contractors snapshot for stable dropdown rendering
+  const { contractors, isLoading: contractorsLoading } = useContractors();
+  const [contractorOptions, setContractorOptions] = useState<Contractor[]>([]);
+  useEffect(() => {
+    setContractorOptions(contractors);
+  }, [contractors]);
+
+  // Local component for contractor select
+  const ContractorSelect = React.memo(
+    ({
+      value,
+      onChange,
+    }: {
+      value: string;
+      onChange: (id: string, label?: string) => void;
+    }) => {
+      const [open, setOpen] = useState(false);
+      const selected = contractorOptions.find((c) => c.id === value);
+      return (
+        <div className="space-y-1 relative">
+          <label className="block text-sm font-medium text-gray-900 arabic-spacing">
+            اختر المقاول (الموظف)
+          </label>
+          <button
+            type="button"
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 text-right flex items-center justify-between"
+            onClick={() => {
+              const next = !open;
+              setOpen(next);
+              console.log(
+                next
+                  ? "🟢 ContractorDropdown open"
+                  : "⚪ ContractorDropdown close",
+                {
+                  contractorsCount: contractorOptions.length,
+                }
+              );
+            }}
+          >
+            <span className="arabic-spacing">
+              {selected ? selected.full_name : "— اختر —"}
+            </span>
+            <ChevronRight
+              className={`h-4 w-4 transition-transform no-flip ${
+                open ? "rotate-90" : "rotate-0"
+              }`}
+            />
+          </button>
+          {open && (
+            <div className="absolute z-50 mt-1 w-full max-h-56 overflow-auto rounded-md border border-gray-200 bg-white shadow-lg">
+              {contractorOptions.map((c) => (
+                <div
+                  key={c.id}
+                  className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 ${
+                    c.id === value ? "bg-gray-100 font-medium" : ""
+                  }`}
+                  onClick={() => {
+                    console.log("✅ ContractorDropdown selected", {
+                      id: c.id,
+                      label: c.full_name,
+                    });
+                    onChange(c.id, c.full_name);
+                    setOpen(false);
+                  }}
+                >
+                  {c.full_name}
+                </div>
+              ))}
+              {contractorOptions.length === 0 && (
+                <div className="px-3 py-2 text-sm text-gray-500">
+                  لا توجد قائمة مقاولين
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+  );
+  ContractorSelect.displayName = "ContractorSelect";
+
+  // Load project employees
+  useEffect(() => {
+    const loadProjEmployees = async () => {
+      if (!projectId) return;
+      setEmpLoading(true);
+      try {
+        const res = await apiRequest(`/projects/${projectId}/employees`);
+        const json = await res.json();
+        if (json.success) {
+          setProjEmployees(json.data || []);
+        } else {
+          console.warn("Failed to load project employees:", json);
+          // Don't clear existing data on API failure
+          if (projEmployees.length === 0) {
+            setProjEmployees([]); // Only set empty if we don't have existing data
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load project employees", e);
+        // Don't clear existing data on network error
+        if (projEmployees.length === 0) {
+          setProjEmployees([]); // Only set empty if we don't have existing data
+        }
+      } finally {
+        setEmpLoading(false);
+      }
+    };
+    loadProjEmployees();
+  }, [projectId]);
+
+  // Load monthly summary for project employees
+  useEffect(() => {
+    const loadSummary = async () => {
+      if (!projectId) return;
+      const currentMonth = new Date().toISOString().slice(0, 7);
+      try {
+        const res = await apiRequest(
+          `/projects/${projectId}/employees/monthly-summary?month=${currentMonth}`
+        );
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          const map: Record<
+            string,
+            { paidThisMonth: number; lastPaymentDate?: string }
+          > = {};
+          json.data.forEach((row: any) => {
+            map[row.project_employee_id] = {
+              paidThisMonth: Number(row.total_paid || 0),
+              lastPaymentDate: row.last_payment_date,
+            };
+          });
+          setEmployeeSummary(map);
+        } else {
+          setEmployeeSummary({});
+        }
+      } catch (e) {
+        console.warn("Failed to load employee summary", e);
+        setEmployeeSummary({});
+      }
+    };
+    loadSummary();
+  }, [projectId]); // Removed projEmployees.length dependency to prevent infinite loops
+
+  const openProjectSalaryModal = (
+    employee: any,
+    mode: "full" | "installment"
+  ) => {
+    setPayModal({ isOpen: true, employee, mode });
+    // Default installment amount = remaining
+    const paid = toNumber(employeeSummary[employee.id]?.paidThisMonth || 0);
+    const base = getMonthlySalary(employee);
+    const remaining = Math.max(0, base - paid);
+    setInstallmentAmount(
+      mode === "installment" ? (remaining > 0 ? String(remaining) : "") : ""
+    );
+    setPaymentReason(""); // Reset payment reason
+  };
+
+  const closeProjectSalaryModal = () => {
+    setPayModal({ isOpen: false, employee: null, mode: "full" });
+    setInstallmentAmount("");
+    setPaymentReason("");
+  };
+
+  const confirmProjectSalaryPayment = async () => {
+    if (!payModal.employee) return;
+
+    // CRITICAL: Check if project has sufficient budget
+    if (projectBudget.available <= 0) {
+      addToast({
+        type: "error",
+        title: "الميزانية مستنفدة",
+        message: "لا يمكن دفع الرواتب - الميزانية مستنفدة بالكامل",
+      });
+      return;
+    }
+
+    const employee = payModal.employee;
+    const paid = toNumber(employeeSummary[employee.id]?.paidThisMonth || 0);
+    const base = toNumber(employee.monthly_salary || 0);
+    const remaining = Math.max(0, base - paid);
+    const amount =
+      payModal.mode === "full"
+        ? remaining
+        : toNumber(String(installmentAmount).replace(/\D+/g, ""));
+
+    if (!amount || amount <= 0) {
+      addToast({
+        type: "error",
+        title: "مبلغ غير صالح",
+        message: "أدخل مبلغاً صحيحاً",
+      });
+      return;
+    }
+
+    if (amount > remaining) {
+      addToast({
+        type: "error",
+        title: "أعلى من المتبقي",
+        message: "المبلغ يتجاوز المتبقي لهذا الشهر",
+      });
+      return;
+    }
+
+    // CRITICAL: Check if payment amount exceeds available budget
+    if (amount > projectBudget.available) {
+      addToast({
+        type: "error",
+        title: "الميزانية غير كافية",
+        message: `المبلغ المطلوب (${formatCurrency(
+          amount
+        )}) يتجاوز الميزانية المتاحة (${formatCurrency(
+          projectBudget.available
+        )})`,
+      });
+      return;
+    }
+
+    if (!paymentReason.trim()) {
+      addToast({
+        type: "error",
+        title: "",
+        message: "سبب الدفع مطلوب , يرجى ادخال سبب الدفع ",
+      });
+      return;
+    }
+
+    const reason = paymentReason.trim();
+    try {
+      const res = await apiRequest(
+        `/projects/${projectId}/employees/${employee.id}/pay-salary`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            amount,
+            payment_type: payModal.mode,
+            is_full_payment: payModal.mode === "full",
+            reason,
+          }),
+        }
+      );
+      const json = await res.json();
+      if (json.success) {
+        // Prepare payment data for invoice
+        const paymentData = {
+          amount,
+          payment_type: payModal.mode,
+          installment_amount:
+            payModal.mode === "installment" ? amount : undefined,
+          reason,
+          is_full_payment: payModal.mode === "full" || amount >= remaining,
+          payment_date: new Date().toISOString(),
+          invoice_number: `PROJ-SAL-${Date.now()}-${employee.id.slice(-4)}`,
+          base_salary: base,
+          total_due: remaining,
+          remaining_balance: Math.max(0, remaining - amount),
+          project_budget_impact: amount, // Track impact on project budget
+        };
+
+        // Update employeeSummary immediately (no full reload)
+        setEmployeeSummary((prev) => {
+          const prevEmp = prev[employee.id] || { paidThisMonth: 0 };
+          const newPaid = (prevEmp.paidThisMonth || 0) + amount;
+          return {
+            ...prev,
+            [employee.id]: {
+              paidThisMonth: newPaid,
+              lastPaymentDate: new Date().toISOString(),
+            },
+          };
+        });
+
+        setRecentlyUpdatedEmployeeId(employee.id);
+        setTimeout(() => setRecentlyUpdatedEmployeeId(null), 2500);
+
+        // Show invoice modal
+        setInvoiceModal({
+          isOpen: true,
+          paymentData,
+          employee,
+        });
+
+        // Update local project budget if backend returned it
+        if (json.data?.projectBudget) {
+          const beforeAvailable =
+            typeof project?.availableBudget === "string"
+              ? parseFloat(project.availableBudget) || 0
+              : project?.availableBudget || 0;
+          const beforeSpent =
+            typeof project?.spentBudget === "string"
+              ? parseFloat(project.spentBudget) || 0
+              : project?.spentBudget || 0;
+          const afterAvailable = json.data.projectBudget.available_budget;
+          const afterSpent = json.data.projectBudget.spent_budget;
+
+          setProject((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  availableBudget: afterAvailable,
+                  spentBudget: afterSpent,
+                }
+              : prev
+          );
+
+          setBudgetStatus({
+            beforeAvailable,
+            beforeSpent,
+            afterAvailable,
+            afterSpent,
+            delta: amount,
+            at: new Date().toISOString(),
+          });
+        }
+
+        addToast({
+          type: "success",
+          title: "تم الدفع بنجاح",
+          message: `تم دفع ${formatCurrency(amount)} لـ ${employee.name}`,
+        });
+
+        // Refresh data by triggering useEffect
+        // Instead of clearing data (which causes table to disappear),
+        // we'll reload the data properly
+        const refreshData = async () => {
+          try {
+            // Reload project employees
+            const empRes = await apiRequest(`/projects/${projectId}/employees`);
+            const empJson = await empRes.json();
+            if (empJson.success) {
+              setProjEmployees(empJson.data || []);
+            }
+
+            // Reload monthly summary
+            const currentMonth = new Date().toISOString().slice(0, 7);
+            const summaryRes = await apiRequest(
+              `/projects/${projectId}/employees/monthly-summary?month=${currentMonth}`
+            );
+            const summaryJson = await summaryRes.json();
+            if (summaryJson.success && Array.isArray(summaryJson.data)) {
+              const map: Record<
+                string,
+                { paidThisMonth: number; lastPaymentDate?: string }
+              > = {};
+              summaryJson.data.forEach((row: any) => {
+                map[row.project_employee_id] = {
+                  paidThisMonth: Number(row.total_paid || 0),
+                  lastPaymentDate: row.last_payment_date,
+                };
+              });
+              setEmployeeSummary(map);
+            }
+          } catch (error) {
+            console.warn("Error refreshing employee data:", error);
+            // Don't clear data on error - keep existing data
+          }
+        };
+
+        refreshData();
+        closeProjectSalaryModal();
+      } else {
+        addToast({
+          type: "error",
+          title: "فشل الدفع",
+          message: json.message || "خطأ",
+        });
+      }
+    } catch (err: any) {
+      addToast({
+        type: "error",
+        title: "خطأ",
+        message: err.message || "فشل العملية",
+      });
+    }
+  };
+
+  // Pay salary modal UI
+  const renderProjectSalaryModal = () => {
+    if (!payModal.isOpen || !payModal.employee) return null;
+    const employee = payModal.employee;
+    const paid = toNumber(employeeSummary[employee.id]?.paidThisMonth || 0);
+    const base = getMonthlySalary(employee);
+    const remaining = Math.max(0, base - paid);
+
+    // Live calculation for installment amount
+    const installmentAmountNum = toNumber(installmentAmount);
+    const willRemainAfterPayment = Math.max(
+      0,
+      remaining - installmentAmountNum
+    );
+    const isFullPayment =
+      payModal.mode === "full" || installmentAmountNum >= remaining;
+
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+        onClick={closeProjectSalaryModal}
+      >
+        <div
+          className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="text-xl font-semibold arabic-spacing mb-6 text-center">
+            دفع راتب موظف مشروع
+          </h3>
+
+          {/* Employee Info */}
+          <div className="bg-gray-50 rounded-xl p-4 mb-6">
+            <div className="text-center mb-3">
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                <User className="h-8 w-8 text-blue-600" />
+              </div>
+              <h4 className="font-semibold text-lg text-gray-900">
+                {employee.name}
+              </h4>
+              <p className="text-sm text-gray-600">
+                {employee.position || "موظف مشروع"}
+              </p>
+            </div>
+          </div>
+
+          {/* Salary Summary */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-green-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-green-600 mb-1">الراتب الشهري</p>
+              <p className="text-lg font-bold text-green-700">
+                {formatCurrency(base)}
+              </p>
+            </div>
+            <div className="bg-blue-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-blue-600 mb-1">المدفوع هذا الشهر</p>
+              <p className="text-lg font-bold text-blue-700">
+                {formatCurrency(paid)}
+              </p>
+            </div>
+            <div className="bg-amber-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-amber-600 mb-1">المتبقي</p>
+              <p className="text-lg font-bold text-amber-700">
+                {formatCurrency(remaining)}
+              </p>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-3 text-center">
+              <p className="text-xs text-purple-600 mb-1">نوع الدفع</p>
+              <p className="text-sm font-medium text-purple-700">
+                {payModal.mode === "full" ? "دفع كامل" : "قسط"}
+              </p>
+            </div>
+          </div>
+
+          {/* Payment Input */}
+          {payModal.mode === "installment" && (
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-2">
+                مبلغ القسط
+              </label>
+              <Input
+                value={installmentAmount}
+                placeholder="0"
+                inputMode="numeric"
+                className="text-center text-lg font-semibold"
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D+/g, "");
+                  setInstallmentAmount(digits);
+                }}
+                onBlur={() => {
+                  const num = Number(installmentAmount || 0);
+                  setInstallmentAmount(num ? String(num) : "");
+                }}
+              />
+
+              {/* Live Calculation Display */}
+              <div className="mt-3 space-y-2 text-sm">
+                <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                  <span className="text-gray-600">المبلغ المطلوب:</span>
+                  <span className="font-medium">
+                    {formatCurrency(remaining)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-2 bg-gray-2 rounded-lg">
+                  <span className="text-gray-600">مبلغ القسط:</span>
+                  <span className="font-medium text-blue-600">
+                    {formatCurrency(installmentAmountNum)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
+                  <span className="text-gray-600">سيبقى بعد الدفع:</span>
+                  <span
+                    className={`font-medium ${
+                      willRemainAfterPayment > 0
+                        ? "text-amber-600"
+                        : "text-green-600"
+                    }`}
+                  >
+                    {formatCurrency(willRemainAfterPayment)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Payment Reason Input - Always visible */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 arabic-spacing mb-2">
+              سبب الدفع / ملاحظات <span className="text-red-500">*</span>
+            </label>
+            <Input
+              value={paymentReason}
+              placeholder="مثال: راتب شهر يناير 2024 - قسط أول"
+              onChange={(e) => setPaymentReason(e.target.value)}
+              className="w-full"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              هذا السبب سيظهر في الإيصال والسجلات المالية
+            </p>
+          </div>
+
+          {/* Payment Summary */}
+          <div className="bg-blue-50 rounded-lg p-4 mb-6">
+            <h5 className="font-semibold text-blue-900 mb-2 text-center">
+              ملخص الدفع
+            </h5>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>المبلغ المراد دفعه:</span>
+                <span className="font-bold text-blue-700">
+                  {payModal.mode === "full"
+                    ? formatCurrency(remaining)
+                    : formatCurrency(installmentAmountNum)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>نوع الدفع:</span>
+                <span className="font-medium">
+                  {payModal.mode === "full" ? "دفع كامل" : "قسط"}
+                </span>
+              </div>
+              {payModal.mode === "installment" && (
+                <div className="flex justify-between">
+                  <span>الحالة بعد الدفع:</span>
+                  <span
+                    className={`font-medium ${
+                      isFullPayment ? "text-green-600" : "text-amber-600"
+                    }`}
+                  >
+                    {isFullPayment ? "تم الدفع بالكامل" : "دفع جزئي"}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={closeProjectSalaryModal}
+              className="px-6"
+            >
+              إلغاء
+            </Button>
+            <Button
+              onClick={confirmProjectSalaryPayment}
+              disabled={
+                payModal.mode === "installment" && installmentAmountNum <= 0
+              }
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6"
+            >
+              {payModal.mode === "full" ? "تأكيد الدفع الكامل" : "تأكيد القسط"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // Invoice modal UI
+  const renderInvoiceModal = () => {
+    if (
+      !invoiceModal.isOpen ||
+      !invoiceModal.paymentData ||
+      !invoiceModal.employee
+    )
+      return null;
+
+    const { paymentData, employee } = invoiceModal;
+
+    return (
+      <div
+        className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+        onClick={() =>
+          setInvoiceModal({ isOpen: false, paymentData: null, employee: null })
+        }
+      >
+        <div
+          className="bg-white rounded-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Simple Invoice Header */}
+          <div className="text-center mb-6">
+            <h3 className="text-2xl font-bold text-gray-900 arabic-spacing mb-2">
+              إيصال دفع راتب
+            </h3>
+            <p className="text-gray-600">Salary Payment Receipt</p>
+          </div>
+
+          {/* Simple Employee Info */}
+          <div className="bg-gray-50 rounded-lg p-4 mb-4">
+            <h4 className="font-semibold text-gray-900 mb-3 arabic-spacing">
+              معلومات الموظف
+            </h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-600">الاسم:</span>
+                <span className="font-medium pr-2 text-black">
+                  {employee.name}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-600">المنصب:</span>
+                <span className="font-medium pr-2 text-black">
+                  {employee.position || "-"}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-600">المشروع:</span>
+                <span className="font-medium pr-2 text-black">
+                  {project?.name}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-600">تاريخ الدفع:</span>
+                <span className="font-medium pr-2 text-black">
+                  {new Date(paymentData.payment_date).toLocaleDateString(
+                    "ar-IQ"
+                  )}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Simple Payment Details */}
+          <div className="bg-blue-50 rounded-lg p-4 mb-4">
+            <h4 className="font-semibold text-blue-900 mb-3 arabic-spacing">
+              تفاصيل الدفع
+            </h4>
+            <div className="grid grid-cols-2 gap-6 text-sm text-center">
+              <div>
+                <span className="text-blue-700">رقم الإيصال:</span>
+                <span className="font-medium pr-2 text-black font-mono">
+                  {paymentData.invoice_number}
+                </span>
+              </div>
+              <div>
+                <span className="text-blue-700">نوع الدفع:</span>
+                <span className="font-medium pr-2 text-black">
+                  {paymentData.payment_type === "full" ? "دفع كامل" : "قسط"}
+                </span>
+              </div>
+              <div>
+                <span className="text-blue-700 ">السبب:</span>
+                <span className="font-medium pr-2 text-black">
+                  {paymentData.reason || "-"}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Simple Financial Summary */}
+          <div className="bg-green-50 rounded-lg p-4 mb-6">
+            <h4 className="font-semibold text-green-900 mb-3 arabic-spacing text-center">
+              ملخص مالي
+            </h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="text-center">
+                <p className="text-green-700 mb-1">الراتب الشهري</p>
+                <p className="font-bold text-green-900 text-lg">
+                  {formatCurrency(paymentData.base_salary)}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-green-700 mb-1">المبلغ المدفوع</p>
+                <p className="font-bold text-green-900 text-lg">
+                  {formatCurrency(paymentData.amount)}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-green-700 mb-1">المبلغ المستحق</p>
+                <p className="font-bold text-green-900 text-lg">
+                  {formatCurrency(paymentData.total_due)}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="text-green-700 mb-1">المتبقي</p>
+                <p className="font-bold text-green-900 text-lg">
+                  {formatCurrency(paymentData.remaining_balance)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Simple Project Budget Note */}
+          <div className="bg-red-50 rounded-lg p-3 mb-6">
+            <div className="text-center text-red-700 text-sm">
+              <span className="font-medium">
+                هذا المبلغ سيتم خصمه من ميزانية المشروع: {project?.name}
+              </span>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-center gap-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                // Create a simple HTML for PDF generation
+                const invoiceHTML = `
+                  <!DOCTYPE html>
+                  <html dir="rtl" lang="ar">
+                  <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>إيصال دفع راتب - ${employee.name}</title>
+                    <style>
+                      body { font-family: Arial, sans-serif; margin: 20px; direction: rtl; }
+                      .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
+                      .section { margin-bottom: 25px; }
+                      .section h3 { color: #333; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+                      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+                      .item { margin-bottom: 8px; }
+                      .label { font-weight: bold; color: #666; margin-left: 8px; }
+                      .value { font-weight: normal; }
+                      .financial { background: #f8f9fa; padding: 15px; border-radius: 8px; }
+                      .financial-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+                      .financial-item { text-align: center; }
+                      .financial-label { color: #666; margin-bottom: 5px; }
+                      .financial-value { font-size: 18px; font-weight: bold; color: #333; }
+                      .note { background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px; border-radius: 5px; text-align: center; color: #856404; }
+                      @media print { body { margin: 0; } .header { border-bottom: 2px solid #000; } }
+                    </style>
+                  </head>
+                  <body>
+                    <div class="header">
+                      <h1>إيصال دفع راتب</h1>
+                      <p>Salary Payment Receipt</p>
+                      <p style="font-size: 14px; color: #666;">شركة قصر الشام</p>
+                    </div>
+
+                    <div class="section">
+                      <h3>معلومات الموظف</h3>
+                      <div class="grid">
+                        <div class="item">
+                          <span class="label">الاسم:</span>
+                          <span class="value">${employee.name}</span>
+                        </div>
+                        <div class="item">
+                          <span class="label">المنصب:</span>
+                          <span class="value">${employee.position || "-"}</span>
+                        </div>
+                        <div class="item">
+                          <span class="label">المشروع:</span>
+                          <span class="value">${project?.name || "-"}</span>
+                        </div>
+                        <div class="item">
+                          <span class="label">تاريخ الدفع:</span>
+                          <span class="value">${new Date(
+                            paymentData.payment_date
+                          ).toLocaleDateString("ar-IQ")}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="section">
+                      <h3>تفاصيل الدفع</h3>
+                      <div class="grid">
+                        <div class="item">
+                          <span class="label">رقم الإيصال:</span>
+                          <span class="value">${
+                            paymentData.invoice_number
+                          }</span>
+                        </div>
+                        <div class="item">
+                          <span class="label">نوع الدفع:</span>
+                          <span class="value">${
+                            paymentData.payment_type === "full"
+                              ? "دفع كامل"
+                              : "قسط"
+                          }</span>
+                        </div>
+                        <div class="item">
+                          <span class="label">السبب:</span>
+                          <span class="value">${
+                            paymentData.reason || "-"
+                          }</span>
+                        </div>
+                        
+                      </div>
+                    </div>
+
+                    <div class="section">
+                      <h3>ملخص مالي</h3>
+                      <div class="financial">
+                        <div class="financial-grid">
+                          <div class="financial-item">
+                            <div class="financial-label">الراتب الشهري</div>
+                            <div class="financial-value">${formatCurrency(
+                              paymentData.base_salary
+                            )}</div>
+                          </div>
+                          <div class="financial-item">
+                            <div class="financial-label">المبلغ المدفوع</div>
+                            <div class="financial-value">${formatCurrency(
+                              paymentData.amount
+                            )}</div>
+                          </div>
+                          <div class="financial-item">
+                            <div class="financial-label">المبلغ المستحق</div>
+                            <div class="financial-value">${formatCurrency(
+                              paymentData.total_due
+                            )}</div>
+                          </div>
+                          <div class="financial-item">
+                            <div class="financial-label">المتبقي</div>
+                            <div class="financial-value">${formatCurrency(
+                              paymentData.remaining_balance
+                            )}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="note">
+                      هذا المبلغ سيتم خصمه من ميزانية المشروع: ${project?.name}
+                    </div>
+
+                    <div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666;">
+                      <p>تم إنشاء هذا الإيصال في: ${new Date().toLocaleString(
+                        "ar-IQ"
+                      )}</p>
+                    </div>
+                  </body>
+                  </html>
+                `;
+
+                // Open in new window for PDF generation
+                const newWindow = window.open("", "_blank");
+                newWindow?.document.write(invoiceHTML);
+                newWindow?.document.close();
+                newWindow?.print();
+              }}
+              className="px-6"
+            >
+              <Printer className="h-4 w-4 ml-2 no-flip" />
+              إنشاء PDF
+            </Button>
+            <Button
+              onClick={() =>
+                setInvoiceModal({
+                  isOpen: false,
+                  paymentData: null,
+                  employee: null,
+                })
+              }
+              className="px-6"
+            >
+              إغلاق
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -1539,6 +2586,23 @@ export default function ProjectDetailClient() {
                 </div>
                 {activeTab === "expenses" && (
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 to-red-400 rounded-full"></div>
+                )}
+              </button>
+
+              <button
+                onClick={() => setActiveTab("employees")}
+                className={`flex-1 px-6 py-5 text-center font-semibold transition-all duration-300 relative group ${
+                  activeTab === "employees"
+                    ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg"
+                    : "text-gray-600 hover:text-gray-800 hover:bg-white/50"
+                }`}
+              >
+                <div className="flex items-center justify-center space-x-3 space-x-reverse">
+                  <Users className="h-5 w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
+                  <span className="arabic-spacing">موظفو المشروع</span>
+                </div>
+                {activeTab === "employees" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-green-400 rounded-full"></div>
                 )}
               </button>
             </div>
@@ -2883,6 +3947,964 @@ export default function ProjectDetailClient() {
               onUnfreezeAssignment={handleUnfreezeAssignment}
               onEditAssignmentAmount={handleEditAssignmentAmount}
             />
+          ) : activeTab === "employees" ? (
+            <div className="space-y-6">
+              {/* Summary Cards - Redesigned */}
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                {/* Total Employees */}
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="p-5 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500 arabic-spacing mb-1">
+                        إجمالي الموظفين
+                      </p>
+                      <p className="text-3xl font-bold text-slate-900">
+                        {projEmployees.length}
+                      </p>
+                    </div>
+                    <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center">
+                      <Users className="h-6 w-6 text-blue-600" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Total Monthly Salary */}
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="p-5 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500 arabic-spacing mb-1">
+                        إجمالي الرواتب الشهرية
+                      </p>
+                      <p className="text-3xl font-bold text-slate-900">
+                        {formatCurrency(
+                          projEmployees.reduce(
+                            (sum, emp) => sum + getMonthlySalary(emp),
+                            0
+                          )
+                        )}
+                      </p>
+                    </div>
+                    <div className="h-10 w-10 rounded-xl bg-green-50 flex items-center justify-center">
+                      <DollarSign className="h-6 w-6 text-green-600" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Total Paid This Month */}
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="p-5 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500 arabic-spacing mb-1">
+                        إجمالي المدفوع (هذا الشهر)
+                      </p>
+                      <p className="text-3xl font-bold text-slate-900">
+                        {formatCurrency(
+                          Object.values(employeeSummary).reduce(
+                            (sum, s) => sum + s.paidThisMonth,
+                            0
+                          )
+                        )}
+                      </p>
+                    </div>
+                    <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
+                      <CheckCircle className="h-6 w-6 text-indigo-600" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Total Remaining This Month */}
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                  <div className="p-5 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-slate-500 arabic-spacing mb-1">
+                        إجمالي المتبقي (هذا الشهر)
+                      </p>
+                      <p className="text-3xl font-bold text-slate-900">
+                        {formatCurrency(
+                          projEmployees.reduce((sum, emp) => {
+                            const paidThisMonth = toNumber(
+                              employeeSummary[emp.id]?.paidThisMonth || 0
+                            );
+                            const monthlySalary = getMonthlySalary(emp);
+                            return (
+                              sum + Math.max(0, monthlySalary - paidThisMonth)
+                            );
+                          }, 0)
+                        )}
+                      </p>
+                    </div>
+                    <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                      <Clock className="h-6 w-6 text-amber-600" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Project Budget Status 
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="p-5 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-slate-500 arabic-spacing mb-1">
+                      حالة ميزانية المشروع
+                    </p>
+                    <div className="flex items-baseline gap-4">
+                      <div>
+                        <p className="text-[11px] text-slate-500">
+                          المتاح الحالي
+                        </p>
+                        <p className="text-2xl font-bold text-slate-900">
+                          {formatCurrency(projectBudget.available)}
+                        </p>
+                      </div>
+                      <div className="h-8 w-px bg-slate-200" />
+                      <div>
+                        <p className="text-[11px] text-slate-500">
+                          المنفق الكلي
+                        </p>
+                        <p className="text-2xl font-bold text-slate-900">
+                          {formatCurrency(projectBudget.spent)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="h-10 w-10 rounded-xl bg-red-50 flex items-center justify-center">
+                    <TrendingDown className="h-6 w-6 text-red-600" />
+                  </div>
+                </div>
+                {budgetStatus && (
+                  <div className="px-5 pb-5">
+                    <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[13px]">
+                        <div>
+                          <p className="text-slate-500 mb-1">
+                            قبل الدفع - المتاح
+                          </p>
+                          <p className="font-semibold">
+                            {formatCurrency(budgetStatus.beforeAvailable)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 mb-1">
+                            قبل الدفع - المنفق
+                          </p>
+                          <p className="font-semibold">
+                            {formatCurrency(budgetStatus.beforeSpent)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 mb-1">
+                            بعد الدفع - المتاح
+                          </p>
+                          <p className="font-semibold text-red-700">
+                            {formatCurrency(budgetStatus.afterAvailable)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-slate-500 mb-1">
+                            بعد الدفع - المنفق
+                          </p>
+                          <p className="font-semibold text-red-700">
+                            {formatCurrency(budgetStatus.afterSpent)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 text-[12px] text-slate-500 flex items-center justify-between">
+                        <span>
+                          قيمة الخصم الأخيرة:{" "}
+                          <span className="font-semibold text-slate-700">
+                            {formatCurrency(budgetStatus.delta)}
+                          </span>
+                        </span>
+                        <span>
+                          {new Date(budgetStatus.at).toLocaleString("en-GB")}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="px-5 pb-5">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between text-[13px]">
+                      <span className="text-slate-600">
+                        نسبة استخدام الميزانية
+                      </span>
+                      <span
+                        className={`font-semibold ${
+                          projectBudget.utilization > 90
+                            ? "text-amber-600"
+                            : "text-slate-800"
+                        }`}
+                      >
+                        {projectBudget.utilization}%
+                      </span>
+                    </div>
+                    <div className="mt-2 w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                      <div
+                        className={`h-2 rounded-full ${
+                          projectBudget.utilization > 100
+                            ? "bg-red-500"
+                            : projectBudget.utilization > 90
+                            ? "bg-amber-500"
+                            : "bg-blue-600"
+                        }`}
+                        style={{
+                          width: `${Math.min(projectBudget.utilization, 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              */}
+
+              {/* CRITICAL: Project Budget Tracker for Employees */}
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="p-5 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-slate-500 arabic-spacing mb-1">
+                      متتبع ميزانية الموظفين
+                    </p>
+                    <div className="flex items-baseline gap-6">
+                      <div>
+                        <p className="text-[11px] text-slate-500">
+                          الميزانية الإجمالية
+                        </p>
+                        <p className="text-xl font-bold text-slate-900">
+                          {formatCurrency(projectBudget.estimate)}
+                        </p>
+                      </div>
+                      <div className="h-8 w-px bg-slate-200" />
+                      <div>
+                        <p className="text-[11px] text-slate-500">
+                          المنفق على الموظفين
+                        </p>
+                        <p className="text-xl font-bold text-red-600">
+                          {formatCurrency(projectBudget.spent)}
+                        </p>
+                      </div>
+                      <div className="h-8 w-px bg-slate-200" />
+                      <div>
+                        <p className="text-[11px] text-slate-500">
+                          المتبقي الفعلي
+                        </p>
+                        <p
+                          className={`text-xl font-bold ${
+                            projectBudget.available <= 0
+                              ? "text-red-600"
+                              : projectBudget.available <
+                                projectBudget.estimate * 0.1
+                              ? "text-amber-600"
+                              : "text-green-600"
+                          }`}
+                        >
+                          {formatCurrency(projectBudget.available)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className={`h-10 w-10 rounded-xl flex items-center justify-center ${
+                      projectBudget.available <= 0
+                        ? "bg-red-50"
+                        : projectBudget.available < projectBudget.estimate * 0.1
+                        ? "bg-amber-50"
+                        : "bg-green-50"
+                    }`}
+                  >
+                    {projectBudget.available <= 0 ? (
+                      <XCircle className="h-6 w-6 text-red-600" />
+                    ) : projectBudget.available <
+                      projectBudget.estimate * 0.1 ? (
+                      <AlertTriangle className="h-6 w-6 text-amber-600" />
+                    ) : (
+                      <CheckCircle className="h-6 w-6 text-green-600" />
+                    )}
+                  </div>
+                </div>
+
+                {/* Budget Alerts */}
+                {projectBudget.available <= 0 && (
+                  <div className="px-5 pb-5">
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                      <div className="flex items-center justify-center text-red-700">
+                        <XCircle className="h-5 w-5 ml-2 no-flip" />
+                        <span className="text-sm font-medium text-center">
+                          ⚠️ تحذير: الميزانية مستنفدة! لا يمكن دفع أي رواتب
+                          للموظفين
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {projectBudget.available > 0 &&
+                  projectBudget.available < projectBudget.estimate * 0.1 && (
+                    <div className="px-5 pb-5">
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                        <div className="flex items-center justify-center text-amber-700">
+                          <AlertTriangle className="h-5 w-5 ml-2 no-flip" />
+                          <span className="text-sm font-medium text-center">
+                            ⚠️ تنبيه: الميزانية منخفضة! متبقي فقط{" "}
+                            {formatCurrency(projectBudget.available)} للموظفين
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                {/* Budget Progress Bar */}
+                <div className="px-5 pb-5">
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between text-[13px] mb-2">
+                      <span className="text-slate-600">
+                        استخدام ميزانية الموظفين
+                      </span>
+                      <span
+                        className={`font-semibold ${
+                          projectBudget.spent / projectBudget.estimate > 0.9
+                            ? "text-amber-600"
+                            : "text-slate-800"
+                        }`}
+                      >
+                        {(
+                          (projectBudget.spent / projectBudget.estimate) *
+                          100
+                        ).toFixed(1)}
+                        %
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-200 h-3 rounded-full overflow-hidden">
+                      <div
+                        className={`h-3 rounded-full transition-all duration-500 ${
+                          projectBudget.spent / projectBudget.estimate > 1
+                            ? "bg-red-500"
+                            : projectBudget.spent / projectBudget.estimate > 0.9
+                            ? "bg-amber-500"
+                            : "bg-blue-600"
+                        }`}
+                        style={{
+                          width: `${Math.min(
+                            (projectBudget.spent / projectBudget.estimate) *
+                              100,
+                            100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-500 mt-2">
+                      <span>0 د.ع</span>
+                      <span>{formatCurrency(projectBudget.estimate)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Employee Salary Budget Impact Summary */}
+                <div className="px-5 pb-5">
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-4">
+                    <h6 className="font-semibold text-blue-800 mb-3 flex items-center">
+                      <Calculator className="h-4 w-4 ml-2 no-flip" />
+                      تأثير رواتب الموظفين على الميزانية
+                    </h6>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                      <div className="bg-white/70 rounded-lg p-3 border border-blue-200">
+                        <div className="text-lg font-bold text-blue-600">
+                          {formatCurrency(
+                            projEmployees.reduce(
+                              (sum, emp) => sum + getMonthlySalary(emp),
+                              0
+                            )
+                          )}
+                        </div>
+                        <div className="text-xs text-blue-600">
+                          إجمالي الرواتب الشهرية
+                        </div>
+                      </div>
+                      <div className="bg-white/70 rounded-lg p-3 border border-green-200">
+                        <div className="text-lg font-bold text-green-600">
+                          {formatCurrency(
+                            Object.values(employeeSummary).reduce(
+                              (sum, s) => sum + s.paidThisMonth,
+                              0
+                            )
+                          )}
+                        </div>
+                        <div className="text-xs text-green-600">
+                          إجمالي المدفوع (هذا الشهر)
+                        </div>
+                      </div>
+                      <div className="bg-white/70 rounded-lg p-3 border border-amber-200">
+                        <div className="text-lg font-bold text-amber-600">
+                          {formatCurrency(
+                            projEmployees.reduce((sum, emp) => {
+                              const paidThisMonth = toNumber(
+                                employeeSummary[emp.id]?.paidThisMonth || 0
+                              );
+                              const monthlySalary = getMonthlySalary(emp);
+                              return (
+                                sum + Math.max(0, monthlySalary - paidThisMonth)
+                              );
+                            }, 0)
+                          )}
+                        </div>
+                        <div className="text-xs text-amber-600">
+                          إجمالي المتبقي (هذا الشهر)
+                        </div>
+                      </div>
+                      <div
+                        className={`bg-white/70 rounded-lg p-3 border ${
+                          projectBudget.available <= 0
+                            ? "border-red-200"
+                            : projectBudget.available <
+                              projectBudget.estimate * 0.1
+                            ? "border-amber-200"
+                            : "border-green-200"
+                        }`}
+                      >
+                        <div
+                          className={`text-lg font-bold ${
+                            projectBudget.available <= 0
+                              ? "text-red-600"
+                              : projectBudget.available <
+                                projectBudget.estimate * 0.1
+                              ? "text-amber-600"
+                              : "text-green-600"
+                          }`}
+                        >
+                          {formatCurrency(projectBudget.available)}
+                        </div>
+                        <div
+                          className={`text-xs ${
+                            projectBudget.available <= 0
+                              ? "text-red-600"
+                              : projectBudget.available <
+                                projectBudget.estimate * 0.1
+                              ? "text-amber-600"
+                              : "text-green-600"
+                          }`}
+                        >
+                          الميزانية المتاحة للموظفين
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
+                <div className="p-6 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-semibold arabic-spacing">
+                      موظفوا المشروع
+                    </h3>
+                    <p className="text-gray-500 arabic-spacing">
+                      الرواتب تخصم من ميزانية المشروع وترتبط بالخزينة مع وصف
+                      الدفع
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    {/* Budget Warning for New Employees */}
+                    {projectBudget.available <= 0 && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-center">
+                        <div className="flex items-center justify-center text-red-700 text-xs">
+                          <XCircle className="h-3 w-3 ml-1 no-flip" />
+                          <span className="font-medium">
+                            لا يمكن إضافة موظفين - الميزانية مستنفدة
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {projectBudget.available > 0 &&
+                      projectBudget.available < 1000000 && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center">
+                          <div className="flex items-center justify-center text-amber-700 text-xs">
+                            <AlertTriangle className="h-3 w-3 ml-1 no-flip" />
+                            <span className="font-medium">
+                              الميزانية منخفضة - متبقي{" "}
+                              {formatCurrency(projectBudget.available)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    <PermissionButton
+                      permission="canEditProjects"
+                      onClick={() => setShowAddProjEmp(true)}
+                      disabled={projectBudget.available <= 0}
+                      className={
+                        projectBudget.available <= 0
+                          ? "opacity-50 cursor-not-allowed"
+                          : ""
+                      }
+                    >
+                      <Plus className="h-4 w-4 ml-2 no-flip" />
+                      إضافة موظف مشروع
+                    </PermissionButton>
+                  </div>
+                </div>
+                <div className="p-6">
+                  {empLoading ? (
+                    <div className="text-gray-500">جاري التحميل...</div>
+                  ) : projEmployees.length === 0 ? (
+                    <div className="text-gray-500">لا يوجد موظفون للمشروع</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-gray-300 rounded-lg overflow-hidden shadow-lg">
+                        <thead>
+                          <tr className="bg-gradient-to-r from-gray-100 to-gray-200">
+                            <th className="border border-gray-300 text-center py-3 px-4 text-gray-700 font-semibold">
+                              الاسم
+                            </th>
+                            <th className="border border-gray-300 text-center py-3 px-4 text-gray-700 font-semibold">
+                              المنصب
+                            </th>
+                            <th className="border border-gray-300 text-center py-3 px-4 text-gray-700 font-semibold">
+                              القسم
+                            </th>
+                            <th className="border border-gray-300 text-center py-3 px-4 text-gray-700 font-semibold">
+                              الراتب الشهري
+                            </th>
+                            <th className="border border-gray-300 text-center py-3 px-4 text-gray-700 font-semibold">
+                              الحالة
+                            </th>
+                            <th className="border border-gray-300 text-center py-3 px-4 text-gray-700 font-semibold">
+                              حالة الدفع
+                            </th>
+                            <th className="border border-gray-300 text-center py-3 px-4 text-gray-700 font-semibold">
+                              المدفوع (هذا الشهر)
+                            </th>
+                            <th className="border border-gray-300 text-center py-3 px-4 text-gray-700 font-semibold">
+                              المتبقي (هذا الشهر)
+                            </th>
+                            <th className="border border-gray-300 text-center py-3 px-4 text-gray-700 font-semibold">
+                              آخر دفع
+                            </th>
+                            <th className="border border-gray-300 text-center py-3 px-4 text-gray-700 font-semibold">
+                              إجراء
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {projEmployees.map((e, index) => (
+                            <tr
+                              key={e.id}
+                              className={`transition-colors ${
+                                index % 2 === 0 ? "bg-white" : "bg-gray-25"
+                              } ${
+                                recentlyUpdatedEmployeeId === e.id
+                                  ? "bg-green-50 ring-2 ring-green-200"
+                                  : "hover:bg-gray-50"
+                              }`}
+                            >
+                              <td className="border border-gray-300 py-3 px-4 text-center text-gray-900 font-medium">
+                                {e.name}
+                              </td>
+                              <td className="border border-gray-300 py-3 px-4 text-center text-gray-900">
+                                {e.position || "-"}
+                              </td>
+                              <td className="border border-gray-300 py-3 px-4 text-center text-gray-900">
+                                {e.department || "-"}
+                              </td>
+                              <td className="border border-gray-300 py-3 px-4 text-center font-bold text-green-600">
+                                {formatCurrency(getMonthlySalary(e))}
+                              </td>
+                              <td className="border border-gray-300 py-3 px-4 text-center">
+                                <span
+                                  className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    e.status === "active"
+                                      ? "bg-green-100 text-green-800"
+                                      : "bg-red-100 text-red-800"
+                                  }`}
+                                >
+                                  {e.status === "active" ? "نشط" : "غير نشط"}
+                                </span>
+                              </td>
+                              <td className="border border-gray-300 py-3 px-4 text-center">
+                                {(() => {
+                                  const paidThisMonth = toNumber(
+                                    employeeSummary[e.id]?.paidThisMonth || 0
+                                  );
+                                  const monthlySalary = getMonthlySalary(e);
+                                  const remaining = Math.max(
+                                    0,
+                                    monthlySalary - paidThisMonth
+                                  );
+
+                                  if (paidThisMonth === 0) {
+                                    // Check if budget is insufficient for this employee
+                                    if (projectBudget.available <= 0) {
+                                      return (
+                                        <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                          <XCircle className="h-3 w-3 ml-1 no-flip" />
+                                          ميزانية مستنفدة
+                                        </span>
+                                      );
+                                    } else if (
+                                      monthlySalary > projectBudget.available
+                                    ) {
+                                      return (
+                                        <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                          <AlertTriangle className="h-3 w-3 ml-1 no-flip" />
+                                          ميزانية غير كافية
+                                        </span>
+                                      );
+                                    }
+                                    return (
+                                      <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                        لم يتم الدفع
+                                      </span>
+                                    );
+                                  } else if (remaining === 0) {
+                                    return (
+                                      <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        تم الدفع بالكامل
+                                      </span>
+                                    );
+                                  } else {
+                                    // Check if remaining amount can be paid with available budget
+                                    if (remaining > projectBudget.available) {
+                                      return (
+                                        <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                          <AlertTriangle className="h-3 w-3 ml-1 no-flip" />
+                                          ميزانية غير كافية
+                                        </span>
+                                      );
+                                    }
+                                    return (
+                                      <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                        دفع جزئي
+                                      </span>
+                                    );
+                                  }
+                                })()}
+                              </td>
+                              <td className="border border-gray-300 py-3 px-4 text-center text-blue-700 font-medium">
+                                {formatCurrency(
+                                  toNumber(
+                                    employeeSummary[e.id]?.paidThisMonth || 0
+                                  )
+                                )}
+                              </td>
+                              <td className="border border-gray-300 py-3 px-4 text-center text-amber-700 font-medium">
+                                {formatCurrency(
+                                  Math.max(
+                                    0,
+                                    getMonthlySalary(e) -
+                                      toNumber(
+                                        employeeSummary[e.id]?.paidThisMonth ||
+                                          0
+                                      )
+                                  )
+                                )}
+                              </td>
+                              <td className="border border-gray-300 py-3 px-4 text-center text-gray-600">
+                                {employeeSummary[e.id]?.lastPaymentDate
+                                  ? new Date(
+                                      employeeSummary[e.id]
+                                        ?.lastPaymentDate as any
+                                    ).toLocaleDateString("en-GB")
+                                  : "—"}
+                              </td>
+                              <td className="border border-gray-300 py-3 px-4 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  {(() => {
+                                    const paidThisMonth = toNumber(
+                                      employeeSummary[e.id]?.paidThisMonth || 0
+                                    );
+                                    const monthlySalary = getMonthlySalary(e);
+                                    const remaining = Math.max(
+                                      0,
+                                      monthlySalary - paidThisMonth
+                                    );
+
+                                    if (remaining === 0) {
+                                      return (
+                                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                          <CheckCircle className="h-3 w-3 ml-1 no-flip" />
+                                          تم الدفع
+                                        </span>
+                                      );
+                                    }
+
+                                    return (
+                                      <>
+                                        <Button
+                                          onClick={() =>
+                                            openProjectSalaryModal(e, "full")
+                                          }
+                                          className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1"
+                                          disabled={
+                                            remaining === 0 ||
+                                            projectBudget.available <= 0 ||
+                                            getMonthlySalary(e) >
+                                              projectBudget.available
+                                          }
+                                          title={
+                                            remaining === 0
+                                              ? "تم الدفع بالكامل"
+                                              : projectBudget.available <= 0
+                                              ? "الميزانية مستنفدة"
+                                              : getMonthlySalary(e) >
+                                                projectBudget.available
+                                              ? "الميزانية غير كافية للراتب الكامل"
+                                              : "دفع الراتب كاملاً"
+                                          }
+                                        >
+                                          <Wallet className="h-3 w-3 ml-1 no-flip" />
+                                          دفع كامل
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          onClick={() =>
+                                            openProjectSalaryModal(
+                                              e,
+                                              "installment"
+                                            )
+                                          }
+                                          className="text-xs px-3 py-1"
+                                          disabled={
+                                            remaining === 0 ||
+                                            projectBudget.available <= 0
+                                          }
+                                          title={
+                                            remaining === 0
+                                              ? "تم الدفع بالكامل"
+                                              : projectBudget.available <= 0
+                                              ? "الميزانية مستنفدة"
+                                              : "دفع قسط من الراتب"
+                                          }
+                                        >
+                                          <Calculator className="h-3 w-3 ml-1 no-flip" />
+                                          قسط
+                                        </Button>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {showAddProjEmp && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-2xl w-full max-w-lg p-6 relative will-change-auto">
+                    {/* Explicit close button to avoid backdrop click issues with native selects */}
+                    <button
+                      aria-label="إغلاق"
+                      className="absolute top-3 left-3 text-gray-500 hover:text-gray-700"
+                      onClick={() => setShowAddProjEmp(false)}
+                    >
+                      <X className="h-5 w-5 no-flip" />
+                    </button>
+                    <h3 className="text-lg font-semibold arabic-spacing mb-4 pr-6">
+                      إضافة موظف مشروع
+                    </h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Contractor dropdown (fills name automatically) */}
+                      <div className="col-span-2 text-black ">
+                        <ContractorDropdown
+                          contractors={contractors}
+                          value={newProjEmp.contractor_id}
+                          onChange={(id, label) => {
+                            setNewProjEmp({
+                              ...newProjEmp,
+                              contractor_id: id,
+                              name: label || newProjEmp.name,
+                            });
+                          }}
+                        />
+                      </div>
+                      <Input
+                        placeholder="المنصب"
+                        value={newProjEmp.position}
+                        onChange={(e) =>
+                          setNewProjEmp({
+                            ...newProjEmp,
+                            position: e.target.value,
+                          })
+                        }
+                      />
+                      <Input
+                        placeholder="القسم"
+                        value={newProjEmp.department}
+                        onChange={(e) =>
+                          setNewProjEmp({
+                            ...newProjEmp,
+                            department: e.target.value,
+                          })
+                        }
+                      />
+                      <Input
+                        placeholder="الراتب الشهري"
+                        value={newProjEmp.monthly_salary}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          // Normalize Arabic digits then keep digits only for typing
+                          const normalized = normalizeArabicDigits(raw);
+                          const digitsOnly = normalized.replace(/\D+/g, "");
+                          setNewProjEmp((prev) => ({
+                            ...prev,
+                            monthly_salary: digitsOnly,
+                          }));
+                        }}
+                        onBlur={() => {
+                          // Format on blur only, so user can type freely
+                          const rawValue = String(newProjEmp.monthly_salary);
+                          const normalized = normalizeArabicDigits(rawValue);
+                          const digitsOnly = normalized.replace(/\D+/g, "");
+                          const num = Number(digitsOnly);
+
+                          if (num > 0) {
+                            const formatted = new Intl.NumberFormat(
+                              "ar-IQ"
+                            ).format(num);
+                            setNewProjEmp((prev) => ({
+                              ...prev,
+                              monthly_salary: formatted,
+                            }));
+                          } else {
+                            // If invalid number, clear the field
+                            setNewProjEmp((prev) => ({
+                              ...prev,
+                              monthly_salary: "",
+                            }));
+                          }
+                        }}
+                        inputMode="numeric"
+                      />
+                    </div>
+                    <div className="mt-4 flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowAddProjEmp(false)}
+                      >
+                        إلغاء
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          if (!newProjEmp.contractor_id) {
+                            addToast({
+                              type: "error",
+                              title: "اختر مقاول",
+                              message: "يرجى اختيار مقاول للموظف",
+                            });
+                            return;
+                          }
+                          try {
+                            // Debug: Log the original salary value
+                            console.log(
+                              "🔍 Original salary:",
+                              newProjEmp.monthly_salary
+                            );
+                            console.log(
+                              "🔍 Type:",
+                              typeof newProjEmp.monthly_salary
+                            );
+
+                            // Sanitize salary (normalize Arabic digits, remove separators)
+                            const salaryNumber = normalizeArabicDigits(
+                              newProjEmp.monthly_salary
+                            )
+                              .replace(/[^0-9.]/g, "")
+                              .replace(/^0+/, "");
+
+                            console.log("🔍 Sanitized salary:", salaryNumber);
+
+                            // Validate salary is not empty and is a valid number
+                            if (
+                              !salaryNumber ||
+                              salaryNumber === "0" ||
+                              salaryNumber === "0.0" ||
+                              isNaN(Number(salaryNumber))
+                            ) {
+                              addToast({
+                                type: "error",
+                                title: "خطأ في الراتب",
+                                message:
+                                  "الراتب يجب أن يكون رقماً صحيحاً أكبر من صفر",
+                              });
+                              return;
+                            }
+
+                            // Note: allow small salaries (e.g., 50,000) per user request
+                            const salaryValue = Number(salaryNumber);
+
+                            const payload = {
+                              contractor_id: newProjEmp.contractor_id,
+                              position: newProjEmp.position || undefined,
+                              department: newProjEmp.department || undefined,
+                              monthly_salary: salaryNumber,
+                              status: newProjEmp.status || "active",
+                              notes: newProjEmp.notes || undefined,
+                            };
+
+                            console.log("🔍 Final payload:", payload);
+
+                            // Test: Log what we're about to send
+                            console.log("🔍 About to send salary:", {
+                              original: newProjEmp.monthly_salary,
+                              sanitized: salaryNumber,
+                              asNumber: Number(salaryNumber),
+                              payload: payload,
+                            });
+
+                            const res = await apiRequest(
+                              `/projects/${projectId}/employees`,
+                              {
+                                method: "POST",
+                                body: JSON.stringify(payload),
+                              }
+                            );
+                            const json = await res.json();
+                            console.log("🔍 API Response:", json);
+
+                            if (json.success) {
+                              console.log(
+                                "✅ Successfully created project employee:",
+                                json.data
+                              );
+                              setProjEmployees([json.data, ...projEmployees]);
+                              setShowAddProjEmp(false);
+                              setNewProjEmp({
+                                position: "",
+                                department: "",
+                                monthly_salary: "",
+                                status: "active",
+                                notes: "",
+                                contractor_id: "",
+                              } as any);
+
+                              // Refresh the employees list
+                              // fetchProjectEmployees(); // TODO: Implement this function
+                            } else {
+                              addToast({
+                                type: "error",
+                                title: "خطأ",
+                                message: json.message || "فشل في إضافة الموظف",
+                              });
+                            }
+                          } catch (err: any) {
+                            addToast({
+                              type: "error",
+                              title: "خطأ",
+                              message: err.message || "فشل في إضافة الموظف",
+                            });
+                          }
+                        }}
+                      >
+                        حفظ
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {renderProjectSalaryModal()}
+              {renderInvoiceModal()}
+            </div>
           ) : (
             /* General Expenses Tab */
             <div className="space-y-8 animate-fade-in-up">

@@ -52,24 +52,30 @@ export function PayrollReportModal({
   const activeEmployees = employees.filter((emp) => emp.status === "active");
   const totalEmployees = employees.length;
   const totalActiveEmployees = activeEmployees.length;
-  const totalPayroll = activeEmployees.reduce(
-    (sum, emp) => sum + calculateMonthlySalary(emp),
-    0
+  const salaryValues = activeEmployees.map((emp) =>
+    calculateMonthlySalary(emp)
   );
+  const totalPayroll = salaryValues.reduce((sum, s) => sum + s, 0);
   const averageSalary =
     totalActiveEmployees > 0 ? totalPayroll / totalActiveEmployees : 0;
-  const highestSalary = Math.max(
-    ...activeEmployees.map((emp) => calculateMonthlySalary(emp)),
-    0
-  );
-  const lowestSalary = Math.min(
-    ...activeEmployees.map((emp) => calculateMonthlySalary(emp)),
-    0
-  );
+  const highestSalary = salaryValues.length ? Math.max(...salaryValues) : 0;
+  const lowestSalary = salaryValues.length ? Math.min(...salaryValues) : 0;
 
-  // Payment status analysis
-  const paidEmployees = employees.filter((emp) => emp.last_payment_date).length;
-  const unpaidEmployees = totalActiveEmployees - paidEmployees;
+  // Payment status analysis (active employees only, and by selected month)
+  const paidEmployees = activeEmployees.filter((emp) => {
+    if (!emp.last_payment_date) return false;
+    try {
+      const d = new Date(emp.last_payment_date);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+        2,
+        "0"
+      )}`;
+      return monthKey === selectedMonth;
+    } catch {
+      return false;
+    }
+  }).length;
+  const unpaidEmployees = Math.max(0, totalActiveEmployees - paidEmployees);
   const paymentCoverage =
     totalActiveEmployees > 0 ? (paidEmployees / totalActiveEmployees) * 100 : 0;
 

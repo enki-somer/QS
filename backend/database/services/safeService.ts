@@ -265,6 +265,75 @@ export class SafeService {
   }
 
   /**
+   * Deduct money for project employee salary payment and link to project
+   */
+  async deductForProjectSalary(
+    amount: number,
+    projectId: string,
+    projectName: string,
+    projectEmployeeId: string,
+    projectEmployeeName: string,
+    description: string,
+    userId: string
+  ): Promise<DatabaseResult<SafeTransaction>> {
+    const client = await getPool().connect();
+    try {
+      await client.query('BEGIN');
+
+      const balanceResult = await client.query(`
+        SELECT current_balance FROM safe_state WHERE id = 1
+      `);
+      const currentBalance = parseFloat(balanceResult.rows[0]?.current_balance || 0);
+      if (currentBalance < amount) {
+        throw new Error(`رصيد غير كافي. الرصيد الحالي: ${currentBalance}, المطلوب: ${amount}`);
+      }
+      const newBalance = currentBalance - amount;
+
+      // Insert project salary transaction
+      const transactionResult = await client.query(`
+        INSERT INTO safe_transactions (
+          type, amount, description, date,
+          project_id, project_name,
+          employee_id, employee_name,
+          previous_balance, new_balance, created_by
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        RETURNING *
+      `, [
+        'salary_payment',
+        -amount,
+        description || `راتب موظف مشروع: ${projectEmployeeName}`,
+        new Date().toISOString().split('T')[0],
+        projectId,
+        projectName,
+        projectEmployeeId,
+        projectEmployeeName,
+        currentBalance,
+        newBalance,
+        userId
+      ]);
+
+      // Update safe state
+      await client.query(`
+        UPDATE safe_state
+        SET current_balance = $1,
+            total_spent = total_spent + $2,
+            last_updated = CURRENT_TIMESTAMP,
+            updated_by = $3
+        WHERE id = 1
+      `, [newBalance, amount, userId]);
+
+      await client.query('COMMIT');
+      return { success: true, data: transactionResult.rows[0] };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error deducting for project salary:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * Deduct money for general expense
    */
   async deductForExpense(

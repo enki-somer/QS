@@ -227,13 +227,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
     );
   }
 
-  // For login page, show without header
+  // For public routes (e.g., login), render without mounting data providers that fetch protected APIs
   if (isPublicRoute) {
-    return (
-      <ToastProvider>
-        <EmployeeProvider>{children}</EmployeeProvider>
-      </ToastProvider>
-    );
+    return <ToastProvider>{children}</ToastProvider>;
   }
 
   // Protected content - require authentication
@@ -275,6 +271,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       <p className="text-sm text-gray-600 arabic-spacing">
                         نظام إدارة المشاريع والمقاولين
                       </p>
+                      <div className="flex items-center gap-1 mt-1 text-[20px] text-gray-400">
+                        <span>بواسطة</span>
+                        <img
+                          src="/q.png"
+                          alt="Connected"
+                          className="h-6 w-auto"
+                        />
+                      </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
@@ -317,14 +321,24 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
                     {/* Center: Logo */}
                     <div className="flex items-center justify-center">
-                      <div className="bg-gradient-to-r from-[#182C61] to-blue-700 p-2.5 rounded-xl flex-shrink-0">
-                        <img
-                          src="/QS-WHITE.svg"
-                          alt="شركة قصر الشام"
-                          width={28}
-                          height={28}
-                          style={{ display: "block" }}
-                        />
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="bg-gradient-to-r from-[#182C61] to-blue-700 p-2.5 rounded-xl flex-shrink-0">
+                          <img
+                            src="/QS-WHITE.svg"
+                            alt="شركة قصر الشام"
+                            width={28}
+                            height={28}
+                            style={{ display: "block" }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-400">
+                          <span>بواسطة</span>
+                          <img
+                            src="/q.png"
+                            alt="Connected"
+                            className="h-3 w-auto"
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -453,6 +467,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
                       <p className="text-sm text-gray-500 arabic-spacing">
                         نظام الإدارة المالية المتكامل
                       </p>
+                      <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-400">
+                        <span>بواسطة</span>
+                        <img
+                          src="/q.png"
+                          alt="Connected"
+                          className="h-3 w-auto"
+                        />
+                      </div>
                     </div>
                   </div>
 

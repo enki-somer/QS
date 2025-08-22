@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cairo } from "next/font/google";
 import "./globals.css";
 import MainLayout from "@/components/layout/MainLayout";
@@ -22,13 +22,6 @@ export const metadata: Metadata = {
   keywords:
     "الإدارة المالية، البناء والتشييد، المشاريع، التدفق النقدي، المحاسبة",
   manifest: "/manifest.json",
-  themeColor: "#182C61",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -48,6 +41,14 @@ export const metadata: Metadata = {
     shortcut: "/icons/android/android-launchericon-192-192.png",
     apple: "/icons/ios/192.png",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#182C61",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

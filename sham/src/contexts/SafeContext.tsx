@@ -26,6 +26,10 @@ interface SafeTransaction {
 
   // Project linking and batch tracking
   batch_number?: number;
+
+  // Funding metadata (for funding transactions)
+  funding_source?: string;
+  funding_notes?: string;
 }
 
 interface FundingSource {
@@ -47,7 +51,11 @@ interface SafeState {
 interface SafeContextType {
   safeState: SafeState;
   refreshSafeState: () => Promise<void>;
-  addFunding: (amount: number, description: string) => Promise<void>;
+  addFunding: (
+    amount: number,
+    description: string,
+    extras?: { funding_source?: string; funding_notes?: string }
+  ) => Promise<void>;
   deductForInvoice: (
     amount: number,
     projectId: string,
@@ -169,7 +177,11 @@ export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Database-only mode - no localStorage saving
 
-  const addFunding = async (amount: number, description: string) => {
+  const addFunding = async (
+    amount: number,
+    description: string,
+    extras?: { funding_source?: string; funding_notes?: string }
+  ) => {
     if (!user) {
       throw new Error("User not authenticated");
     }
@@ -182,8 +194,8 @@ export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
         body: JSON.stringify({
           amount,
           description,
-          funding_source: "manual",
-          funding_notes: description,
+          funding_source: extras?.funding_source || description || "manual",
+          funding_notes: extras?.funding_notes || "",
         }),
       });
 

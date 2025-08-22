@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/Button";
 import { formatCurrency } from "@/lib/utils";
 import { Employee } from "@/types";
 import { useEmployee } from "@/contexts/EmployeeContext";
+import { useResponsive } from "@/hooks/useResponsive";
 
 interface MonthlyPayrollStatusProps {
   employees: Employee[];
@@ -40,6 +41,7 @@ export function MonthlyPayrollStatus({
   onRefresh,
 }: MonthlyPayrollStatusProps) {
   const { calculateMonthlySalary, calculateRemainingSalary } = useEmployee();
+  const { isMobile } = useResponsive();
   const [monthlyStatus, setMonthlyStatus] = useState<MonthlyStatus | null>(
     null
   );
@@ -146,8 +148,8 @@ export function MonthlyPayrollStatus({
         currentMonth,
         monthName,
         totalEmployees,
-        paidEmployees: fullyPaidEmployees + partiallyPaidEmployees, // Anyone who received any payment
-        unpaidEmployees: unpaidEmployees, // Only completely unpaid employees
+        paidEmployees: fullyPaidEmployees, // Count only fully paid as "paid"
+        unpaidEmployees: unpaidEmployees, // Unpaid only
         totalPayroll,
         paidAmount: totalPaidAmount,
         remainingAmount: totalRemainingAmount,
@@ -254,19 +256,20 @@ export function MonthlyPayrollStatus({
             </div>
           )}
 
-          {/* Refresh Button - Hidden to prevent overflow */}
-          {/* <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              calculateMonthlyStatus();
-              onRefresh?.();
-            }}
-            className="flex items-center space-x-2 space-x-reverse"
-          >
-            <RefreshCw className="h-4 w-4 no-flip" />
-            <span className="arabic-spacing">تحديث</span>
-          </Button> */}
+          {!isMobile && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                calculateMonthlyStatus();
+                onRefresh?.();
+              }}
+              className="flex items-center space-x-2 space-x-reverse"
+            >
+              <RefreshCw className="h-4 w-4 no-flip" />
+              <span className="arabic-spacing">تحديث</span>
+            </Button>
+          )}
         </div>
       </div>
 

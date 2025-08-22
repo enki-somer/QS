@@ -59,12 +59,17 @@ export function EnhancedEmployeesTable({
     Record<string, number>
   >({});
 
-  // Create a stable dependency array to prevent infinite loops
+  // Create a stable dependency signature to avoid infinite loops when parent passes a new array instance
   const employeeDependency = React.useMemo(
     () =>
       employees
-        .map((emp) => `${emp.id}-${emp.last_payment_date || "none"}`)
-        .join(","),
+        .map(
+          (emp) =>
+            `${emp.id}-${emp.last_payment_date || "none"}-${
+              emp.monthly_salary || 0
+            }-${emp.status}-${emp.payment_status || ""}`
+        )
+        .join("|"),
     [employees]
   );
 
@@ -123,7 +128,7 @@ export function EnhancedEmployeesTable({
     return () => {
       isCancelled = true;
     };
-  }, [employeeDependency]); // Only trigger when employee data actually changes
+  }, [employeeDependency]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -266,12 +271,7 @@ export function EnhancedEmployeesTable({
               : "يتم حساب المتبقي..."}
           </div>
         )}
-        {!canPay && remainingSalary > 0 && (
-          <div className="text-xs text-red-600 arabic-spacing flex items-center">
-            <AlertCircle className="h-3 w-3 ml-1 no-flip" />
-            رصيد غير كافي
-          </div>
-        )}
+        {/* Reserve insufficiency checks for the payment modal where the amount is chosen */}
       </div>
     );
   };
@@ -365,7 +365,11 @@ export function EnhancedEmployeesTable({
               const remainingSalary = remainingSalaries[employee.id];
               const effectiveRemaining =
                 remainingSalary !== undefined ? remainingSalary : salary;
-              const canPay = canPaySalary(effectiveRemaining);
+              // If remaining is not yet calculated, don't block the action button.
+              const canPay =
+                remainingSalary !== undefined
+                  ? canPaySalary(effectiveRemaining)
+                  : true;
               const hasRemainingBalance = effectiveRemaining > 0;
 
               return (
@@ -560,13 +564,22 @@ export function EnhancedEmployeesTable({
                               variant="ghost"
                               size="sm"
                               onClick={() => onPaySalary(employee)}
-                              disabled={!canPay}
+                              disabled={
+                                !hasRemainingBalance ||
+                                employee.status !== "active"
+                              }
                               className={`rounded p-1 transition-all duration-200 ${
-                                canPay
+                                hasRemainingBalance &&
+                                employee.status === "active"
                                   ? "text-green-600 hover:text-green-700 hover:bg-green-50"
                                   : "text-slate-400 cursor-not-allowed opacity-50"
                               }`}
-                              title={canPay ? "دفع الراتب" : "رصيد غير كافي"}
+                              title={
+                                hasRemainingBalance &&
+                                employee.status === "active"
+                                  ? "دفع الراتب"
+                                  : "غير متاح"
+                              }
                             >
                               <Wallet className="h-3 w-3 no-flip" />
                             </Button>
@@ -614,7 +627,10 @@ export function EnhancedEmployeesTable({
               {formatCurrency(
                 employees
                   .filter((emp) => emp.status === "active")
-                  .reduce((sum, emp) => sum + calculateMonthlySalary(emp), 0)
+                  .reduce((sum, emp) => {
+                    // If remaining is undefined, use full salary, else use remaining
+                    return calculateMonthlySalary(emp);
+                  }, 0)
               )}
             </div>
             <div className="text-slate-600 arabic-spacing text-sm font-medium">

@@ -61,6 +61,27 @@ import { useAuth } from "@/contexts/AuthContext";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
+// Short number formatter (1.2K, 3.4M, 2.1B)
+const formatShortNumber = (value: number): string => {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 1_000_000_000)
+    return `${sign}${(abs / 1_000_000_000)
+      .toFixed(2)
+      .replace(/\.0+$/, "")
+      .replace(/\.(\d)0$/, ".$1")}B`;
+  if (abs >= 1_000_000)
+    return `${sign}${(abs / 1_000_000)
+      .toFixed(2)
+      .replace(/\.0+$/, "")
+      .replace(/\.(\d)0$/, ".$1")}M`;
+  if (abs >= 1_000)
+    return `${sign}${(abs / 1_000).toFixed(1).replace(/\.0+$/, "")}K`;
+  return `${value}`;
+};
+
+const formatShortCurrency = (value: number): string => formatShortNumber(value);
+
 interface ReportSummary {
   safeBalance: number;
   totalProjectBudgets: number;
@@ -170,6 +191,18 @@ export default function FinancialReportsPage() {
   const [costBreakdownData, setCostBreakdownData] = useState<ChartDataPoint[]>(
     []
   );
+  const [allProjects, setAllProjects] = useState<any[]>([]);
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
+  const [allExpenses, setAllExpenses] = useState<any[]>([]);
+  const [allCategoryInvoices, setAllCategoryInvoices] = useState<any[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("all");
+  const [overallFundingSources, setOverallFundingSources] = useState<any>({
+    factory: 0,
+    rental: 0,
+    contracts: 0,
+    general: 0,
+    project: 0,
+  });
 
   const { safeState } = useSafe();
   const { hasPermission, user, isAuthenticated } = useAuth();
@@ -371,13 +404,121 @@ export default function FinancialReportsPage() {
           };
 
           setReportSummary(summary);
+          // Store raw datasets for filtering
+          setAllProjects(projectsData);
+          setAllEmployees(employeesData);
+          setAllExpenses(expensesData);
+          setAllCategoryInvoices(categoryInvoicesData);
+
+          // Compute overall funding sources from safe transactions
+          const overallFunding = {
+            factory: 0,
+            rental: 0,
+            contracts: 0,
+            general: 0,
+            project: 0,
+          } as any;
+          safeState.transactions
+            .filter((transaction: any) => transaction.type === "funding")
+            .forEach((transaction: any) => {
+              const amount = parseFloat(transaction.amount || 0);
+              const description = transaction.description?.toLowerCase() || "";
+              if (
+                description.includes("مصنع") ||
+                description.includes("factory")
+              ) {
+                overallFunding.factory += amount;
+              } else if (
+                description.includes("إيجار") ||
+                description.includes("rent")
+              ) {
+                overallFunding.rental += amount;
+              } else if (
+                description.includes("عقد") ||
+                description.includes("contract")
+              ) {
+                overallFunding.contracts += amount;
+              } else if (
+                description.includes("مشروع") ||
+                description.includes("project") ||
+                transaction.projectId
+              ) {
+                overallFunding.project += amount;
+              } else {
+                overallFunding.general += amount;
+              }
+            });
+          setOverallFundingSources(overallFunding);
+
+          // Apply project filter for charts
+          const filteredProjects =
+            selectedProjectId === "all"
+              ? projectsData
+              : projectsData.filter(
+                  (p: any) => String(p.id) === String(selectedProjectId)
+                );
+          const filteredExpenses =
+            selectedProjectId === "all"
+              ? expensesData
+              : expensesData.filter(
+                  (exp: any) =>
+                    String(exp.project_id) === String(selectedProjectId)
+                );
+          const filteredInvoices =
+            selectedProjectId === "all"
+              ? categoryInvoicesData
+              : categoryInvoicesData.filter(
+                  (inv: any) =>
+                    String(inv.project_id) === String(selectedProjectId)
+                );
+
+          // Funding sources for selection
+          const fundingForSelection = (() => {
+            if (selectedProjectId === "all") return overallFunding;
+            const fs = {
+              factory: 0,
+              rental: 0,
+              contracts: 0,
+              general: 0,
+              project: 0,
+            } as any;
+            safeState.transactions
+              .filter(
+                (t: any) =>
+                  t.type === "funding" &&
+                  String(t.projectId) === String(selectedProjectId)
+              )
+              .forEach((t: any) => {
+                const amt = parseFloat(t.amount || 0);
+                const desc = t.description?.toLowerCase() || "";
+                if (desc.includes("مصنع") || desc.includes("factory"))
+                  fs.factory += amt;
+                else if (desc.includes("إيجار") || desc.includes("rent"))
+                  fs.rental += amt;
+                else if (desc.includes("عقد") || desc.includes("contract"))
+                  fs.contracts += amt;
+                else fs.project += amt;
+              });
+            return fs;
+          })();
+
+          // Use project-specific summary for charts if a single project is selected
+          const summaryForCharts =
+            selectedProjectId === "all"
+              ? summary
+              : {
+                  ...summary,
+                  totalEmployeeSalaries: 0,
+                  totalGeneralExpenses: 0,
+                };
+
           generateChartData(
-            projectsData,
+            filteredProjects,
             employeesData,
-            expensesData,
-            categoryInvoicesData,
-            summary,
-            { factory: 0, rental: 0, contracts: 0, general: 0, project: 0 } // Empty funding sources for localStorage fallback
+            filteredExpenses,
+            filteredInvoices,
+            summaryForCharts,
+            fundingForSelection
           );
           return;
         }
@@ -626,14 +767,79 @@ export default function FinancialReportsPage() {
 
         setReportSummary(summary);
 
+        // Store raw datasets for filtering
+        setAllProjects(projectsData);
+        setAllEmployees(employeesData);
+        setAllExpenses(expensesData);
+        setAllCategoryInvoices(categoryInvoicesData);
+        setOverallFundingSources(fundingSources);
+
+        // Apply project filter for charts
+        const filteredProjects =
+          selectedProjectId === "all"
+            ? projectsData
+            : projectsData.filter(
+                (p: any) => String(p.id) === String(selectedProjectId)
+              );
+        const filteredExpenses =
+          selectedProjectId === "all"
+            ? expensesData
+            : expensesData.filter(
+                (exp: any) =>
+                  String(exp.project_id) === String(selectedProjectId)
+              );
+        const filteredInvoices =
+          selectedProjectId === "all"
+            ? categoryInvoicesData
+            : categoryInvoicesData.filter(
+                (inv: any) =>
+                  String(inv.project_id) === String(selectedProjectId)
+              );
+
+        // Funding sources for selection
+        const fundingForSelection = (() => {
+          if (selectedProjectId === "all") return fundingSources;
+          const fs = {
+            factory: 0,
+            rental: 0,
+            contracts: 0,
+            general: 0,
+            project: 0,
+          } as any;
+          safeState.transactions
+            .filter(
+              (t: any) =>
+                t.type === "funding" &&
+                String(t.projectId) === String(selectedProjectId)
+            )
+            .forEach((t: any) => {
+              const amt = parseFloat(t.amount || 0);
+              const desc = t.description?.toLowerCase() || "";
+              if (desc.includes("مصنع") || desc.includes("factory"))
+                fs.factory += amt;
+              else if (desc.includes("إيجار") || desc.includes("rent"))
+                fs.rental += amt;
+              else if (desc.includes("عقد") || desc.includes("contract"))
+                fs.contracts += amt;
+              else fs.project += amt;
+            });
+          return fs;
+        })();
+
+        // Use project-specific summary for charts if a single project is selected
+        const summaryForCharts =
+          selectedProjectId === "all"
+            ? summary
+            : { ...summary, totalEmployeeSalaries: 0, totalGeneralExpenses: 0 };
+
         // Generate chart data
         generateChartData(
-          projectsData,
+          filteredProjects,
           employeesData,
-          expensesData,
-          categoryInvoicesData,
-          summary,
-          fundingSources
+          filteredExpenses,
+          filteredInvoices,
+          summaryForCharts,
+          fundingForSelection
         );
       } catch (error) {
         console.error("Error loading report data:", error);
@@ -747,48 +953,75 @@ export default function FinancialReportsPage() {
       setFundingSourcesData(fundingChartData);
 
       // 3. Revenue vs Expenses Trend (from SAFE transactions)
+      // Build monthly aggregates from sorted transactions (more reliable ordering)
+      const sortedTx = [...safeState.transactions].sort(
+        (a: any, b: any) =>
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
       const monthlyMap = new Map<
-        string,
-        { revenue: number; expenses: number; balance: number }
+        number,
+        { label: string; revenue: number; expenses: number; balance?: number }
       >();
-
-      safeState.transactions.forEach((transaction) => {
+      let runningBalance = 0;
+      sortedTx.forEach((transaction: any) => {
         const date = new Date(transaction.date);
-        const monthKey = date.toLocaleDateString("ar-IQ", {
+        const key = date.getFullYear() * 12 + date.getMonth();
+        const label = date.toLocaleDateString("ar-IQ", {
           month: "short",
           year: "numeric",
         });
 
-        const existing = monthlyMap.get(monthKey) || {
-          revenue: 0,
-          expenses: 0,
-          balance: 0,
-        };
-
-        if (
+        const amount = parseFloat(transaction.amount || 0);
+        const isIn =
           transaction.type === "funding" ||
-          transaction.type === "invoice_payment"
-        ) {
-          existing.revenue += transaction.amount;
-        } else {
-          existing.expenses += Math.abs(transaction.amount);
-        }
-        existing.balance = transaction.newBalance;
+          transaction.type === "invoice_payment";
+        const delta = isIn ? amount : -Math.abs(amount);
 
-        monthlyMap.set(monthKey, existing);
+        const existing =
+          monthlyMap.get(key) || ({ label, revenue: 0, expenses: 0 } as any);
+        if (isIn) existing.revenue += amount;
+        else existing.expenses += Math.abs(amount);
+
+        // Update running balance using newBalance if provided, otherwise apply delta
+        const nb = parseFloat(transaction.newBalance);
+        if (!isNaN(nb)) runningBalance = nb;
+        else runningBalance += delta;
+
+        existing.balance = runningBalance;
+        existing.label = label; // ensure label set
+        monthlyMap.set(key, existing);
       });
 
-      const trendChartData: TrendDataPoint[] = Array.from(monthlyMap.entries())
-        .map(([period, data]) => ({
-          period,
+      // Sort by key and convert to series
+      const monthlySeries = Array.from(monthlyMap.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([_, data]) => ({
+          period: data.label,
           revenue: data.revenue,
           expenses: data.expenses,
           profit: data.revenue - data.expenses,
-          safeBalance: data.balance,
-        }))
-        .slice(-6); // Last 6 months
+          safeBalance: data.balance ?? 0,
+        }));
 
-      setTrendData(trendChartData);
+      let trendChartData: TrendDataPoint[] = monthlySeries.slice(-6);
+
+      // If safeBalance is missing across points, fall back to cumulative balance from deltas
+      const hasBalanceValues = trendChartData.some(
+        (p) =>
+          typeof p.safeBalance === "number" &&
+          !isNaN(p.safeBalance) &&
+          p.safeBalance !== 0
+      );
+      if (!hasBalanceValues) {
+        let running = 0;
+        trendChartData = trendChartData.map((p) => {
+          running += p.revenue - p.expenses;
+          return { ...p, safeBalance: running };
+        });
+        setTrendData(trendChartData);
+      } else {
+        setTrendData(trendChartData);
+      }
 
       // 3. Project Performance Data (using category invoices for accuracy)
       const projectRevenueMap = new Map<string, number>();
@@ -1090,7 +1323,7 @@ export default function FinancialReportsPage() {
     }, 1000); // 1 second delay
 
     return () => clearTimeout(timer);
-  }, [safeState, isAuthenticated, user]);
+  }, [safeState, isAuthenticated, user, selectedProjectId]);
 
   const refreshData = () => {
     setIsLoading(true);
@@ -1516,6 +1749,23 @@ export default function FinancialReportsPage() {
                 <option value="all">جميع البيانات</option>
               </Select>
             </div>
+            {/* Project filter */}
+            <div className="flex items-center space-x-2 space-x-reverse w-full sm:w-auto">
+              <Select
+                value={selectedProjectId}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setSelectedProjectId(e.target.value)
+                }
+                icon={<Building2 className="h-4 w-4 text-gray-500 no-flip" />}
+              >
+                <option value="all">جميع المشاريع</option>
+                {allProjects.map((p: any) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
             <div className="flex items-center space-x-2 space-x-reverse">
               <Calendar className="h-4 w-4 text-gray-500 no-flip" />
               <span className="text-sm text-gray-600 arabic-spacing arabic-nums">
@@ -1875,7 +2125,11 @@ export default function FinancialReportsPage() {
                             {project.name}
                           </span>
                           <span className="text-green-600 font-bold arabic-nums">
-                            {project.completionPercentage.toFixed(1)}% مكتمل
+                            {project.completionPercentage != null
+                              ? `${project.completionPercentage.toFixed(
+                                  1
+                                )}% مكتمل`
+                              : "—"}
                           </span>
                         </div>
                       ))}
@@ -1902,20 +2156,31 @@ export default function FinancialReportsPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <RechartsLineChart data={trendData}>
+              <RechartsLineChart
+                data={trendData}
+                margin={{ top: 10, right: 20, bottom: 40, left: 80 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="period"
-                  tick={{ fontSize: 12 }}
-                  interval={0}
-                  angle={-45}
-                  textAnchor="end"
-                  height={60}
+                <XAxis dataKey="period" hide />
+                <YAxis
+                  tickFormatter={(v) => formatShortCurrency(v as number)}
+                  width={80}
+                  tick={{ dx: -10, fontSize: 12 }}
+                  tickMargin={16}
                 />
-                <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip
-                  formatter={(value: number) => [formatCurrency(value), ""]}
-                  labelStyle={{ textAlign: "right" }}
+                  formatter={(value: number, name: string) => [
+                    formatCurrency(value),
+                    name,
+                  ]}
+                  labelFormatter={(label: any) => String(label)}
+                  contentStyle={{
+                    backgroundColor: "#fff",
+                    border: "1px solid #e5e7eb",
+                    color: "#111",
+                  }}
+                  itemStyle={{ color: "#111" }}
+                  labelStyle={{ color: "#111", textAlign: "right" }}
                 />
                 <Legend />
                 <Line
@@ -1963,10 +2228,7 @@ export default function FinancialReportsPage() {
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={({ name, percent }: any) =>
-                    `${name} ${(percent * 100).toFixed(1)}%`
-                  }
-                  outerRadius={80}
+                  outerRadius={90}
                   fill="#8884d8"
                   dataKey="value"
                 >
@@ -1978,10 +2240,20 @@ export default function FinancialReportsPage() {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: any) => [formatCurrency(value), "المبلغ"]}
-                  labelStyle={{ direction: "rtl" }}
+                  formatter={(value: any, name) => [
+                    formatCurrency(value),
+                    name as string,
+                  ]}
+                  labelFormatter={(label: any) => String(label)}
+                  contentStyle={{
+                    backgroundColor: "#fff",
+                    border: "1px solid #e5e7eb",
+                    color: "#111",
+                  }}
+                  itemStyle={{ color: "#111" }}
+                  labelStyle={{ color: "#111", direction: "rtl" }}
                 />
-                <Legend />
+                <Legend verticalAlign="bottom" height={36} />
               </RechartsPieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -1999,25 +2271,27 @@ export default function FinancialReportsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
+            <ResponsiveContainer width="100%" height={320}>
               <RechartsBarChart
                 data={costBreakdownData}
-                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                margin={{ top: 10, right: 20, left: 90, bottom: 80 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="name"
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                  interval={0}
+                <XAxis dataKey="name" hide />
+                <YAxis
+                  tickFormatter={(v) => formatShortCurrency(v as number)}
+                  width={86}
+                  tick={{ dx: -10, fontSize: 12 }}
+                  tickMargin={16}
                 />
-                <YAxis />
                 <Tooltip
-                  formatter={(value: any) => [formatCurrency(value), "المبلغ"]}
+                  formatter={(value: any, name: string) => [
+                    formatCurrency(value),
+                    name,
+                  ]}
                   labelStyle={{ direction: "rtl" }}
                 />
-                <Bar dataKey="value" fill={COLORS.primary} />
+                <Bar dataKey="value" fill={COLORS.primary} barSize={28} />
               </RechartsBarChart>
             </ResponsiveContainer>
 
@@ -2054,10 +2328,9 @@ export default function FinancialReportsPage() {
                 <Pie
                   data={expenseBreakdown}
                   cx="50%"
-                  cy="50%"
+                  cy="45%"
                   labelLine={false}
-                  label={({ name, percentage }) => `${name}: ${percentage}%`}
-                  outerRadius={80}
+                  outerRadius={90}
                   fill="#8884d8"
                   dataKey="value"
                 >
@@ -2066,8 +2339,12 @@ export default function FinancialReportsPage() {
                   ))}
                 </Pie>
                 <Tooltip
-                  formatter={(value: number) => [formatCurrency(value), ""]}
+                  formatter={(value: number, name) => [
+                    formatCurrency(value),
+                    name as string,
+                  ]}
                 />
+                <Legend verticalAlign="bottom" height={36} />
               </RechartsPieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -2085,26 +2362,52 @@ export default function FinancialReportsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <RechartsBarChart data={projectPerformance}>
+            <ResponsiveContainer width="100%" height={320}>
+              <RechartsBarChart
+                data={projectPerformance}
+                margin={{ top: 10, right: 20, bottom: 80, left: 90 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 10 }}
-                  interval={0}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
+                <XAxis dataKey="name" hide />
+                <YAxis
+                  tickFormatter={(v) => formatShortCurrency(v as number)}
+                  width={86}
+                  tick={{ dx: -10, fontSize: 12 }}
+                  tickMargin={16}
                 />
-                <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip
-                  formatter={(value: number) => [formatCurrency(value), ""]}
-                  labelStyle={{ textAlign: "right" }}
+                  formatter={(value: number, name: string) => [
+                    formatCurrency(value),
+                    name,
+                  ]}
+                  labelFormatter={(label: any) => String(label)}
+                  contentStyle={{
+                    backgroundColor: "#fff",
+                    border: "1px solid #e5e7eb",
+                    color: "#111",
+                  }}
+                  itemStyle={{ color: "#111" }}
+                  labelStyle={{ color: "#111", textAlign: "right" }}
                 />
                 <Legend />
-                <Bar dataKey="budget" fill={COLORS.info} name="الميزانية" />
-                <Bar dataKey="spent" fill={COLORS.warning} name="المصروف" />
-                <Bar dataKey="remaining" fill={COLORS.success} name="المتبقي" />
+                <Bar
+                  dataKey="budget"
+                  fill={COLORS.info}
+                  name="الميزانية"
+                  barSize={24}
+                />
+                <Bar
+                  dataKey="spent"
+                  fill={COLORS.warning}
+                  name="المصروف"
+                  barSize={24}
+                />
+                <Bar
+                  dataKey="remaining"
+                  fill={COLORS.success}
+                  name="المتبقي"
+                  barSize={24}
+                />
               </RechartsBarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -2122,24 +2425,32 @@ export default function FinancialReportsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <RechartsAreaChart data={revenueByProject}>
+            <ResponsiveContainer width="100%" height={320}>
+              <RechartsAreaChart
+                data={revenueByProject}
+                margin={{ top: 10, right: 20, bottom: 80, left: 90 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 10 }}
-                  interval={0}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
+                <XAxis dataKey="name" hide />
+                <YAxis
+                  tickFormatter={(v) => formatShortCurrency(v as number)}
+                  width={86}
+                  tick={{ dx: -10, fontSize: 12 }}
+                  tickMargin={16}
                 />
-                <YAxis tick={{ fontSize: 12 }} />
                 <Tooltip
-                  formatter={(value: number) => [
+                  formatter={(value: number, name: string) => [
                     formatCurrency(value),
-                    "الإيرادات",
+                    name,
                   ]}
-                  labelStyle={{ textAlign: "right" }}
+                  labelFormatter={(label: any) => String(label)}
+                  contentStyle={{
+                    backgroundColor: "#fff",
+                    border: "1px solid #e5e7eb",
+                    color: "#111",
+                  }}
+                  itemStyle={{ color: "#111" }}
+                  labelStyle={{ color: "#111", textAlign: "right" }}
                 />
                 <Area
                   type="monotone"
@@ -2166,20 +2477,19 @@ export default function FinancialReportsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height={420}>
             <RechartsBarChart
               data={budgetVarianceData}
-              margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+              margin={{ top: 10, right: 20, left: 90, bottom: 80 }}
             >
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="projectName"
-                angle={-45}
-                textAnchor="end"
-                height={80}
-                interval={0}
+              <XAxis dataKey="projectName" hide />
+              <YAxis
+                tickFormatter={(v) => formatShortCurrency(v as number)}
+                width={86}
+                tick={{ dx: -10, fontSize: 12 }}
+                tickMargin={16}
               />
-              <YAxis />
               <Tooltip
                 formatter={(value: any, name: string) => {
                   if (name === "budgetEstimate")
@@ -2258,13 +2568,24 @@ export default function FinancialReportsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={400}>
-            <ComposedChart data={monthlyComparison}>
+          <ResponsiveContainer width="100%" height={420}>
+            <ComposedChart
+              data={monthlyComparison}
+              margin={{ top: 10, right: 20, bottom: 40, left: 90 }}
+            >
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
+              <XAxis dataKey="month" hide />
+              <YAxis
+                tickFormatter={(v) => formatShortCurrency(v as number)}
+                width={86}
+                tick={{ dx: -10, fontSize: 12 }}
+                tickMargin={16}
+              />
               <Tooltip
-                formatter={(value: number) => [formatCurrency(value), ""]}
+                formatter={(value: number, name: string) => [
+                  formatCurrency(value),
+                  name,
+                ]}
                 labelStyle={{ textAlign: "right" }}
               />
               <Legend />
@@ -2296,10 +2617,30 @@ export default function FinancialReportsPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={250}>
-              <RechartsAreaChart data={trendData}>
+              <RechartsAreaChart
+                data={
+                  trendData && trendData.length
+                    ? trendData
+                    : [
+                        {
+                          period: "—",
+                          revenue: 0,
+                          expenses: 0,
+                          profit: 0,
+                          safeBalance: 0,
+                        },
+                      ]
+                }
+                margin={{ top: 10, right: 20, bottom: 20, left: 90 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="period" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <XAxis dataKey="period" hide />
+                <YAxis
+                  tickFormatter={(v) => formatShortCurrency(v as number)}
+                  width={86}
+                  tick={{ dx: -10, fontSize: 12 }}
+                  tickMargin={16}
+                />
                 <Tooltip
                   formatter={(value: number) => [
                     formatCurrency(value),

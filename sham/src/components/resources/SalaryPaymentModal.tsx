@@ -64,6 +64,9 @@ export function SalaryPaymentModal({
   const [calculation, setCalculation] = useState<PaymentCalculation | null>(
     null
   );
+  const [previewInvoiceNumber, setPreviewInvoiceNumber] = useState<
+    string | null
+  >(null);
 
   // Format currency for display
   const formatCurrency = (amount: number): string => {
@@ -235,6 +238,9 @@ export function SalaryPaymentModal({
         is_full_payment: calculation.isFullPayment,
         payment_date: new Date().toISOString(),
         invoice_number: invoiceNumber,
+        base_salary: calculation.baseSalary,
+        total_due: calculation.totalDue,
+        remaining_balance: calculation.remainingBalance,
       };
 
       setPaymentResult(paymentData);
@@ -247,12 +253,9 @@ export function SalaryPaymentModal({
         }`,
       });
 
-      // Show invoice instead of closing immediately
-      setShowConfirmation(false);
-      setShowInvoice(true);
-
-      // Call onPaymentComplete to refresh data but don't close modal yet
-      // onPaymentComplete will be called when invoice is closed
+      // Return to main page immediately after successful payment
+      onPaymentComplete();
+      onClose();
     } catch (error) {
       console.error("Error processing salary payment:", error);
       addToast({
@@ -267,6 +270,11 @@ export function SalaryPaymentModal({
 
   const handleConfirmPayment = () => {
     if (validatePayment()) {
+      if (!previewInvoiceNumber) {
+        setPreviewInvoiceNumber(
+          `SAL-PREVIEW-${Date.now()}-${employee.id.slice(-4)}`
+        );
+      }
       setShowConfirmation(true);
     }
   };
@@ -609,7 +617,7 @@ export function SalaryPaymentModal({
                   معاينة فاتورة دفع الراتب
                 </h3>
                 <p className="text-blue-600 text-sm arabic-spacing">
-                  رقم الفاتورة: SAL-{Date.now()}-{employee.id.slice(-4)}
+                  رقم الفاتورة: {previewInvoiceNumber}
                 </p>
               </div>
 
@@ -739,9 +747,9 @@ export function SalaryPaymentModal({
                         reason: paymentReason.trim() || undefined,
                         is_full_payment: calculation.isFullPayment,
                         payment_date: new Date().toISOString(),
-                        invoice_number: `SAL-PREVIEW-${Date.now()}-${employee.id.slice(
-                          -4
-                        )}`,
+                        invoice_number:
+                          previewInvoiceNumber ||
+                          `SAL-PREVIEW-${Date.now()}-${employee.id.slice(-4)}`,
                       };
 
                       // Create temporary invoice for preview
