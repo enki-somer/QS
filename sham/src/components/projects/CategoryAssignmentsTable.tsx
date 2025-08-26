@@ -34,6 +34,7 @@ import { formatCurrency } from "@/lib/utils";
 import { useUIPermissions } from "@/hooks/useUIPermissions";
 import { FinancialDisplay } from "@/components/ui/FinancialDisplay";
 import { PermissionButton } from "@/components/ui/PermissionButton";
+import { useResponsive } from "@/hooks/useResponsive";
 
 interface CategoryAssignment {
   id: string;
@@ -118,6 +119,7 @@ export default function CategoryAssignmentsTable({
   onEditAssignmentAmount,
 }: CategoryAssignmentsTableProps) {
   const permissions = useUIPermissions();
+  const { isMobile } = useResponsive();
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -358,8 +360,8 @@ export default function CategoryAssignmentsTable({
           </div>
         </div>
 
-        {/* Enhanced Table */}
-        <div className="overflow-x-auto">
+        {/* Enhanced Table / Mobile Cards */}
+        <div className={isMobile ? "" : "overflow-x-auto"}>
           {sortedAssignments.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -391,6 +393,18 @@ export default function CategoryAssignmentsTable({
                 </PermissionButton>
               )}
             </div>
+          ) : isMobile ? (
+            <MobileCategoryAssignmentsCards
+              sortedAssignments={sortedAssignments}
+              onAddInvoice={onAddInvoice}
+              onEditAssignment={onEditAssignment}
+              onDeleteAssignment={onDeleteAssignment}
+              onViewInvoices={onViewInvoices}
+              onFreezeAssignment={onFreezeAssignment}
+              onUnfreezeAssignment={onUnfreezeAssignment}
+              onEditAssignmentAmount={onEditAssignmentAmount}
+              getCategoryIcon={getCategoryIcon}
+            />
           ) : (
             <table className="w-full border-collapse">
               <thead>
@@ -887,10 +901,19 @@ export default function CategoryAssignmentsTable({
                 <div>
                   <div className="text-sm font-bold text-green-600 arabic-spacing">
                     <FinancialDisplay
-                      value={sortedAssignments.reduce(
-                        (sum, a) => sum + a.estimated_amount,
-                        0
-                      )}
+                      value={sortedAssignments.reduce((sum, a) => {
+                        // If assignment is frozen, only count the returned_budget (if present), else use estimated_amount
+                        if (a.status === "frozen") {
+                          // If returned_budget is defined, add it; else, treat as 0
+                          return (
+                            sum +
+                            (typeof a.returned_budget === "number"
+                              ? a.returned_budget
+                              : 0)
+                          );
+                        }
+                        return sum + a.estimated_amount;
+                      }, 0)}
                     />
                   </div>
                   <div className="text-xs text-gray-500 arabic-spacing">
@@ -917,11 +940,21 @@ export default function CategoryAssignmentsTable({
                 <div>
                   <div className="text-sm font-bold text-emerald-600 arabic-spacing">
                     <FinancialDisplay
-                      value={sortedAssignments.reduce(
-                        (sum, a) =>
-                          sum + (a.estimated_amount - (a.actual_amount || 0)),
-                        0
-                      )}
+                      value={sortedAssignments.reduce((sum, a) => {
+                        // If assignment is frozen, only count the returned_budget (if present), else use estimated - actual
+                        if (a.status === "frozen") {
+                          // If returned_budget is defined, add it; else, treat as 0
+                          return (
+                            sum +
+                            (typeof a.returned_budget === "number"
+                              ? a.returned_budget
+                              : 0)
+                          );
+                        }
+                        return (
+                          sum + (a.estimated_amount - (a.actual_amount || 0))
+                        );
+                      }, 0)}
                     />
                   </div>
                   <div className="text-xs text-gray-500 arabic-spacing">
@@ -1108,7 +1141,7 @@ function FreezeAssignmentModal({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="اذكر سبب تجميد هذا التعيين..."
-              className="w-full p-3 border border-gray-300 rounded-lg resize-none arabic-spacing"
+              className="w-full p-3 border border-gray-300 rounded-lg resize-none arabic-spacing text-black"
               rows={3}
               required
               disabled={isSubmitting}
@@ -1383,6 +1416,366 @@ function DeleteAssignmentConfirm({
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Mobile Category Assignments Cards Component
+function MobileCategoryAssignmentsCards({
+  sortedAssignments,
+  onAddInvoice,
+  onEditAssignment,
+  onDeleteAssignment,
+  onViewInvoices,
+  onFreezeAssignment,
+  onUnfreezeAssignment,
+  onEditAssignmentAmount,
+  getCategoryIcon,
+}: {
+  sortedAssignments: CategoryAssignment[];
+  onAddInvoice: (assignment: CategoryAssignment) => void;
+  onEditAssignment: (assignment: CategoryAssignment) => void;
+  onDeleteAssignment: (assignmentId: string) => void;
+  onViewInvoices: (assignment: CategoryAssignment) => void;
+  onFreezeAssignment?: (assignmentId: string, reason: string) => void;
+  onUnfreezeAssignment?: (assignmentId: string) => void;
+  onEditAssignmentAmount?: (
+    assignmentId: string,
+    newAmount: number,
+    reason?: string
+  ) => void;
+  getCategoryIcon: (
+    category: string,
+    isPurchasing?: boolean
+  ) => React.ComponentType<any>;
+}) {
+  const permissions = useUIPermissions();
+
+  return (
+    <div className="space-y-4">
+      {sortedAssignments.map((assignment, index) => {
+        const isPurchasing = assignment.assignment_type === "purchasing";
+        const IconComponent = getCategoryIcon(
+          assignment.main_category,
+          isPurchasing
+        );
+        const isEditDeleteProtected = assignment.has_approved_invoice;
+        const isInvoiceButtonDisabled = assignment.budget_exhausted || false;
+
+        return (
+          <div
+            key={assignment.id}
+            className={`bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden ${
+              assignment.status === "frozen"
+                ? "bg-gradient-to-r from-cyan-50/60 via-blue-50/40 to-cyan-50/60 border-l-4 border-l-cyan-300"
+                : isPurchasing
+                ? "bg-emerald-50/40 border-l-4 border-l-emerald-300"
+                : isEditDeleteProtected
+                ? "bg-red-50/40 border-l-4 border-l-red-300"
+                : ""
+            }`}
+          >
+            {/* Card Header */}
+            <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 border-b border-gray-200">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center space-x-2 space-x-reverse">
+                  <div
+                    className={`w-8 h-8 rounded flex items-center justify-center ${
+                      isPurchasing
+                        ? "bg-green-100"
+                        : isEditDeleteProtected
+                        ? "bg-red-100"
+                        : "bg-blue-100"
+                    }`}
+                  >
+                    <IconComponent
+                      className={`h-4 w-4 no-flip ${
+                        isPurchasing
+                          ? "text-green-600"
+                          : isEditDeleteProtected
+                          ? "text-red-600"
+                          : "text-blue-600"
+                      }`}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-gray-900 arabic-spacing">
+                      {assignment.main_category}
+                    </h3>
+                    <p className="text-xs text-gray-600 arabic-spacing">
+                      {assignment.subcategory}
+                    </p>
+                    {isEditDeleteProtected && (
+                      <div className="flex items-center space-x-1 space-x-reverse mt-1">
+                        <svg
+                          className="h-3 w-3 text-red-500 no-flip"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        <span className="text-xs text-red-500 arabic-spacing">
+                          محمي
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Status Badge */}
+                <span
+                  className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
+                    statusColors[
+                      assignment.status as keyof typeof statusColors
+                    ] || statusColors.active
+                  }`}
+                >
+                  {assignment.status === "frozen" && (
+                    <svg
+                      className="w-3 h-3 text-cyan-700 ml-1"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M10 2L13 8h4l-3 2 1 4-5-3-5 3 1-4-3-2h4l3-6z" />
+                    </svg>
+                  )}
+                  {statusLabels[
+                    assignment.status as keyof typeof statusLabels
+                  ] || assignment.status}
+                </span>
+              </div>
+            </div>
+
+            {/* Card Content */}
+            <div className="p-4">
+              {/* Contractor Info */}
+              <div className="flex items-center space-x-2 space-x-reverse mb-3">
+                <div
+                  className={`w-5 h-5 rounded flex items-center justify-center ${
+                    isPurchasing ? "bg-green-100" : "bg-blue-100"
+                  }`}
+                >
+                  {isPurchasing ? (
+                    <ShoppingCart className="h-3 w-3 text-green-600 no-flip" />
+                  ) : (
+                    <User className="h-3 w-3 text-blue-600 no-flip" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <p
+                    className={`text-sm font-medium arabic-spacing ${
+                      isPurchasing ? "text-green-700" : "text-gray-900"
+                    }`}
+                  >
+                    {assignment.contractor_name}
+                  </p>
+                  {isPurchasing && (
+                    <p className="text-xs text-green-600 arabic-spacing">
+                      تعيين مشتريات
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Financial Info */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-xs text-gray-600 arabic-spacing mb-1">
+                    الميزانية المقدرة
+                  </p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    <FinancialDisplay value={assignment.estimated_amount} />
+                  </p>
+                </div>
+                <div className="bg-gray-50 p-3 rounded-lg">
+                  <p className="text-xs text-gray-600 arabic-spacing mb-1">
+                    المبلغ الفعلي
+                  </p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {assignment.actual_amount &&
+                    assignment.actual_amount > 0 ? (
+                      <FinancialDisplay value={assignment.actual_amount} />
+                    ) : (
+                      "-"
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Invoice Count */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-2 space-x-reverse">
+                  <FileText className="h-4 w-4 text-gray-500 no-flip" />
+                  <span className="text-sm text-gray-600 arabic-spacing">
+                    عدد الفواتير: {assignment.total_invoices}
+                  </span>
+                </div>
+                <div className="flex space-x-1 space-x-reverse">
+                  {assignment.pending_invoices > 0 && (
+                    <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded text-xs">
+                      {assignment.pending_invoices} معلقة
+                    </span>
+                  )}
+                  {assignment.approved_invoices > 0 && (
+                    <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">
+                      {assignment.approved_invoices} معتمدة
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              {assignment.status === "frozen" ? (
+                /* Frozen Assignment - Show Unfreeze Option */
+                <div className="space-y-3">
+                  <div className="bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-lg p-3 text-center">
+                    <div className="flex items-center justify-center mb-1">
+                      <Snowflake className="h-4 w-4 text-cyan-600 mr-1" />
+                      <span className="text-sm font-semibold text-cyan-800 arabic-spacing">
+                        مجمد
+                      </span>
+                    </div>
+                    <div className="text-xs text-cyan-700 arabic-spacing leading-relaxed">
+                      {assignment.freeze_reason || "تم تجميد هذا التعيين"}
+                    </div>
+                    {assignment.frozen_at && (
+                      <div className="text-xs text-cyan-600 arabic-spacing mt-1 opacity-75">
+                        {new Date(assignment.frozen_at).toLocaleDateString(
+                          "ar-EG"
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {/* No actions available for frozen assignments in mobile */}
+                  <div className="text-center py-2">
+                    <span className="text-xs text-cyan-600 arabic-spacing">
+                      التعيين مجمد - لا توجد إجراءات متاحة
+                    </span>
+                  </div>
+                </div>
+              ) : permissions.canEditProjects ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Row 1: Add Invoice & Edit */}
+                  <PermissionButton
+                    permission="canCreateInvoices"
+                    onClick={() =>
+                      !isInvoiceButtonDisabled &&
+                      assignment.status === "active" &&
+                      onAddInvoice(assignment)
+                    }
+                    className={`flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${
+                      isInvoiceButtonDisabled || assignment.status !== "active"
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-green-50 text-green-700 hover:bg-green-100"
+                    }`}
+                    disabled={
+                      isInvoiceButtonDisabled || assignment.status !== "active"
+                    }
+                    title={
+                      assignment.status !== "active"
+                        ? "التعيين غير نشط"
+                        : isInvoiceButtonDisabled
+                        ? "الميزانية مستنفدة"
+                        : "إضافة فاتورة"
+                    }
+                    viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                  >
+                    <Receipt className="h-4 w-4 ml-1 no-flip" />
+                    فاتورة
+                  </PermissionButton>
+
+                  <PermissionButton
+                    permission="canEditProjects"
+                    onClick={() => onEditAssignment(assignment)}
+                    className={`flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium transition-colors touch-manipulation ${
+                      isEditDeleteProtected || assignment.status !== "active"
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    }`}
+                    disabled={
+                      isEditDeleteProtected || assignment.status !== "active"
+                    }
+                    title={
+                      assignment.status !== "active"
+                        ? "لا يمكن التعديل - التعيين غير نشط"
+                        : isEditDeleteProtected
+                        ? "محمي - لا يمكن التعديل (يوجد فواتير معتمدة)"
+                        : "تعديل التعيين"
+                    }
+                    viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                  >
+                    <Edit className="h-4 w-4 ml-1 no-flip" />
+                    تعديل
+                  </PermissionButton>
+
+                  {/* Row 2: Freeze/Delete & View Invoices */}
+                  {/* Freeze Button - Always show for active assignments */}
+                  {assignment.status === "active" && onFreezeAssignment ? (
+                    <PermissionButton
+                      permission="canEditProjects"
+                      onClick={() => {
+                        // Mobile view - freeze without asking for reason
+                        onFreezeAssignment(
+                          assignment.id,
+                          "تم التجميد من الجوال"
+                        );
+                      }}
+                      className="flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-cyan-50 text-cyan-700 hover:bg-cyan-100 transition-colors touch-manipulation"
+                      viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                    >
+                      <Snowflake className="h-4 w-4 ml-1 no-flip" />
+                      تجميد
+                    </PermissionButton>
+                  ) : !isEditDeleteProtected &&
+                    assignment.status === "active" ? (
+                    // If not protected and active, show delete option
+                    <PermissionButton
+                      permission="canEditProjects"
+                      onClick={() => onDeleteAssignment(assignment.id)}
+                      className="flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors touch-manipulation"
+                      viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                    >
+                      <Trash2 className="h-4 w-4 ml-1 no-flip" />
+                      حذف
+                    </PermissionButton>
+                  ) : (
+                    // Fallback: Show protected status
+                    <div className="flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-400">
+                      <Snowflake className="h-4 w-4 ml-1 no-flip" />
+                      محمي
+                    </div>
+                  )}
+
+                  {/* Admin Only: Additional Action Slot */}
+                  {permissions.canEditProjects ? (
+                    <div className="flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-gray-50 text-gray-500">
+                      <Settings className="h-4 w-4 ml-1 no-flip" />
+                      إدارة
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-400">
+                      <span className="text-xs">غير متاح</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Non-Admin Users - No Actions Available */
+                <div className="text-center py-4">
+                  <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <span className="text-sm text-gray-500 arabic-spacing">
+                      الإجراءات متاحة للمدراء فقط
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

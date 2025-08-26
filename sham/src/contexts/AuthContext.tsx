@@ -165,10 +165,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       }
 
       console.log("🔍 Debug: API_BASE_URL =", API_BASE_URL);
-      console.log("🔍 Debug: Final login URL =", `${API_BASE_URL}/auth/login`);
+      console.log(
+        "🔍 Debug: Final login URL =",
+        `${API_BASE_URL}/api/auth/login`
+      );
       console.log("🔍 Debug: Credentials being sent =", credentials);
 
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),

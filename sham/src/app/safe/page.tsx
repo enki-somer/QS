@@ -65,6 +65,657 @@ const transactionTypeLabels = {
   general_expense: "مصروف عام",
 };
 
+// Separate Modal Components to prevent re-rendering issues
+interface FundingModalProps {
+  isOpen: boolean;
+  fundingForm: {
+    amount: string;
+    description: string;
+    source: string;
+  };
+  setFundingForm: (form: any) => void;
+  safeState: any;
+  fundingSources: any[];
+  selectedFundingSource: any;
+  setSelectedFundingSource: (source: any) => void;
+  fundingSourceSearch: string;
+  setFundingSourceSearch: (search: string) => void;
+  showFundingSourceDropdown: boolean;
+  setShowFundingSourceDropdown: (show: boolean) => void;
+  filteredGeneralSources: any[];
+  filteredProjectSources: any[];
+  selectFundingSource: (source: any) => void;
+  handleAddFunding: () => void;
+  closeFundingModal: () => void;
+}
+
+const FundingModalComponent: React.FC<FundingModalProps> = ({
+  isOpen,
+  fundingForm,
+  setFundingForm,
+  safeState,
+  fundingSources,
+  selectedFundingSource,
+  setSelectedFundingSource,
+  fundingSourceSearch,
+  setFundingSourceSearch,
+  showFundingSourceDropdown,
+  setShowFundingSourceDropdown,
+  filteredGeneralSources,
+  filteredProjectSources,
+  selectFundingSource,
+  handleAddFunding,
+  closeFundingModal,
+}) => {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
+        {/* Modal Header */}
+        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-green-600 to-emerald-600 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3 space-x-reverse text-white">
+              <div className="bg-white/20 p-2 rounded-lg">
+                <Banknote className="h-6 w-6 no-flip" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold arabic-spacing">
+                  تمويل الخزينة
+                </h3>
+                <p className="text-green-100 arabic-spacing text-sm">
+                  إضافة أموال جديدة إلى الخزينة مع تسجيل كامل
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={closeFundingModal}
+              className="h-8 w-8 p-0 text-white hover:bg-white/20"
+            >
+              <X className="h-4 w-4 no-flip" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Modal Content */}
+        <div className="p-8 space-y-6 flex-1 overflow-y-auto scroll-smooth">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2 space-x-reverse text-blue-800">
+              <Info className="h-5 w-5 no-flip" />
+              <span className="font-medium arabic-spacing">الرصيد الحالي:</span>
+              <span className="font-bold">
+                <FinancialDisplay value={safeState.currentBalance} />
+              </span>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-base font-semibold text-gray-800 arabic-spacing">
+                مبلغ التمويل (بالدينار العراقي) *
+              </label>
+              <Input
+                type="number"
+                step="1"
+                min="0"
+                value={fundingForm.amount}
+                onChange={(e) =>
+                  setFundingForm({
+                    ...fundingForm,
+                    amount: e.target.value,
+                  })
+                }
+                className="h-12 text-base"
+                placeholder="1000000"
+              />
+              {fundingForm.amount && (
+                <p className="text-green-600 text-sm font-medium">
+                  💰{" "}
+                  {new Intl.NumberFormat("en-US").format(
+                    Number(fundingForm.amount)
+                  )}{" "}
+                  دينار عراقي
+                </p>
+              )}
+              {fundingForm.amount && (
+                <p className="text-blue-600 text-sm">
+                  الرصيد بعد التمويل:{" "}
+                  {formatCurrency(
+                    safeState.currentBalance +
+                      (parseFloat(fundingForm.amount) || 0)
+                  )}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-base font-semibold text-gray-800 arabic-spacing">
+                مصدر التمويل *
+              </label>
+
+              {/* Enhanced Funding Source Selector */}
+              <div className="relative funding-source-dropdown">
+                {/* Search Input */}
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="ابحث عن مصدر التمويل أو اختر من القائمة..."
+                    value={fundingSourceSearch}
+                    onChange={(e) => setFundingSourceSearch(e.target.value)}
+                    onFocus={() => setShowFundingSourceDropdown(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") {
+                        setShowFundingSourceDropdown(false);
+                      } else if (e.key === "Enter") {
+                        e.preventDefault();
+                        const allSources = [
+                          ...filteredGeneralSources,
+                          ...filteredProjectSources,
+                        ];
+                        if (allSources.length === 1) {
+                          selectFundingSource(allSources[0]);
+                        }
+                      }
+                    }}
+                    className="w-full h-12 px-4 pr-10 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 arabic-spacing"
+                  />
+                  <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                </div>
+
+                {/* Dropdown Results */}
+                {showFundingSourceDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-y-auto">
+                    {/* General Sources Section */}
+                    <div className="p-2 border-b border-gray-100">
+                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 arabic-spacing">
+                        مصادر عامة
+                      </div>
+                      {filteredGeneralSources.map((source) => (
+                        <button
+                          key={source.value}
+                          type="button"
+                          onClick={() => selectFundingSource(source)}
+                          className="w-full text-right p-2 hover:bg-gray-50 rounded-md flex items-center space-x-2 space-x-reverse"
+                        >
+                          <span className="text-2xl">💰</span>
+                          <span className="text-sm font-medium text-gray-900 arabic-spacing">
+                            {source.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Project Sources Section */}
+                    {filteredProjectSources.length > 0 && (
+                      <div className="p-2">
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 arabic-spacing">
+                          مشاريع ({filteredProjectSources.length})
+                        </div>
+                        {filteredProjectSources.map((source) => (
+                          <button
+                            key={source.value}
+                            type="button"
+                            onClick={() => selectFundingSource(source)}
+                            className={`w-full text-right p-3 rounded-md border mb-1 transition-colors ${
+                              source.isAvailable
+                                ? "hover:bg-blue-50 border-transparent hover:border-blue-200"
+                                : "bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed"
+                            }`}
+                            disabled={!source.isAvailable}
+                          >
+                            <div className="flex items-start space-x-3 space-x-reverse">
+                              <span className="text-2xl">🏗️</span>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-gray-900 arabic-spacing truncate">
+                                  {source.label
+                                    .split(" - ")[0]
+                                    .replace("مشروع ", "")}
+                                </div>
+                                <div className="text-xs text-gray-500 arabic-spacing">
+                                  <span>الدفعة {source.batchNumber}</span>
+                                  {source.projectCode && (
+                                    <span className="mr-2">
+                                      • {source.projectCode}
+                                    </span>
+                                  )}
+                                  {source.projectLocation && (
+                                    <span className="mr-2">
+                                      • {source.projectLocation}
+                                    </span>
+                                  )}
+                                </div>
+                                {source.remainingAmount !== undefined && (
+                                  <div className="text-xs mt-1">
+                                    <span
+                                      className={`font-medium ${
+                                        source.isAvailable
+                                          ? "text-green-600"
+                                          : "text-red-600"
+                                      }`}
+                                    >
+                                      متبقي:{" "}
+                                      {new Intl.NumberFormat("en-US").format(
+                                        source.remainingAmount
+                                      )}{" "}
+                                      د.ع
+                                    </span>
+                                    <span className="text-gray-400 mr-2">
+                                      من أصل{" "}
+                                      {new Intl.NumberFormat("en-US").format(
+                                        source.totalDealPrice || 0
+                                      )}{" "}
+                                      د.ع
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-shrink-0 flex flex-col items-end space-y-1">
+                                {source.isAvailable ? (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    متاح
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    مكتمل
+                                  </span>
+                                )}
+                                {source.projectStatus && (
+                                  <span
+                                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                      source.projectStatus === "active"
+                                        ? "bg-blue-100 text-blue-800"
+                                        : "bg-yellow-100 text-yellow-800"
+                                    }`}
+                                  >
+                                    {source.projectStatus === "active"
+                                      ? "نشط"
+                                      : "تخطيط"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* No Results */}
+                    {filteredGeneralSources.length === 0 &&
+                      filteredProjectSources.length === 0 && (
+                        <div className="p-4 text-center text-gray-500 arabic-spacing">
+                          لا توجد نتائج مطابقة للبحث
+                        </div>
+                      )}
+                  </div>
+                )}
+              </div>
+
+              {/* Selected Source Display */}
+              {selectedFundingSource && (
+                <div
+                  className={`border rounded-lg p-3 mt-2 ${
+                    selectedFundingSource.type === "project"
+                      ? "bg-blue-50 border-blue-200"
+                      : "bg-gray-50 border-gray-200"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <span className="text-xl">
+                        {selectedFundingSource.type === "project" ? "🏗️" : "💰"}
+                      </span>
+                      <span className="font-medium text-gray-900 arabic-spacing">
+                        {selectedFundingSource.type === "project"
+                          ? selectedFundingSource.label
+                              .split(" - ")[0]
+                              .replace("مشروع ", "")
+                          : selectedFundingSource.label}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedFundingSource(null);
+                        setFundingForm({
+                          ...fundingForm,
+                          description: "",
+                        });
+                        setFundingSourceSearch("");
+                      }}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  {selectedFundingSource.type === "project" && (
+                    <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
+                      <div className="text-blue-700">
+                        <span className="font-medium">📦 رقم الدفعة:</span>
+                        <span className="mr-1">
+                          {selectedFundingSource.batchNumber}
+                        </span>
+                      </div>
+                      {selectedFundingSource.remainingAmount !== undefined && (
+                        <div className="text-blue-700">
+                          <span className="font-medium">
+                            💰 المبلغ المتبقي:
+                          </span>
+                          <span className="mr-1">
+                            {new Intl.NumberFormat("en-US").format(
+                              selectedFundingSource.remainingAmount
+                            )}{" "}
+                            د.ع
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-base font-semibold text-gray-800 arabic-spacing">
+                ملاحظات إضافية (اختياري)
+              </label>
+              <Input
+                value={fundingForm.source}
+                onChange={(e) =>
+                  setFundingForm({
+                    ...fundingForm,
+                    source: e.target.value,
+                  })
+                }
+                className="h-12 text-base arabic-spacing"
+                placeholder="مثال: تفاصيل إضافية حول مصدر التمويل"
+              />
+            </div>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-start space-x-3 space-x-reverse">
+              <AlertTriangle className="h-5 w-5 text-amber-600 no-flip flex-shrink-0 mt-0.5" />
+              <div className="text-amber-800 text-sm arabic-spacing leading-relaxed">
+                <p className="font-medium mb-1">تنبيه مهم:</p>
+                <p>
+                  سيتم تسجيل هذا التمويل بشكل دائم في سجل المعاملات مع التاريخ
+                  والوقت. تأكد من صحة المبلغ والوصف قبل الحفظ.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+          <div className="flex justify-between items-center">
+            <div className="text-sm text-gray-600 arabic-spacing">
+              <span className="font-medium">ملاحظة:</span> ستتم إضافة المبلغ
+              فوراً إلى رصيد الخزينة
+            </div>
+
+            <div className="flex space-x-4 space-x-reverse">
+              <Button
+                variant="outline"
+                onClick={closeFundingModal}
+                className="px-6 py-3 text-base"
+              >
+                <span className="arabic-spacing">إلغاء</span>
+              </Button>
+
+              <Button
+                onClick={handleAddFunding}
+                disabled={
+                  !fundingForm.amount ||
+                  !fundingForm.description ||
+                  (fundingForm.description === "اخرى" &&
+                    !fundingForm.source.trim())
+                }
+                className="px-6 py-3 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50"
+              >
+                <Save className="h-5 w-5 ml-2 no-flip" />
+                <span className="arabic-spacing">تأكيد التمويل</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface EditModalProps {
+  isOpen: boolean;
+  editingTransaction: any;
+  editForm: {
+    amount: string;
+    description: string;
+    funding_source: string;
+    funding_notes: string;
+    edit_reason: string;
+  };
+  setEditForm: (form: any) => void;
+  fundingSources: any[];
+  handleEditTransaction: () => void;
+  closeEditModal: () => void;
+}
+
+const EditModalComponent: React.FC<EditModalProps> = ({
+  isOpen,
+  editingTransaction,
+  editForm,
+  setEditForm,
+  fundingSources,
+  handleEditTransaction,
+  closeEditModal,
+}) => {
+  if (!isOpen || !editingTransaction) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+        {/* Modal Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3 space-x-reverse">
+              <div className="bg-white/20 p-2 rounded-lg">
+                <Edit3 className="h-6 w-6 no-flip" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold arabic-spacing">
+                  تعديل معاملة مالية
+                </h3>
+                <p className="text-blue-100 text-sm arabic-spacing mt-1">
+                  تعديل بيانات المعاملة مع الاحتفاظ بسجل التعديل
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={closeEditModal}
+              className="h-8 w-8 p-0 text-white hover:bg-white/20"
+            >
+              <X className="h-4 w-4 no-flip" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+          {/* Original Transaction Info */}
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h4 className="font-semibold text-gray-800 arabic-spacing mb-3">
+              معلومات المعاملة الأصلية:
+            </h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-600">المبلغ الأصلي:</span>
+                <span className="font-medium text-green-600 mr-2 pr-2">
+                  {formatCurrency(editingTransaction.amount)}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-600">التاريخ:</span>
+                <span className="font-medium mr-2 text-gray-800 pr-2">
+                  {formatDate(editingTransaction.date)}
+                </span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-gray-600">الوصف الأصلي:</span>
+                <span className="font-medium mr-2 text-gray-800 pr-2">
+                  {editingTransaction.description}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Edit Form */}
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-base font-semibold text-gray-800 arabic-spacing">
+                المبلغ الجديد *
+              </label>
+              <Input
+                type="number"
+                value={editForm.amount}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, amount: e.target.value })
+                }
+                className="h-12 text-base arabic-spacing"
+                placeholder="أدخل المبلغ الجديد"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-base font-semibold text-gray-800 arabic-spacing">
+                الوصف الجديد
+              </label>
+              <Input
+                value={editForm.description}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    description: e.target.value,
+                  })
+                }
+                className="h-12 text-base arabic-spacing"
+                placeholder="أدخل الوصف الجديد"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-base font-semibold text-gray-800 arabic-spacing">
+                مصدر التمويل
+              </label>
+              <Select
+                value={editForm.funding_source}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    funding_source: e.target.value,
+                  })
+                }
+                className="h-12 text-base arabic-spacing"
+              >
+                <option value="">اختر مصدر التمويل</option>
+                {fundingSources.map((source) => (
+                  <option key={source.value} value={source.value}>
+                    {source.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-base font-semibold text-gray-800 arabic-spacing">
+                ملاحظات إضافية
+              </label>
+              <Input
+                value={editForm.funding_notes}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    funding_notes: e.target.value,
+                  })
+                }
+                className="h-12 text-base arabic-spacing"
+                placeholder="ملاحظات إضافية حول التعديل"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-base font-semibold text-gray-800 arabic-spacing">
+                سبب التعديل * (مطلوب للمراجعة)
+              </label>
+              <Input
+                value={editForm.edit_reason}
+                onChange={(e) =>
+                  setEditForm({
+                    ...editForm,
+                    edit_reason: e.target.value,
+                  })
+                }
+                className="h-12 text-base arabic-spacing"
+                placeholder="أدخل سبب التعديل (مثال: تصحيح خطأ في المبلغ)"
+              />
+            </div>
+          </div>
+
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-start space-x-3 space-x-reverse">
+              <AlertTriangle className="h-5 w-5 text-amber-600 no-flip flex-shrink-0 mt-0.5" />
+              <div className="text-amber-800 text-sm arabic-spacing leading-relaxed">
+                <p className="font-medium mb-1">تنبيه مهم:</p>
+                <p>
+                  سيتم تسجيل هذا التعديل في سجل المراجعة مع اسم المستخدم والوقت
+                  وسبب التعديل. تأكد من صحة البيانات قبل الحفظ.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+          <div className="flex justify-between items-center">
+            <div className="text-sm text-gray-600 arabic-spacing">
+              <span className="font-medium">ملاحظة:</span> سيتم تعديل رصيد
+              الخزينة تلقائياً
+            </div>
+
+            <div className="flex space-x-4 space-x-reverse">
+              <Button
+                variant="outline"
+                onClick={closeEditModal}
+                className="px-6 py-3 text-base"
+              >
+                <span className="arabic-spacing">إلغاء</span>
+              </Button>
+
+              <Button
+                onClick={handleEditTransaction}
+                disabled={
+                  !editForm.amount ||
+                  !editForm.edit_reason.trim() ||
+                  parseFloat(editForm.amount) <= 0
+                }
+                className="px-6 py-3 text-base bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50"
+              >
+                <CheckCircle className="h-5 w-5 ml-2 no-flip" />
+                <span className="arabic-spacing">تأكيد التعديل</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const transactionIcons = {
   funding: <Banknote className="h-5 w-5 no-flip" />,
   invoice_payment: <Building2 className="h-5 w-5 no-flip" />,
@@ -1095,585 +1746,6 @@ export default function SafePage() {
     </div>
   );
 
-  // Shared Modal Components
-  const FundingModalContent = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
-        {/* Modal Header */}
-        <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-green-600 to-emerald-600 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3 space-x-reverse text-white">
-              <div className="bg-white/20 p-2 rounded-lg">
-                <Banknote className="h-6 w-6 no-flip" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold arabic-spacing">
-                  تمويل الخزينة
-                </h3>
-                <p className="text-green-100 arabic-spacing text-sm">
-                  إضافة أموال جديدة إلى الخزينة مع تسجيل كامل
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={closeFundingModal}
-              className="h-8 w-8 p-0 text-white hover:bg-white/20"
-            >
-              <X className="h-4 w-4 no-flip" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Modal Content */}
-        <div className="p-8 space-y-6 flex-1 overflow-y-auto scroll-smooth">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center space-x-2 space-x-reverse text-blue-800">
-              <Info className="h-5 w-5 no-flip" />
-              <span className="font-medium arabic-spacing">الرصيد الحالي:</span>
-              <span className="font-bold">
-                <FinancialDisplay value={safeState.currentBalance} />
-              </span>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-base font-semibold text-gray-800 arabic-spacing">
-                مبلغ التمويل (بالدينار العراقي) *
-              </label>
-              <Input
-                type="number"
-                step="1"
-                min="0"
-                value={fundingForm.amount}
-                onChange={(e) =>
-                  setFundingForm({
-                    ...fundingForm,
-                    amount: e.target.value,
-                  })
-                }
-                className="h-12 text-base"
-                placeholder="1000000"
-              />
-              {fundingForm.amount && (
-                <p className="text-green-600 text-sm font-medium">
-                  💰{" "}
-                  {new Intl.NumberFormat("en-US").format(
-                    Number(fundingForm.amount)
-                  )}{" "}
-                  دينار عراقي
-                </p>
-              )}
-              {fundingForm.amount && (
-                <p className="text-blue-600 text-sm">
-                  الرصيد بعد التمويل:{" "}
-                  {formatCurrency(
-                    safeState.currentBalance +
-                      (parseFloat(fundingForm.amount) || 0)
-                  )}
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-base font-semibold text-gray-800 arabic-spacing">
-                مصدر التمويل *
-              </label>
-
-              {/* Enhanced Funding Source Selector */}
-              <div className="relative funding-source-dropdown">
-                {/* Search Input */}
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="ابحث عن مصدر التمويل أو اختر من القائمة..."
-                    value={fundingSourceSearch}
-                    onChange={(e) => setFundingSourceSearch(e.target.value)}
-                    onFocus={() => setShowFundingSourceDropdown(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Escape") {
-                        setShowFundingSourceDropdown(false);
-                      } else if (e.key === "Enter") {
-                        e.preventDefault();
-                        const allSources = [
-                          ...filteredGeneralSources,
-                          ...filteredProjectSources,
-                        ];
-                        if (allSources.length === 1) {
-                          selectFundingSource(allSources[0]);
-                        }
-                      }
-                    }}
-                    className="w-full h-12 px-4 pr-10 text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 arabic-spacing"
-                  />
-                  <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                </div>
-
-                {/* Dropdown Results */}
-                {showFundingSourceDropdown && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-80 overflow-y-auto">
-                    {/* General Sources Section */}
-                    <div className="p-2 border-b border-gray-100">
-                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 arabic-spacing">
-                        مصادر عامة
-                      </div>
-                      {filteredGeneralSources.map((source) => (
-                        <button
-                          key={source.value}
-                          type="button"
-                          onClick={() => selectFundingSource(source)}
-                          className="w-full text-right p-2 hover:bg-gray-50 rounded-md flex items-center space-x-2 space-x-reverse"
-                        >
-                          <span className="text-2xl">💰</span>
-                          <span className="text-sm font-medium text-gray-900 arabic-spacing">
-                            {source.label}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Project Sources Section */}
-                    {filteredProjectSources.length > 0 && (
-                      <div className="p-2">
-                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 arabic-spacing">
-                          مشاريع ({filteredProjectSources.length})
-                        </div>
-                        {filteredProjectSources.map((source) => (
-                          <button
-                            key={source.value}
-                            type="button"
-                            onClick={() => selectFundingSource(source)}
-                            className={`w-full text-right p-3 rounded-md border mb-1 transition-colors ${
-                              source.isAvailable
-                                ? "hover:bg-blue-50 border-transparent hover:border-blue-200"
-                                : "bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed"
-                            }`}
-                            disabled={!source.isAvailable}
-                          >
-                            <div className="flex items-start space-x-3 space-x-reverse">
-                              <span className="text-2xl">🏗️</span>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-gray-900 arabic-spacing truncate">
-                                  {source.label
-                                    .split(" - ")[0]
-                                    .replace("مشروع ", "")}
-                                </div>
-                                <div className="text-xs text-gray-500 arabic-spacing">
-                                  <span>الدفعة {source.batchNumber}</span>
-                                  {source.projectCode && (
-                                    <span className="mr-2">
-                                      • {source.projectCode}
-                                    </span>
-                                  )}
-                                  {source.projectLocation && (
-                                    <span className="mr-2">
-                                      • {source.projectLocation}
-                                    </span>
-                                  )}
-                                </div>
-                                {source.remainingAmount !== undefined && (
-                                  <div className="text-xs mt-1">
-                                    <span
-                                      className={`font-medium ${
-                                        source.isAvailable
-                                          ? "text-green-600"
-                                          : "text-red-600"
-                                      }`}
-                                    >
-                                      متبقي:{" "}
-                                      {new Intl.NumberFormat("en-US").format(
-                                        source.remainingAmount
-                                      )}{" "}
-                                      د.ع
-                                    </span>
-                                    <span className="text-gray-400 mr-2">
-                                      من أصل{" "}
-                                      {new Intl.NumberFormat("en-US").format(
-                                        source.totalDealPrice || 0
-                                      )}{" "}
-                                      د.ع
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex-shrink-0 flex flex-col items-end space-y-1">
-                                {source.isAvailable ? (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                    متاح
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                    مكتمل
-                                  </span>
-                                )}
-                                {source.projectStatus && (
-                                  <span
-                                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                      source.projectStatus === "active"
-                                        ? "bg-blue-100 text-blue-800"
-                                        : "bg-yellow-100 text-yellow-800"
-                                    }`}
-                                  >
-                                    {source.projectStatus === "active"
-                                      ? "نشط"
-                                      : "تخطيط"}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* No Results */}
-                    {filteredGeneralSources.length === 0 &&
-                      filteredProjectSources.length === 0 && (
-                        <div className="p-4 text-center text-gray-500 arabic-spacing">
-                          لا توجد نتائج مطابقة للبحث
-                        </div>
-                      )}
-                  </div>
-                )}
-              </div>
-
-              {/* Selected Source Display */}
-              {selectedFundingSource && (
-                <div
-                  className={`border rounded-lg p-3 mt-2 ${
-                    selectedFundingSource.type === "project"
-                      ? "bg-blue-50 border-blue-200"
-                      : "bg-gray-50 border-gray-200"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <span className="text-xl">
-                        {selectedFundingSource.type === "project" ? "🏗️" : "💰"}
-                      </span>
-                      <span className="font-medium text-gray-900 arabic-spacing">
-                        {selectedFundingSource.type === "project"
-                          ? selectedFundingSource.label
-                              .split(" - ")[0]
-                              .replace("مشروع ", "")
-                          : selectedFundingSource.label}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedFundingSource(null);
-                        setFundingForm({
-                          ...fundingForm,
-                          description: "",
-                        });
-                        setFundingSourceSearch("");
-                      }}
-                      className="text-gray-400 hover:text-gray-600"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {selectedFundingSource.type === "project" && (
-                    <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
-                      <div className="text-blue-700">
-                        <span className="font-medium">📦 رقم الدفعة:</span>
-                        <span className="mr-1">
-                          {selectedFundingSource.batchNumber}
-                        </span>
-                      </div>
-                      {selectedFundingSource.remainingAmount !== undefined && (
-                        <div className="text-blue-700">
-                          <span className="font-medium">
-                            💰 المبلغ المتبقي:
-                          </span>
-                          <span className="mr-1">
-                            {new Intl.NumberFormat("en-US").format(
-                              selectedFundingSource.remainingAmount
-                            )}{" "}
-                            د.ع
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-base font-semibold text-gray-800 arabic-spacing">
-                ملاحظات إضافية (اختياري)
-              </label>
-              <Input
-                value={fundingForm.source}
-                onChange={(e) =>
-                  setFundingForm({
-                    ...fundingForm,
-                    source: e.target.value,
-                  })
-                }
-                className="h-12 text-base arabic-spacing"
-                placeholder="مثال: تفاصيل إضافية حول مصدر التمويل"
-              />
-            </div>
-          </div>
-
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <div className="flex items-start space-x-3 space-x-reverse">
-              <AlertTriangle className="h-5 w-5 text-amber-600 no-flip flex-shrink-0 mt-0.5" />
-              <div className="text-amber-800 text-sm arabic-spacing leading-relaxed">
-                <p className="font-medium mb-1">تنبيه مهم:</p>
-                <p>
-                  سيتم تسجيل هذا التمويل بشكل دائم في سجل المعاملات مع التاريخ
-                  والوقت. تأكد من صحة المبلغ والوصف قبل الحفظ.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Modal Footer */}
-        <div className="p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-gray-600 arabic-spacing">
-              <span className="font-medium">ملاحظة:</span> ستتم إضافة المبلغ
-              فوراً إلى رصيد الخزينة
-            </div>
-
-            <div className="flex space-x-4 space-x-reverse">
-              <Button
-                variant="outline"
-                onClick={closeFundingModal}
-                className="px-6 py-3 text-base"
-              >
-                <span className="arabic-spacing">إلغاء</span>
-              </Button>
-
-              <Button
-                onClick={handleAddFunding}
-                disabled={
-                  !fundingForm.amount ||
-                  !fundingForm.description ||
-                  (fundingForm.description === "اخرى" &&
-                    !fundingForm.source.trim())
-                }
-                className="px-6 py-3 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:opacity-50"
-              >
-                <Save className="h-5 w-5 ml-2 no-flip" />
-                <span className="arabic-spacing">تأكيد التمويل</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const EditModalContent = () => (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        {/* Modal Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3 space-x-reverse">
-              <div className="bg-white/20 p-2 rounded-lg">
-                <Edit3 className="h-6 w-6 no-flip" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold arabic-spacing">
-                  تعديل معاملة مالية
-                </h3>
-                <p className="text-blue-100 text-sm arabic-spacing mt-1">
-                  تعديل بيانات المعاملة مع الاحتفاظ بسجل التعديل
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={closeEditModal}
-              className="h-8 w-8 p-0 text-white hover:bg-white/20"
-            >
-              <X className="h-4 w-4 no-flip" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Modal Body */}
-        <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
-          {/* Original Transaction Info */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <h4 className="font-semibold text-gray-800 arabic-spacing mb-3">
-              معلومات المعاملة الأصلية:
-            </h4>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-600">المبلغ الأصلي:</span>
-                <span className="font-medium text-green-600 mr-2 pr-2">
-                  {formatCurrency(editingTransaction.amount)}
-                </span>
-              </div>
-              <div>
-                <span className="text-gray-600">التاريخ:</span>
-                <span className="font-medium mr-2 text-gray-800 pr-2">
-                  {formatDate(editingTransaction.date)}
-                </span>
-              </div>
-              <div className="col-span-2">
-                <span className="text-gray-600">الوصف الأصلي:</span>
-                <span className="font-medium mr-2 text-gray-800 pr-2">
-                  {editingTransaction.description}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Edit Form */}
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-base font-semibold text-gray-800 arabic-spacing">
-                المبلغ الجديد *
-              </label>
-              <Input
-                type="number"
-                value={editForm.amount}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, amount: e.target.value })
-                }
-                className="h-12 text-base arabic-spacing"
-                placeholder="أدخل المبلغ الجديد"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-base font-semibold text-gray-800 arabic-spacing">
-                الوصف الجديد
-              </label>
-              <Input
-                value={editForm.description}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    description: e.target.value,
-                  })
-                }
-                className="h-12 text-base arabic-spacing"
-                placeholder="أدخل الوصف الجديد"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-base font-semibold text-gray-800 arabic-spacing">
-                مصدر التمويل
-              </label>
-              <Select
-                value={editForm.funding_source}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    funding_source: e.target.value,
-                  })
-                }
-                className="h-12 text-base arabic-spacing"
-              >
-                <option value="">اختر مصدر التمويل</option>
-                {fundingSources.map((source) => (
-                  <option key={source.value} value={source.value}>
-                    {source.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-base font-semibold text-gray-800 arabic-spacing">
-                ملاحظات إضافية
-              </label>
-              <Input
-                value={editForm.funding_notes}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    funding_notes: e.target.value,
-                  })
-                }
-                className="h-12 text-base arabic-spacing"
-                placeholder="ملاحظات إضافية حول التعديل"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-base font-semibold text-gray-800 arabic-spacing">
-                سبب التعديل * (مطلوب للمراجعة)
-              </label>
-              <Input
-                value={editForm.edit_reason}
-                onChange={(e) =>
-                  setEditForm({
-                    ...editForm,
-                    edit_reason: e.target.value,
-                  })
-                }
-                className="h-12 text-base arabic-spacing"
-                placeholder="أدخل سبب التعديل (مثال: تصحيح خطأ في المبلغ)"
-              />
-            </div>
-          </div>
-
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <div className="flex items-start space-x-3 space-x-reverse">
-              <AlertTriangle className="h-5 w-5 text-amber-600 no-flip flex-shrink-0 mt-0.5" />
-              <div className="text-amber-800 text-sm arabic-spacing leading-relaxed">
-                <p className="font-medium mb-1">تنبيه مهم:</p>
-                <p>
-                  سيتم تسجيل هذا التعديل في سجل المراجعة مع اسم المستخدم والوقت
-                  وسبب التعديل. تأكد من صحة البيانات قبل الحفظ.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Modal Footer */}
-        <div className="p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-          <div className="flex justify-between items-center">
-            <div className="text-sm text-gray-600 arabic-spacing">
-              <span className="font-medium">ملاحظة:</span> سيتم تعديل رصيد
-              الخزينة تلقائياً
-            </div>
-
-            <div className="flex space-x-4 space-x-reverse">
-              <Button
-                variant="outline"
-                onClick={closeEditModal}
-                className="px-6 py-3 text-base"
-              >
-                <span className="arabic-spacing">إلغاء</span>
-              </Button>
-
-              <Button
-                onClick={handleEditTransaction}
-                disabled={
-                  !editForm.amount ||
-                  !editForm.edit_reason.trim() ||
-                  parseFloat(editForm.amount) <= 0
-                }
-                className="px-6 py-3 text-base bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50"
-              >
-                <CheckCircle className="h-5 w-5 ml-2 no-flip" />
-                <span className="arabic-spacing">تأكيد التعديل</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
   // Responsive Layout Selection
   if (isMobile) {
     return (
@@ -1681,8 +1753,33 @@ export default function SafePage() {
         <div>
           <MobileLayout />
           {/* Include modals for mobile */}
-          {showFundingModal && <FundingModalContent />}
-          {showEditModal && editingTransaction && <EditModalContent />}
+          <FundingModalComponent
+            isOpen={showFundingModal}
+            fundingForm={fundingForm}
+            setFundingForm={setFundingForm}
+            safeState={safeState}
+            fundingSources={fundingSources}
+            selectedFundingSource={selectedFundingSource}
+            setSelectedFundingSource={setSelectedFundingSource}
+            fundingSourceSearch={fundingSourceSearch}
+            setFundingSourceSearch={setFundingSourceSearch}
+            showFundingSourceDropdown={showFundingSourceDropdown}
+            setShowFundingSourceDropdown={setShowFundingSourceDropdown}
+            filteredGeneralSources={filteredGeneralSources}
+            filteredProjectSources={filteredProjectSources}
+            selectFundingSource={selectFundingSource}
+            handleAddFunding={handleAddFunding}
+            closeFundingModal={closeFundingModal}
+          />
+          <EditModalComponent
+            isOpen={showEditModal}
+            editingTransaction={editingTransaction}
+            editForm={editForm}
+            setEditForm={setEditForm}
+            fundingSources={fundingSources}
+            handleEditTransaction={handleEditTransaction}
+            closeEditModal={closeEditModal}
+          />
           {showReceiptModal && receiptTransaction && (
             <FundingReceiptModal
               isOpen={showReceiptModal}
@@ -1701,8 +1798,33 @@ export default function SafePage() {
         <div>
           <TabletLayout />
           {/* Include modals for tablet */}
-          {showFundingModal && <FundingModalContent />}
-          {showEditModal && editingTransaction && <EditModalContent />}
+          <FundingModalComponent
+            isOpen={showFundingModal}
+            fundingForm={fundingForm}
+            setFundingForm={setFundingForm}
+            safeState={safeState}
+            fundingSources={fundingSources}
+            selectedFundingSource={selectedFundingSource}
+            setSelectedFundingSource={setSelectedFundingSource}
+            fundingSourceSearch={fundingSourceSearch}
+            setFundingSourceSearch={setFundingSourceSearch}
+            showFundingSourceDropdown={showFundingSourceDropdown}
+            setShowFundingSourceDropdown={setShowFundingSourceDropdown}
+            filteredGeneralSources={filteredGeneralSources}
+            filteredProjectSources={filteredProjectSources}
+            selectFundingSource={selectFundingSource}
+            handleAddFunding={handleAddFunding}
+            closeFundingModal={closeFundingModal}
+          />
+          <EditModalComponent
+            isOpen={showEditModal}
+            editingTransaction={editingTransaction}
+            editForm={editForm}
+            setEditForm={setEditForm}
+            fundingSources={fundingSources}
+            handleEditTransaction={handleEditTransaction}
+            closeEditModal={closeEditModal}
+          />
           {showReceiptModal && receiptTransaction && (
             <FundingReceiptModal
               isOpen={showReceiptModal}
@@ -2084,7 +2206,27 @@ export default function SafePage() {
         </Card>
 
         {/* Funding Modal */}
-        {showFundingModal && (
+        <FundingModalComponent
+          isOpen={showFundingModal}
+          fundingForm={fundingForm}
+          setFundingForm={setFundingForm}
+          safeState={safeState}
+          fundingSources={fundingSources}
+          selectedFundingSource={selectedFundingSource}
+          setSelectedFundingSource={setSelectedFundingSource}
+          fundingSourceSearch={fundingSourceSearch}
+          setFundingSourceSearch={setFundingSourceSearch}
+          showFundingSourceDropdown={showFundingSourceDropdown}
+          setShowFundingSourceDropdown={setShowFundingSourceDropdown}
+          filteredGeneralSources={filteredGeneralSources}
+          filteredProjectSources={filteredProjectSources}
+          selectFundingSource={selectFundingSource}
+          handleAddFunding={handleAddFunding}
+          closeFundingModal={closeFundingModal}
+        />
+
+        {/* Old desktop modal - remove this section */}
+        {false && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl max-h-[90vh] flex flex-col">
               {/* Modal Header */}
@@ -2475,7 +2617,18 @@ export default function SafePage() {
         )}
 
         {/* Edit Transaction Modal */}
-        {showEditModal && editingTransaction && (
+        <EditModalComponent
+          isOpen={showEditModal}
+          editingTransaction={editingTransaction}
+          editForm={editForm}
+          setEditForm={setEditForm}
+          fundingSources={fundingSources}
+          handleEditTransaction={handleEditTransaction}
+          closeEditModal={closeEditModal}
+        />
+
+        {/* Old desktop edit modal - remove this section */}
+        {false && editingTransaction && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
               {/* Modal Header */}

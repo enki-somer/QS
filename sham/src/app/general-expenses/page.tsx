@@ -304,43 +304,46 @@ export default function GeneralExpensesPage() {
       <PageNavigation />
 
       {/* Page Header */}
-      <div className="flex items-center justify-between bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <div className="space-y-2">
-          <h1 className="text-3xl font-bold text-gray-900 arabic-spacing">
-            المصروفات العامة
-          </h1>
-          <p className="text-gray-600 arabic-spacing leading-relaxed">
-            إدارة المصروفات التشغيلية مع دفع من الخزينة مباشرة
-          </p>
-          <div className="flex items-center space-x-4 space-x-reverse text-sm text-gray-500">
-            {hasPermission("canViewSafe") && (
-              <span className="flex items-center space-x-1 space-x-reverse">
-                <Wallet className="h-4 w-4 no-flip" />
-                <span className="arabic-spacing">
-                  رصيد الخزينة: {formatCurrency(safeState.currentBalance)}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 arabic-spacing">
+              المصروفات العامة
+            </h1>
+            <p className="text-gray-600 arabic-spacing leading-relaxed text-sm sm:text-base">
+              إدارة المصروفات التشغيلية مع دفع من الخزينة مباشرة
+            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 sm:space-x-reverse text-sm text-gray-500 gap-2 sm:gap-0">
+              {hasPermission("canViewSafe") && (
+                <span className="flex items-center space-x-1 space-x-reverse">
+                  <Wallet className="h-4 w-4 no-flip" />
+                  <span className="arabic-spacing">
+                    رصيد الخزينة: {formatCurrency(safeState.currentBalance)}
+                  </span>
                 </span>
+              )}
+              <span className="flex items-center space-x-1 space-x-reverse">
+                <Receipt className="h-4 w-4 no-flip" />
+                <span className="arabic-spacing">{expenses.length} مصروف</span>
               </span>
-            )}
-            <span className="flex items-center space-x-1 space-x-reverse">
-              <Receipt className="h-4 w-4 no-flip" />
-              <span className="arabic-spacing">{expenses.length} مصروف</span>
-            </span>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center space-x-4 gap-2 space-x-reverse">
-          <Button variant="outline">
-            <PieChart className="h-4 w-4 ml-2 no-flip" />
-            <span className="arabic-spacing">تقرير الفئات</span>
-          </Button>
-          <PermissionButton
-            permission="canCreateInvoices"
-            onClick={() => setShowExpenseModal(true)}
-            viewOnlyTooltip="غير متاح - وضع العرض فقط"
-          >
-            <Plus className="h-4 w-4 ml-2 no-flip" />
-            <span className="arabic-spacing">مصروف جديد</span>
-          </PermissionButton>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:space-x-4 sm:gap-2 sm:space-x-reverse">
+            <Button variant="outline" className="w-full sm:w-auto">
+              <PieChart className="h-4 w-4 ml-2 no-flip" />
+              <span className="arabic-spacing">تقرير الفئات</span>
+            </Button>
+            <PermissionButton
+              permission="canCreateInvoices"
+              onClick={() => setShowExpenseModal(true)}
+              viewOnlyTooltip="غير متاح - وضع العرض فقط"
+              className="w-full sm:w-auto"
+            >
+              <Plus className="h-4 w-4 ml-2 no-flip" />
+              <span className="arabic-spacing">مصروف جديد</span>
+            </PermissionButton>
+          </div>
         </div>
       </div>
 

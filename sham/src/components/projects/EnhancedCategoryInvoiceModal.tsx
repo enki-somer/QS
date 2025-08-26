@@ -1560,36 +1560,46 @@ ${invoiceContent}
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 p-4">
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 p-2 sm:p-4">
         <div className="h-full flex items-center justify-center">
-          <div className="bg-white rounded-2xl w-full max-w-7xl max-h-[90vh] shadow-2xl relative flex flex-col">
+          <div className="bg-white rounded-2xl w-full max-w-7xl max-h-[95vh] sm:max-h-[90vh] shadow-2xl relative flex flex-col">
             {/* Simple Header - Data Entry Focused */}
-            <div className="bg-white border-b border-gray-200 p-4 no-print flex-shrink-0">
+            <div className="bg-white border-b border-gray-200 p-3 sm:p-4 no-print flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900">
+                  <h2 className="text-base sm:text-lg font-semibold text-gray-900">
                     إنشاء فاتورة جديدة
                   </h2>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-xs sm:text-sm text-gray-600">
                     {project.name} - {category?.name}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1 sm:gap-2">
                   <Button
                     onClick={handlePrint}
                     disabled={!selectedAssignment}
                     variant="outline"
                     size="sm"
-                    className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                    className="border-blue-200 text-blue-700 hover:bg-blue-50 px-2 sm:px-3 py-2 touch-manipulation hidden sm:flex"
                   >
                     <Printer className="h-4 w-4 ml-1" />
                     معاينة وطباعة
+                  </Button>
+                  {/* Mobile Print Button */}
+                  <Button
+                    onClick={handlePrint}
+                    disabled={!selectedAssignment}
+                    variant="outline"
+                    size="sm"
+                    className="border-blue-200 text-blue-700 hover:bg-blue-50 h-8 w-8 p-0 touch-manipulation sm:hidden"
+                  >
+                    <Printer className="h-4 w-4" />
                   </Button>
                   <Button
                     onClick={onClose}
                     variant="ghost"
                     size="sm"
-                    className="text-gray-500 hover:text-gray-700 h-8 w-8 p-0"
+                    className="text-gray-500 hover:text-gray-700 h-8 w-8 p-0 touch-manipulation"
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -1601,7 +1611,7 @@ ${invoiceContent}
             <div
               ref={scrollContainerRef}
               onScroll={handleScroll}
-              className="flex-1 overflow-y-auto p-6 invoice-modal-scroll"
+              className="flex-1 overflow-y-auto p-3 sm:p-6 invoice-modal-scroll"
             >
               {/* Scroll to top button */}
               {showScrollTop && (
@@ -2173,9 +2183,9 @@ ${invoiceContent}
               </div>
             </div>
 
-            {/* Footer Actions - Simple */}
-            <div className="bg-white border-t border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
-              <div className="text-sm text-gray-600">
+            {/* Footer Actions - Mobile Friendly */}
+            <div className="bg-white border-t border-gray-200 px-3 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0 flex-shrink-0">
+              <div className="text-sm text-gray-600 order-2 sm:order-1 text-center sm:text-right">
                 {selectedAssignment && (
                   <>
                     المبلغ المتبقي:
@@ -2191,8 +2201,13 @@ ${invoiceContent}
                   </>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <Button onClick={onClose} variant="outline" size="sm">
+              <div className="flex items-center gap-3 w-full sm:w-auto order-1 sm:order-2">
+                <Button
+                  onClick={onClose}
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 sm:flex-none py-3 touch-manipulation"
+                >
                   إلغاء
                 </Button>
                 <Button
@@ -2206,7 +2221,7 @@ ${invoiceContent}
                     )
                   }
                   size="sm"
-                  className="bg-blue-600 hover:bg-blue-700"
+                  className="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 py-3 touch-manipulation"
                 >
                   <Save className="h-4 w-4 ml-1" />
                   حفظ الفاتورة

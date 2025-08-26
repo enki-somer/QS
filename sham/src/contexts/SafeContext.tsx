@@ -115,11 +115,35 @@ export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
         const response = await apiRequest("/safe/state");
         if (response.ok) {
           const data = await response.json();
+          // Debug: Log transaction data to see what we're getting
+          console.log(
+            "🔍 Raw transaction data from API:",
+            data.transactions?.slice(0, 2)
+          );
+
+          // Process transactions to ensure previousBalance and newBalance are numbers
+          const processedTransactions = (data.transactions || []).map(
+            (transaction: any) => ({
+              ...transaction,
+              previousBalance: parseFloat(
+                transaction.previousBalance || transaction.previous_balance || 0
+              ),
+              newBalance: parseFloat(
+                transaction.newBalance || transaction.new_balance || 0
+              ),
+            })
+          );
+
+          console.log(
+            "🔍 Processed transaction data:",
+            processedTransactions?.slice(0, 2)
+          );
+
           setSafeState({
             currentBalance: parseFloat(data.current_balance || 0),
             totalFunded: parseFloat(data.total_funded || 0),
             totalSpent: parseFloat(data.total_spent || 0),
-            transactions: data.transactions || [],
+            transactions: processedTransactions,
           });
           console.log("✅ Safe state loaded from database:", data);
           console.log("🔍 Loaded SafeState details:", {
@@ -162,11 +186,25 @@ export const SafeProvider: React.FC<{ children: React.ReactNode }> = ({
       const response = await apiRequest("/safe/state");
       if (response.ok) {
         const data = await response.json();
+
+        // Process transactions to ensure previousBalance and newBalance are numbers
+        const processedTransactions = (data.transactions || []).map(
+          (transaction: any) => ({
+            ...transaction,
+            previousBalance: parseFloat(
+              transaction.previousBalance || transaction.previous_balance || 0
+            ),
+            newBalance: parseFloat(
+              transaction.newBalance || transaction.new_balance || 0
+            ),
+          })
+        );
+
         setSafeState({
           currentBalance: parseFloat(data.current_balance || 0),
           totalFunded: parseFloat(data.total_funded || 0),
           totalSpent: parseFloat(data.total_spent || 0),
-          transactions: data.transactions || [],
+          transactions: processedTransactions,
         });
         console.log("✅ Safe state refreshed from database");
       }

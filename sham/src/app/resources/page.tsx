@@ -134,52 +134,36 @@ export default function ResourcesPage() {
         onRefresh={() => fetchEmployees()}
       />
       {/* Page Header */}
-      <div
-        className={`bg-blue-950 rounded-xl text-white shadow-sm border border-gray-200 p-4 md:p-6 ${
-          isMobile ? "space-y-4" : "flex items-center justify-between"
-        }`}
-      >
-        <div className="space-y-2">
-          <h1
-            className={`font-bold text-white arabic-spacing ${
-              isMobile ? "text-xl" : "text-3xl"
-            }`}
-          >
-            الموارد البشرية
-          </h1>
-          {!isMobile && (
-            <p className="text-white arabic-spacing leading-relaxed">
+      <div className="bg-blue-950 rounded-xl text-white shadow-sm border border-gray-200 p-4 md:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="space-y-2">
+            <h1 className="text-xl sm:text-3xl font-bold text-white arabic-spacing">
+              الموارد البشرية
+            </h1>
+            <p className="text-white arabic-spacing leading-relaxed text-sm sm:text-base">
               إدارة الموظفين مع دفع الرواتب من الخزينة مباشرة
             </p>
-          )}
-          <div
-            className={`flex items-center text-sm text-gray-500 ${
-              isMobile
-                ? "flex-col space-y-2 items-start"
-                : "space-x-4 space-x-reverse"
-            }`}
-          >
-            <span className="flex items-center space-x-1 space-x-reverse">
-              <Wallet className="h-4 w-4 no-flip text-white" />
-              <span className="arabic-spacing text-emerald-300 pr-1 pl-1">
-                رصيد الخزينة: {formatCurrency(safeState.currentBalance)}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 sm:space-x-reverse text-sm gap-2 sm:gap-0">
+              <span className="flex items-center space-x-1 space-x-reverse">
+                <Wallet className="h-4 w-4 no-flip text-white" />
+                <span className="arabic-spacing text-emerald-300 pr-1 pl-1">
+                  رصيد الخزينة: {formatCurrency(safeState.currentBalance)}
+                </span>
               </span>
-            </span>
-            <span className="flex items-center space-x-1 space-x-reverse">
-              <Users className="h-4 w-4 no-flip text-white" />
-              <span className="arabic-spacing text-amber-300">
-                {employees.length} موظف
+              <span className="flex items-center space-x-1 space-x-reverse">
+                <Users className="h-4 w-4 no-flip text-white" />
+                <span className="arabic-spacing text-amber-300">
+                  {employees.length} موظف
+                </span>
               </span>
-            </span>
+            </div>
           </div>
-        </div>
 
-        {!isMobile && (
-          <div className="flex items-center space-x-4 gap-2 space-x-reverse">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:space-x-4 sm:gap-2 sm:space-x-reverse">
             <Button
               variant="outline"
               onClick={() => setShowPayrollReportModal(true)}
-              className="border-white text-black hover:bg-white hover:text-blue-950"
+              className="w-full sm:w-auto border-white text-black hover:bg-white hover:text-blue-950"
             >
               <Calendar className="h-4 w-4 ml-2 no-flip" />
               <span className="arabic-spacing">كشف الرواتب</span>
@@ -187,14 +171,14 @@ export default function ResourcesPage() {
             {!permissions.isViewOnlyMode && (
               <Button
                 onClick={() => setShowEmployeeModal(true)}
-                className="bg-white text-blue-950 hover:bg-gray-100"
+                className="w-full sm:w-auto bg-white text-blue-950 hover:bg-gray-100"
               >
                 <Plus className="h-4 w-4 ml-2 no-flip" />
                 <span className="arabic-spacing">موظف جديد</span>
               </Button>
             )}
           </div>
-        )}
+        </div>
       </div>
 
       {/* SAFE Balance Alert */}
@@ -280,16 +264,8 @@ export default function ResourcesPage() {
         </CardContent>
       </Card>
 
-      {/* Mobile Employee Cards - Show on mobile only */}
-      <div className="block md:hidden">
-        <MobileEmployeeCards
-          employees={filteredEmployees}
-          positions={positions}
-        />
-      </div>
-
-      {/* Desktop Employee Table - Show on desktop only */}
-      <div className="hidden md:block">
+      {/* Enhanced Employee Table - Responsive for all screen sizes */}
+      <div>
         <EnhancedEmployeesTable
           employees={filteredEmployees}
           onViewEmployee={(employee) => {
@@ -417,280 +393,6 @@ export default function ResourcesPage() {
           onClose={() => setShowPayrollReportModal(false)}
         />
       )}
-    </div>
-  );
-}
-
-// Mobile Employee Cards Component
-function MobileEmployeeCards({
-  employees,
-  positions,
-}: {
-  employees: Employee[];
-  positions: Position[];
-}) {
-  // If no employees, return null to let empty state show
-  if (!employees || employees.length === 0) {
-    return null;
-  }
-
-  const getStatusConfig = (status: string) => {
-    switch (status) {
-      case "active":
-        return {
-          color: "bg-emerald-500",
-          textColor: "text-white",
-          bgColor: "bg-emerald-50",
-          borderColor: "border-emerald-200",
-          text: "نشط",
-          icon: "✓",
-        };
-      case "inactive":
-        return {
-          color: "bg-red-500",
-          textColor: "text-white",
-          bgColor: "bg-red-50",
-          borderColor: "border-red-200",
-          text: "غير نشط",
-          icon: "⏸",
-        };
-      case "terminated":
-        return {
-          color: "bg-gray-500",
-          textColor: "text-white",
-          bgColor: "bg-gray-50",
-          borderColor: "border-gray-200",
-          text: "منتهي الخدمة",
-          icon: "✕",
-        };
-      default:
-        return {
-          color: "bg-blue-500",
-          textColor: "text-white",
-          bgColor: "bg-blue-50",
-          borderColor: "border-blue-200",
-          text: status,
-          icon: "?",
-        };
-    }
-  };
-
-  const getPaymentStatusConfig = (paymentStatus: string | undefined) => {
-    // Handle undefined, null, empty string, or literal "undefined"/"null" strings
-    if (
-      !paymentStatus ||
-      paymentStatus === "undefined" ||
-      paymentStatus === "null" ||
-      paymentStatus.trim() === "" ||
-      paymentStatus === "غير محدد"
-    ) {
-      return {
-        color: "text-blue-600",
-        bg: "bg-blue-100",
-        text: "لم يتم تحديده",
-      };
-    }
-
-    const status = paymentStatus.toLowerCase().trim();
-    switch (status) {
-      case "paid":
-      case "مدفوع":
-        return { color: "text-green-600", bg: "bg-green-100", text: "مدفوع" };
-      case "pending":
-      case "معلق":
-        return { color: "text-orange-600", bg: "bg-orange-100", text: "معلق" };
-      case "overdue":
-      case "متأخر":
-        return { color: "text-red-600", bg: "bg-red-100", text: "متأخر" };
-      case "unpaid":
-      case "غير مدفوع":
-        return { color: "text-red-600", bg: "bg-red-100", text: "غير مدفوع" };
-      case "current":
-      case "جاري":
-        return { color: "text-blue-600", bg: "bg-blue-100", text: "جاري" };
-      case "partial":
-      case "جزئي":
-        return { color: "text-yellow-600", bg: "bg-yellow-100", text: "جزئي" };
-      default:
-        // Return a default status without console log to prevent infinite loops
-        return {
-          color: "text-blue-600",
-          bg: "bg-blue-100",
-          text: "لم يتم تحديده",
-        };
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      {employees.map((employee) => {
-        const statusConfig = getStatusConfig(employee.status);
-        const paymentConfig = getPaymentStatusConfig(employee.payment_status);
-
-        return (
-          <div
-            key={employee.id}
-            className={`bg-white rounded-2xl border-2 ${statusConfig.borderColor} overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300`}
-          >
-            {/* Employee Header with Status */}
-            <div
-              className={`${statusConfig.bgColor} p-4 border-b ${statusConfig.borderColor}`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3 space-x-reverse">
-                  <div
-                    className={`${statusConfig.color} p-3 rounded-full shadow-md`}
-                  >
-                    <Users className="h-5 w-5 text-white no-flip" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-900 arabic-spacing">
-                      {employee.name}
-                    </h3>
-                    <p className="text-sm text-gray-600 arabic-spacing font-medium">
-                      {employee.position || "غير محدد"}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Status Badge */}
-                <div
-                  className={`${statusConfig.color} px-3 py-1.5 rounded-full shadow-sm`}
-                >
-                  <span
-                    className={`text-xs font-bold ${statusConfig.textColor} arabic-spacing`}
-                  >
-                    {statusConfig.icon} {statusConfig.text}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Employee Details */}
-            <div className="p-4 space-y-4">
-              {/* Contact Information */}
-              <div className="grid grid-cols-1 gap-3">
-                {employee.mobile_number && (
-                  <div className="flex items-center space-x-2 space-x-reverse">
-                    <div className="bg-blue-100 p-2 rounded-lg">
-                      <span className="text-blue-600 text-sm font-bold">
-                        📞
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs text-gray-500 arabic-spacing">
-                        رقم الهاتف
-                      </p>
-                      <p className="text-sm font-semibold text-gray-900 arabic-nums">
-                        {employee.mobile_number}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {employee.department && (
-                  <div className="flex items-center space-x-2 space-x-reverse">
-                    <div className="bg-purple-100 p-2 rounded-lg">
-                      <span className="text-purple-600 text-sm font-bold">
-                        🏢
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs text-gray-500 arabic-spacing">
-                        القسم
-                      </p>
-                      <p className="text-sm font-semibold text-gray-900 arabic-spacing">
-                        {employee.department}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Financial Information */}
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-3 border border-green-200">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center space-x-2 space-x-reverse">
-                    <span className="text-green-600 text-lg">💰</span>
-                    <span className="text-sm font-medium text-green-800 arabic-spacing">
-                      الراتب الشهري
-                    </span>
-                  </div>
-                  <span className="text-lg font-bold text-green-700">
-                    {formatCurrency(employee.monthly_salary || 0)}
-                  </span>
-                </div>
-
-                {/* Payment Status */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-600 arabic-spacing">
-                    حالة الدفع:
-                  </span>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${paymentConfig.bg} ${paymentConfig.color}`}
-                  >
-                    {paymentConfig.text}
-                  </span>
-                </div>
-              </div>
-
-              {/* Employment Details */}
-              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
-                {employee.hire_date && (
-                  <div className="text-center">
-                    <p className="text-xs text-gray-500 arabic-spacing mb-1">
-                      تاريخ التوظيف
-                    </p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {formatDate(employee.hire_date)}
-                    </p>
-                  </div>
-                )}
-
-                {employee.last_payment_date && (
-                  <div className="text-center">
-                    <p className="text-xs text-gray-500 arabic-spacing mb-1">
-                      آخر دفعة
-                    </p>
-                    <p className="text-sm font-semibold text-gray-900">
-                      {formatDate(employee.last_payment_date)}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Project Assignment */}
-              {employee.project_name && (
-                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                  <div className="flex items-center space-x-2 space-x-reverse">
-                    <span className="text-blue-600 text-sm">🏗️</span>
-                    <div className="flex-1">
-                      <p className="text-xs text-blue-600 arabic-spacing font-medium">
-                        معين على مشروع
-                      </p>
-                      <p className="text-sm font-semibold text-blue-900 arabic-spacing">
-                        {employee.project_name}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Notes */}
-              {employee.notes && (
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <p className="text-xs text-gray-500 arabic-spacing mb-1">
-                    ملاحظات
-                  </p>
-                  <p className="text-sm text-gray-700 arabic-spacing leading-relaxed">
-                    {employee.notes}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }

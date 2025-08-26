@@ -53,6 +53,7 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -80,6 +81,7 @@ import { useUIPermissions } from "@/hooks/useUIPermissions";
 import { FinancialDisplay } from "@/components/ui/FinancialDisplay";
 import { PermissionButton } from "@/components/ui/PermissionButton";
 import RoleBasedNavigation from "@/components/ui/RoleBasedNavigation";
+import { useResponsive } from "@/hooks/useResponsive";
 import EnhancedCategoryInvoiceModal from "@/components/projects/EnhancedCategoryInvoiceModal";
 import CategoryAssignmentsTable from "@/components/projects/CategoryAssignmentsTable";
 import CategoryAssignmentModal from "@/components/projects/CategoryAssignmentModal";
@@ -364,6 +366,7 @@ export default function ProjectDetailClient() {
   const { user, isAdmin, isAuthenticated } = useAuth();
   const { safeState } = useSafe();
   const permissions = useUIPermissions();
+  const { isMobile } = useResponsive();
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -2542,20 +2545,22 @@ export default function ProjectDetailClient() {
             </Button>
           </div>
 
-          {/* Modern Tab Navigation */}
+          {/* Modern Tab Navigation - Mobile Optimized */}
           <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
             <div className="flex flex-col sm:flex-row">
               <button
                 onClick={() => setActiveTab("info")}
-                className={`flex-1 px-6 py-5 text-center font-semibold transition-all duration-300 relative group ${
+                className={`flex-1 px-3 sm:px-6 py-4 sm:py-5 text-center font-semibold transition-all duration-300 relative group touch-manipulation ${
                   activeTab === "info"
                     ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg"
                     : "text-gray-600 hover:text-gray-800 hover:bg-white/50"
                 }`}
               >
-                <div className="flex items-center justify-center space-x-3 space-x-reverse">
-                  <Building2 className="h-5 w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
-                  <span className="arabic-spacing">معلومات المشروع</span>
+                <div className="flex items-center justify-center space-x-2 sm:space-x-3 space-x-reverse">
+                  <Building2 className="h-4 w-4 sm:h-5 sm:w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
+                  <span className="arabic-spacing text-sm sm:text-base">
+                    معلومات المشروع
+                  </span>
                 </div>
                 {activeTab === "info" && (
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full"></div>
@@ -2564,15 +2569,17 @@ export default function ProjectDetailClient() {
 
               <button
                 onClick={() => setActiveTab("categories")}
-                className={`flex-1 px-6 py-5 text-center font-semibold transition-all duration-300 relative group ${
+                className={`flex-1 px-3 sm:px-6 py-4 sm:py-5 text-center font-semibold transition-all duration-300 relative group touch-manipulation ${
                   activeTab === "categories"
                     ? "bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-lg"
                     : "text-gray-600 hover:text-gray-800 hover:bg-white/50"
                 }`}
               >
-                <div className="flex items-center justify-center space-x-3 space-x-reverse">
-                  <Users className="h-5 w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
-                  <span className="arabic-spacing">الفئات والمقاولين</span>
+                <div className="flex items-center justify-center space-x-2 sm:space-x-3 space-x-reverse">
+                  <Users className="h-4 w-4 sm:h-5 sm:w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
+                  <span className="arabic-spacing text-sm sm:text-base">
+                    الفئات والمقاولين
+                  </span>
                 </div>
                 {activeTab === "categories" && (
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-400 to-cyan-400 rounded-full"></div>
@@ -2581,15 +2588,17 @@ export default function ProjectDetailClient() {
 
               <button
                 onClick={() => setActiveTab("expenses")}
-                className={`flex-1 px-6 py-5 text-center font-semibold transition-all duration-300 relative group ${
+                className={`flex-1 px-3 sm:px-6 py-4 sm:py-5 text-center font-semibold transition-all duration-300 relative group touch-manipulation ${
                   activeTab === "expenses"
                     ? "bg-gradient-to-r from-orange-500 to-red-500 text-white shadow-lg"
                     : "text-gray-600 hover:text-gray-800 hover:bg-white/50"
                 }`}
               >
-                <div className="flex items-center justify-center space-x-3 space-x-reverse">
-                  <Receipt className="h-5 w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
-                  <span className="arabic-spacing">مصروفات المشروع</span>
+                <div className="flex items-center justify-center space-x-2 sm:space-x-3 space-x-reverse">
+                  <Receipt className="h-4 w-4 sm:h-5 sm:w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
+                  <span className="arabic-spacing text-sm sm:text-base">
+                    مصروفات المشروع
+                  </span>
                 </div>
                 {activeTab === "expenses" && (
                   <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-400 to-red-400 rounded-full"></div>
@@ -2599,15 +2608,17 @@ export default function ProjectDetailClient() {
               {!permissions.isDataEntryMode && (
                 <button
                   onClick={() => setActiveTab("employees")}
-                  className={`flex-1 px-6 py-5 text-center font-semibold transition-all duration-300 relative group ${
+                  className={`flex-1 px-3 sm:px-6 py-4 sm:py-5 text-center font-semibold transition-all duration-300 relative group touch-manipulation ${
                     activeTab === "employees"
                       ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg"
                       : "text-gray-600 hover:text-gray-800 hover:bg-white/50"
                   }`}
                 >
-                  <div className="flex items-center justify-center space-x-3 space-x-reverse">
-                    <Users className="h-5 w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
-                    <span className="arabic-spacing">موظفو المشروع</span>
+                  <div className="flex items-center justify-center space-x-2 sm:space-x-3 space-x-reverse">
+                    <Users className="h-4 w-4 sm:h-5 sm:w-5 no-flip group-hover:scale-110 transition-transform duration-200" />
+                    <span className="arabic-spacing text-sm sm:text-base">
+                      موظفو المشروع
+                    </span>
                   </div>
                   {activeTab === "employees" && (
                     <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-400 to-green-400 rounded-full"></div>
@@ -3957,12 +3968,12 @@ export default function ProjectDetailClient() {
               onEditAssignmentAmount={handleEditAssignmentAmount}
             />
           ) : activeTab === "employees" ? (
-            <div className="space-y-6">
-              {/* Summary Cards - Redesigned */}
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+            <div className="space-y-4 sm:space-y-6">
+              {/* Summary Cards - Mobile Optimized */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
                 {/* Total Employees */}
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="p-5 flex items-center justify-between">
+                  <div className="p-4 sm:p-5 flex items-center justify-between">
                     <div>
                       <p className="text-xs text-slate-500 arabic-spacing mb-1">
                         إجمالي الموظفين
@@ -3979,7 +3990,7 @@ export default function ProjectDetailClient() {
 
                 {/* Total Monthly Salary */}
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="p-5 flex items-center justify-between">
+                  <div className="p-4 sm:p-5 flex items-center justify-between">
                     <div>
                       <p className="text-xs text-slate-500 arabic-spacing mb-1">
                         إجمالي الرواتب الشهرية
@@ -4001,7 +4012,7 @@ export default function ProjectDetailClient() {
 
                 {/* Total Paid This Month */}
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="p-5 flex items-center justify-between">
+                  <div className="p-4 sm:p-5 flex items-center justify-between">
                     <div>
                       <p className="text-xs text-slate-500 arabic-spacing mb-1">
                         إجمالي المدفوع (هذا الشهر)
@@ -4023,7 +4034,7 @@ export default function ProjectDetailClient() {
 
                 {/* Total Remaining This Month */}
                 <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-                  <div className="p-5 flex items-center justify-between">
+                  <div className="p-4 sm:p-5 flex items-center justify-between">
                     <div>
                       <p className="text-xs text-slate-500 arabic-spacing mb-1">
                         إجمالي المتبقي (هذا الشهر)
@@ -4449,11 +4460,145 @@ export default function ProjectDetailClient() {
                     </PermissionButton>
                   </div>
                 </div>
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   {empLoading ? (
                     <div className="text-gray-500">جاري التحميل...</div>
                   ) : projEmployees.length === 0 ? (
                     <div className="text-gray-500">لا يوجد موظفون للمشروع</div>
+                  ) : isMobile ? (
+                    /* Mobile Employee Cards */
+                    <div className="space-y-4">
+                      {projEmployees.map((e, index) => {
+                        const paidThisMonth = toNumber(
+                          employeeSummary[e.id]?.paidThisMonth || 0
+                        );
+                        const monthlySalary = getMonthlySalary(e);
+                        const remaining = Math.max(
+                          0,
+                          monthlySalary - paidThisMonth
+                        );
+
+                        return (
+                          <div
+                            key={e.id}
+                            className={`bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden ${
+                              recentlyUpdatedEmployeeId === e.id
+                                ? "ring-2 ring-green-200 bg-green-50"
+                                : ""
+                            }`}
+                          >
+                            {/* Employee Card Header */}
+                            <div className="bg-gradient-to-r from-slate-50 to-slate-100 p-4 border-b border-gray-200">
+                              <div className="flex items-start justify-between">
+                                <div className="flex items-center space-x-2 space-x-reverse">
+                                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <User className="h-5 w-5 text-blue-600 no-flip" />
+                                  </div>
+                                  <div>
+                                    <h3 className="text-lg font-semibold text-slate-900 arabic-spacing">
+                                      {e.name}
+                                    </h3>
+                                    <p className="text-sm text-slate-600 arabic-spacing">
+                                      {e.position || "-"} •{" "}
+                                      {e.department || "-"}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span
+                                  className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
+                                    e.status === "active"
+                                      ? "bg-green-100 text-green-700"
+                                      : "bg-red-100 text-red-700"
+                                  }`}
+                                >
+                                  {e.status === "active" ? "نشط" : "غير نشط"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Employee Card Content */}
+                            <div className="p-4">
+                              {/* Salary Info */}
+                              <div className="grid grid-cols-2 gap-3 mb-4">
+                                <div className="bg-slate-50 p-3 rounded-lg">
+                                  <p className="text-xs text-slate-600 arabic-spacing mb-1">
+                                    الراتب الشهري
+                                  </p>
+                                  <p className="text-sm font-semibold text-green-600">
+                                    {formatCurrency(monthlySalary)}
+                                  </p>
+                                </div>
+                                <div className="bg-slate-50 p-3 rounded-lg">
+                                  <p className="text-xs text-slate-600 arabic-spacing mb-1">
+                                    المدفوع هذا الشهر
+                                  </p>
+                                  <p className="text-sm font-semibold text-slate-900">
+                                    {formatCurrency(paidThisMonth)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Payment Status & Remaining */}
+                              <div className="flex items-center justify-between mb-4">
+                                <div>
+                                  <p className="text-xs text-slate-600 arabic-spacing mb-1">
+                                    المتبقي
+                                  </p>
+                                  <p className="text-lg font-bold text-orange-600">
+                                    {formatCurrency(remaining)}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-xs text-slate-600 arabic-spacing mb-1">
+                                    آخر دفع
+                                  </p>
+                                  <p className="text-sm text-slate-900">
+                                    {employeeSummary[e.id]?.lastPaymentDate
+                                      ? new Date(
+                                          employeeSummary[e.id]
+                                            ?.lastPaymentDate as any
+                                        ).toLocaleDateString("ar-EG")
+                                      : "لا يوجد"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Action Buttons */}
+                              <div className="grid grid-cols-2 gap-2">
+                                {remaining > 0 && (
+                                  <PermissionButton
+                                    permission="canEditProjects"
+                                    onClick={() =>
+                                      openProjectSalaryModal(e, "full")
+                                    }
+                                    disabled={projectBudget.available <= 0}
+                                    className="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-3 rounded-lg text-sm font-medium touch-manipulation"
+                                    viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                                  >
+                                    <Wallet className="h-4 w-4 ml-1 no-flip" />
+                                    دفع كامل
+                                  </PermissionButton>
+                                )}
+                                {remaining > 0 && (
+                                  <PermissionButton
+                                    permission="canEditProjects"
+                                    onClick={() =>
+                                      openProjectSalaryModal(e, "installment")
+                                    }
+                                    disabled={projectBudget.available <= 0}
+                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-lg text-sm font-medium touch-manipulation"
+                                    viewOnlyTooltip="غير متاح - وضع العرض فقط"
+                                  >
+                                    <CreditCard className="h-4 w-4 ml-1 no-flip" />
+                                    دفع جزئي
+                                  </PermissionButton>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full border-collapse border border-gray-300 rounded-lg overflow-hidden shadow-lg">
@@ -4928,18 +5073,18 @@ export default function ProjectDetailClient() {
               </div>
 
               <div className="bg-white/80 backdrop-blur-lg rounded-3xl shadow-2xl border border-white/20 overflow-hidden">
-                {/* Enhanced Section Header */}
-                <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white p-8">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4 space-x-reverse">
-                      <div className="bg-white/20 p-4 rounded-2xl backdrop-blur-sm">
-                        <Receipt className="h-8 w-8 no-flip" />
+                {/* Enhanced Section Header - Mobile Responsive */}
+                <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white p-4 sm:p-8">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-4 sm:space-y-0">
+                    <div className="flex items-center space-x-3 sm:space-x-4 space-x-reverse">
+                      <div className="bg-white/20 p-3 sm:p-4 rounded-xl sm:rounded-2xl backdrop-blur-sm">
+                        <Receipt className="h-6 w-6 sm:h-8 sm:w-8 no-flip" />
                       </div>
                       <div>
-                        <h3 className="text-2xl font-bold arabic-spacing mb-2">
+                        <h3 className="text-xl sm:text-2xl font-bold arabic-spacing mb-1 sm:mb-2">
                           مصروفات المشروع
                         </h3>
-                        <p className="text-orange-100 arabic-spacing">
+                        <p className="text-orange-100 arabic-spacing text-sm sm:text-base">
                           تتبع شامل لجميع المصروفات والنفقات العامة
                         </p>
                       </div>
@@ -4947,7 +5092,7 @@ export default function ProjectDetailClient() {
                     <PermissionButton
                       permission="canCreateInvoices"
                       onClick={() => setShowExpenseModal(true)}
-                      className="bg-white/20 hover:bg-white/30 text-white border-white/30 px-6 py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105"
+                      className="w-full sm:w-auto bg-white/20 hover:bg-white/30 text-white border-white/30 px-4 sm:px-6 py-2 sm:py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 text-sm sm:text-base touch-manipulation"
                       viewOnlyTooltip="غير متاح - وضع العرض فقط"
                     >
                       <Plus className="h-5 w-5 ml-2 no-flip" />
@@ -4956,43 +5101,43 @@ export default function ProjectDetailClient() {
                   </div>
                 </div>
 
-                {/* Enhanced Budget Impact Summary */}
-                <div className="bg-gradient-to-br from-orange-50/60 to-red-50/60 backdrop-blur-sm border-b border-orange-200/50 p-8">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 text-center border border-orange-200/50 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-                      <div className="bg-orange-100 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4">
-                        <FileText className="h-6 w-6 text-orange-600 no-flip" />
+                {/* Enhanced Budget Impact Summary - Mobile Responsive */}
+                <div className="bg-gradient-to-br from-orange-50/60 to-red-50/60 backdrop-blur-sm border-b border-orange-200/50 p-4 sm:p-8">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                    <div className="bg-white/70 backdrop-blur-sm rounded-xl sm:rounded-2xl p-4 sm:p-6 text-center border border-orange-200/50 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+                      <div className="bg-orange-100 w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                        <FileText className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600 no-flip" />
                       </div>
-                      <div className="text-3xl font-bold text-orange-600 mb-2">
+                      <div className="text-2xl sm:text-3xl font-bold text-orange-600 mb-1 sm:mb-2">
                         {projectExpenses.length}
                       </div>
-                      <div className="text-sm text-gray-600 arabic-spacing font-medium">
+                      <div className="text-xs sm:text-sm text-gray-600 arabic-spacing font-medium">
                         إجمالي المصروفات
                       </div>
                     </div>
 
-                    <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 text-center border border-green-200/50 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-                      <div className="bg-green-100 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4">
-                        <DollarSign className="h-6 w-6 text-green-600 no-flip" />
+                    <div className="bg-white/70 backdrop-blur-sm rounded-xl sm:rounded-2xl p-4 sm:p-6 text-center border border-green-200/50 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
+                      <div className="bg-green-100 w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                        <DollarSign className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 no-flip" />
                       </div>
-                      <div className="text-3xl font-bold text-green-600 mb-2">
+                      <div className="text-2xl sm:text-3xl font-bold text-green-600 mb-1 sm:mb-2">
                         {isNaN(totalExpenses)
                           ? "0"
                           : new Intl.NumberFormat("en-US").format(
                               totalExpenses
                             )}
                       </div>
-                      <div className="text-sm text-gray-600 arabic-spacing font-medium">
+                      <div className="text-xs sm:text-sm text-gray-600 arabic-spacing font-medium">
                         المعتمد (د.ع)
                       </div>
                     </div>
 
-                    <div className="bg-white/70 backdrop-blur-sm rounded-2xl p-6 text-center border border-blue-200/50 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-                      <div className="bg-blue-100 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-4">
-                        <Package className="h-6 w-6 text-blue-600 no-flip" />
+                    <div className="bg-white/70 backdrop-blur-sm rounded-xl sm:rounded-2xl p-4 sm:p-6 text-center border border-blue-200/50 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 sm:col-span-2 lg:col-span-1">
+                      <div className="bg-blue-100 w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                        <Package className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 no-flip" />
                       </div>
                       <div
-                        className={`text-3xl font-bold mb-2 ${
+                        className={`text-2xl sm:text-3xl font-bold mb-1 sm:mb-2 ${
                           project?.budgetEstimate || project?.budget_estimate
                             ? totalExpenses >
                               (project?.budgetEstimate ||
@@ -5018,34 +5163,34 @@ export default function ProjectDetailClient() {
                             : `${percentage.toFixed(1)}%`;
                         })()}
                       </div>
-                      <div className="text-sm text-gray-600 arabic-spacing font-medium">
+                      <div className="text-xs sm:text-sm text-gray-600 arabic-spacing font-medium">
                         من إجمالي الميزانية
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Enhanced Search and Filter */}
-                <div className="bg-gradient-to-r from-gray-50/80 to-blue-50/80 backdrop-blur-sm border-b border-gray-200/50 p-8">
-                  <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
+                {/* Enhanced Search and Filter - Mobile Optimized */}
+                <div className="bg-gradient-to-r from-gray-50/80 to-blue-50/80 backdrop-blur-sm border-b border-gray-200/50 p-4 sm:p-8">
+                  <div className="flex flex-col gap-4 sm:gap-6">
                     <div className="flex flex-col sm:flex-row gap-4 flex-1">
-                      <div className="relative flex-1 max-w-md">
-                        <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400 no-flip" />
+                      <div className="relative flex-1">
+                        <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 no-flip" />
                         <Input
                           value={searchTerm}
                           onChange={(e) => setSearchTerm(e.target.value)}
                           placeholder="البحث في المصروفات..."
-                          className="pr-12 h-12 bg-white/80 backdrop-blur-sm border-gray-200/50 rounded-xl arabic-spacing shadow-sm focus:shadow-lg transition-all duration-300"
+                          className="pr-10 sm:pr-12 h-10 sm:h-12 bg-white/80 backdrop-blur-sm border-gray-200/50 rounded-xl arabic-spacing shadow-sm focus:shadow-lg transition-all duration-300"
                         />
                       </div>
-                      <div className="flex items-center gap-3 bg-white/80 backdrop-blur-sm rounded-xl px-4 py-3 border border-gray-200/50 shadow-sm">
-                        <Filter className="h-5 w-5 text-gray-500 no-flip" />
+                      <div className="flex items-center gap-3 bg-white/80 backdrop-blur-sm rounded-xl px-3 sm:px-4 py-2 sm:py-3 border border-gray-200/50 shadow-sm">
+                        <Filter className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500 no-flip" />
                         <Select
                           value={statusFilter}
                           onChange={(e) =>
                             setStatusFilter(e.target.value as any)
                           }
-                          className="border-0 bg-transparent focus:ring-0 min-w-[140px] font-medium"
+                          className="border-0 bg-transparent focus:ring-0 min-w-[120px] sm:min-w-[140px] font-medium text-sm sm:text-base"
                         >
                           <option value="all">جميع الحالات</option>
                           <option value="pending">في الانتظار</option>
@@ -5058,7 +5203,7 @@ export default function ProjectDetailClient() {
                 </div>
 
                 {/* Enhanced Expenses List */}
-                <div className="p-8">
+                <div className="p-4 sm:p-8">
                   {filteredExpenses.length === 0 ? (
                     <div className="text-center py-16">
                       <div className="bg-gradient-to-br from-orange-100 to-red-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg">
@@ -5080,7 +5225,7 @@ export default function ProjectDetailClient() {
                       {filteredExpenses.map((expense) => (
                         <div
                           key={expense.id}
-                          className="bg-white/60 backdrop-blur-sm border border-gray-200/50 rounded-2xl p-6 hover:shadow-xl hover:bg-white/80 transition-all duration-300 transform hover:-translate-y-1"
+                          className="bg-white/60 backdrop-blur-sm border border-gray-200/50 rounded-2xl p-4 sm:p-6 hover:shadow-xl hover:bg-white/80 transition-all duration-300 transform hover:-translate-y-1"
                         >
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -5148,24 +5293,24 @@ export default function ProjectDetailClient() {
                                 </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-2 ml-4">
+                            <div className="flex items-center gap-2 ml-2 sm:ml-4">
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => printExpense(expense)}
-                                className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300"
+                                className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-300 touch-manipulation"
                                 title="طباعة السند"
                               >
-                                <Printer className="h-4 w-4 no-flip" />
+                                <Printer className="h-3 w-3 sm:h-4 sm:w-4 no-flip" />
                               </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => removeProjectExpense(expense.id)}
-                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300"
+                                className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-red-600 hover:text-red-700 border-red-200 hover:border-red-300 touch-manipulation"
                                 title="حذف المصروف"
                               >
-                                <Trash2 className="h-4 w-4 no-flip" />
+                                <Trash2 className="h-3 w-3 sm:h-4 sm:w-4 no-flip" />
                               </Button>
                             </div>
                           </div>

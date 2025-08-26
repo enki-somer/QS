@@ -377,21 +377,21 @@ export default function CreateProjectPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       {/* Header */}
       <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-4 space-x-reverse">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-3 sm:py-0 sm:h-16 gap-3 sm:gap-0">
+            <div className="flex items-center space-x-3 sm:space-x-4 space-x-reverse">
               <Button
                 variant="ghost"
                 onClick={() => router.push("/projects")}
-                className="p-2"
+                className="p-2 touch-manipulation"
               >
                 <ArrowLeft className="h-5 w-5 no-flip" />
               </Button>
               <div>
-                <h1 className="text-xl font-bold text-gray-900 arabic-spacing">
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900 arabic-spacing">
                   {isEditMode ? "تعديل المشروع" : "إنشاء مشروع جديد"}
                 </h1>
-                <p className="text-sm text-gray-500 arabic-spacing">
+                <p className="text-xs sm:text-sm text-gray-500 arabic-spacing">
                   {isEditMode
                     ? "تعديل بيانات المشروع الحالي"
                     : "أضف مشروع جديد لشركة قصر الشام"}
@@ -399,10 +399,10 @@ export default function CreateProjectPage() {
               </div>
             </div>
 
-            {/* Progress Steps */}
-            <div className="flex items-center space-x-4 space-x-reverse">
+            {/* Progress Steps - Responsive */}
+            <div className="flex items-center justify-center sm:justify-end space-x-2 sm:space-x-4 space-x-reverse">
               <div
-                className={`flex items-center space-x-2 space-x-reverse px-3 py-1 rounded-full text-sm font-medium ${
+                className={`flex items-center space-x-1 sm:space-x-2 space-x-reverse px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${
                   currentSection === "basic"
                     ? "bg-blue-100 text-blue-800"
                     : isBasicFormValid
@@ -411,17 +411,20 @@ export default function CreateProjectPage() {
                 }`}
               >
                 {isBasicFormValid ? (
-                  <CheckCircle2 className="h-4 w-4 no-flip" />
+                  <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 no-flip" />
                 ) : (
-                  <Building2 className="h-4 w-4 no-flip" />
+                  <Building2 className="h-3 w-3 sm:h-4 sm:w-4 no-flip" />
                 )}
-                <span className="arabic-spacing">المعلومات الأساسية</span>
+                <span className="arabic-spacing hidden sm:inline">
+                  المعلومات الأساسية
+                </span>
+                <span className="arabic-spacing sm:hidden">الأساسية</span>
               </div>
 
-              <div className="w-8 h-px bg-gray-300"></div>
+              <div className="w-4 sm:w-8 h-px bg-gray-300"></div>
 
               <div
-                className={`flex items-center space-x-2 space-x-reverse px-3 py-1 rounded-full text-sm font-medium ${
+                className={`flex items-center space-x-1 sm:space-x-2 space-x-reverse px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${
                   currentSection === "review"
                     ? "bg-blue-100 text-blue-800"
                     : canGoToReview
@@ -429,7 +432,7 @@ export default function CreateProjectPage() {
                     : "bg-gray-100 text-gray-500"
                 }`}
               >
-                <CheckCircle2 className="h-4 w-4 no-flip" />
+                <CheckCircle2 className="h-3 w-3 sm:h-4 sm:w-4 no-flip" />
                 <span className="arabic-spacing">المراجعة</span>
               </div>
             </div>
@@ -437,20 +440,20 @@ export default function CreateProjectPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 sm:py-8">
         {currentSection === "basic" && (
-          <div className="space-y-8 max-w-4xl mx-auto">
+          <div className="space-y-4 sm:space-y-8 max-w-4xl mx-auto">
             {/* Basic Information Card */}
-            <Card className="p-8">
-              <div className="flex items-center space-x-3 space-x-reverse mb-8">
-                <div className="bg-blue-100 p-3 rounded-2xl">
-                  <Building2 className="h-6 w-6 text-blue-600 no-flip" />
+            <Card className="p-4 sm:p-6 lg:p-8">
+              <div className="flex items-center space-x-2 sm:space-x-3 space-x-reverse mb-6 sm:mb-8">
+                <div className="bg-blue-100 p-2 sm:p-3 rounded-xl sm:rounded-2xl">
+                  <Building2 className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 no-flip" />
                 </div>
                 <div>
-                  <h2 className="text-2xl font-bold text-gray-900 arabic-spacing">
+                  <h2 className="text-lg sm:text-2xl font-bold text-gray-900 arabic-spacing">
                     المعلومات الأساسية للمشروع
                   </h2>
-                  <p className="text-gray-600 arabic-spacing">
+                  <p className="text-sm sm:text-base text-gray-600 arabic-spacing">
                     {isEditMode
                       ? "تعديل البيانات الأساسية للمشروع"
                       : "أدخل البيانات الأساسية للمشروع الجديد"}
@@ -458,15 +461,15 @@ export default function CreateProjectPage() {
                 </div>
               </div>
 
-              {/* Left Column - Basic Information */}
-              <div className="lg:col-span-1 space-y-6">
-                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-200">
-                  <h3 className="text-lg font-bold text-gray-900 arabic-spacing mb-4 flex items-center">
-                    <Building2 className="h-5 w-5 text-blue-600 ml-2 no-flip" />
+              {/* Basic Information Section */}
+              <div className="lg:col-span-1 space-y-4 sm:space-y-6">
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 sm:p-6 rounded-xl border border-blue-200">
+                  <h3 className="text-base sm:text-lg font-bold text-gray-900 arabic-spacing mb-3 sm:mb-4 flex items-center">
+                    <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 ml-2 no-flip" />
                     المعلومات الأساسية
                   </h3>
 
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     {/* Auto-Generated Project Code */}
                     <div className="space-y-2">
                       <label className="block text-sm font-medium text-gray-700 arabic-spacing">
@@ -477,7 +480,7 @@ export default function CreateProjectPage() {
                           value={projectCode}
                           readOnly
                           placeholder="جاري التحميل..."
-                          className="h-12 arabic-spacing bg-gray-50 text-gray-700"
+                          className="h-10 sm:h-12 arabic-spacing bg-gray-50 text-gray-700"
                         />
                       </div>
                       <p className="text-xs text-gray-500 arabic-spacing">
@@ -498,7 +501,7 @@ export default function CreateProjectPage() {
                           })
                         }
                         placeholder="مثال: مجمع الزهراء السكني"
-                        className="h-12 arabic-spacing bg-white"
+                        className="h-10 sm:h-12 arabic-spacing bg-white"
                       />
                     </div>
 
@@ -516,7 +519,7 @@ export default function CreateProjectPage() {
                           })
                         }
                         placeholder="مثال: شركة الإسكان الحديث"
-                        className="h-12 arabic-spacing bg-white"
+                        className="h-10 sm:h-12 arabic-spacing bg-white"
                       />
                     </div>
 
@@ -534,7 +537,7 @@ export default function CreateProjectPage() {
                           })
                         }
                         placeholder="مثال: بغداد - حي الكرادة"
-                        className="h-12 arabic-spacing bg-white"
+                        className="h-10 sm:h-12 arabic-spacing bg-white"
                       />
                     </div>
 
@@ -1025,7 +1028,7 @@ export default function CreateProjectPage() {
               <Button
                 onClick={() => goToSection("review")}
                 disabled={!canGoToReview}
-                className="px-8 py-3 text-base bg-gradient-to-r from-[#182C61] to-blue-600 hover:from-[#1a2e66] hover:to-blue-700 disabled:opacity-50"
+                className="w-full sm:w-auto px-6 sm:px-8 py-3 text-base bg-gradient-to-r from-[#182C61] to-blue-600 hover:from-[#1a2e66] hover:to-blue-700 disabled:opacity-50"
               >
                 <span className="arabic-spacing">التالي: المراجعة</span>
                 <ArrowLeft className="h-4 w-4 mr-2 rotate-180 no-flip" />
@@ -1321,11 +1324,11 @@ export default function CreateProjectPage() {
               )}
 
             {/* Navigation */}
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 sm:gap-0">
               <Button
                 variant="outline"
                 onClick={() => goToSection("basic")}
-                className="px-6 py-3"
+                className="w-full sm:w-auto px-4 sm:px-6 py-3 order-2 sm:order-1"
               >
                 <ArrowLeft className="h-4 w-4 ml-2 no-flip" />
                 <span className="arabic-spacing">السابق</span>
@@ -1334,7 +1337,7 @@ export default function CreateProjectPage() {
               <Button
                 onClick={handleSubmit}
                 disabled={loading}
-                className="px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                className="w-full sm:w-auto px-6 sm:px-8 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 order-1 sm:order-2"
               >
                 {loading ? (
                   <div className="flex items-center space-x-2 space-x-reverse">

@@ -441,7 +441,13 @@ export default function ContractorsPage() {
             </div>
           ) : filteredContractors.length > 0 ? (
             isMobile ? (
-              <MobileContractorCards contractors={filteredContractors} />
+              <MobileContractorCards
+                contractors={filteredContractors}
+                onView={openViewModal}
+                onEdit={openEditModal}
+                onDelete={handleDeleteContractor}
+                permissions={permissions}
+              />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredContractors.map((contractor) => (
@@ -477,17 +483,16 @@ export default function ContractorsPage() {
                         >
                           <Eye className="h-4 w-4 no-flip" />
                         </Button>
-                        {!permissions.isDataEntryMode &&
-                          !permissions.isViewOnlyMode && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEditModal(contractor)}
-                              className="h-8 w-8 p-0"
-                            >
-                              <Edit2 className="h-4 w-4 no-flip" />
-                            </Button>
-                          )}
+                        {!permissions.isViewOnlyMode && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openEditModal(contractor)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit2 className="h-4 w-4 no-flip" />
+                          </Button>
+                        )}
                         {!permissions.isDataEntryMode &&
                           !permissions.isViewOnlyMode && (
                             <Button
@@ -559,6 +564,18 @@ export default function ContractorsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Mobile Floating Action Button for Add Contractor */}
+      {isMobile && !permissions.isViewOnlyMode && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 touch-manipulation"
+          >
+            <Plus className="h-6 w-6 no-flip" />
+          </button>
+        </div>
+      )}
 
       {/* Add Contractor Modal */}
       {showAddModal && (
@@ -859,8 +876,20 @@ function ContractorModal({
   );
 }
 
-// Mobile Contractor Cards Component - No Action Buttons
-function MobileContractorCards({ contractors }: { contractors: Contractor[] }) {
+// Mobile Contractor Cards Component - With Action Buttons
+function MobileContractorCards({
+  contractors,
+  onView,
+  onEdit,
+  onDelete,
+  permissions,
+}: {
+  contractors: Contractor[];
+  onView: (contractor: Contractor) => void;
+  onEdit: (contractor: Contractor) => void;
+  onDelete: (contractor: Contractor) => void;
+  permissions: any;
+}) {
   return (
     <div className="space-y-3">
       {contractors.map((contractor) => (
@@ -893,7 +922,7 @@ function MobileContractorCards({ contractors }: { contractors: Contractor[] }) {
             </div>
           </div>
 
-          {/* Mobile Card Content - Minimal Details */}
+          {/* Mobile Card Content */}
           <div className="p-4">
             <div className="space-y-3">
               {/* Category */}
@@ -918,6 +947,61 @@ function MobileContractorCards({ contractors }: { contractors: Contractor[] }) {
               {/* Date */}
               <div className="pt-2 border-t border-gray-200 text-xs text-gray-500 arabic-spacing">
                 تاريخ الإضافة: {formatDate(contractor.created_at)}
+              </div>
+
+              {/* Mobile Action Buttons */}
+              <div className="pt-3 border-t border-gray-200">
+                {permissions.isViewOnlyMode ? (
+                  /* View Only Mode - Only View Button */
+                  <div className="w-full">
+                    <button
+                      onClick={() => onView(contractor)}
+                      className="w-full flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors touch-manipulation"
+                    >
+                      <Eye className="h-4 w-4 ml-1 no-flip" />
+                      عرض التفاصيل
+                    </button>
+                  </div>
+                ) : (
+                  /* Admin/Data Entry Mode - Action Buttons Grid */
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* View Button */}
+                    <button
+                      onClick={() => onView(contractor)}
+                      className="flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors touch-manipulation"
+                    >
+                      <Eye className="h-4 w-4 ml-1 no-flip" />
+                      عرض
+                    </button>
+
+                    {/* Edit Button - Available for Admin and Data Entry */}
+                    <button
+                      onClick={() => onEdit(contractor)}
+                      className="flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors touch-manipulation"
+                    >
+                      <Edit2 className="h-4 w-4 ml-1 no-flip" />
+                      تعديل
+                    </button>
+
+                    {/* Delete Button - Only for Admin */}
+                    {!permissions.isDataEntryMode ? (
+                      <button
+                        onClick={() => onDelete(contractor)}
+                        className="flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-red-50 text-red-700 hover:bg-red-100 transition-colors touch-manipulation col-span-2"
+                      >
+                        <Trash2 className="h-4 w-4 ml-1 no-flip" />
+                        حذف المقاول
+                      </button>
+                    ) : (
+                      /* Data Entry - Show disabled delete or info message */
+                      <div className="col-span-2 text-center py-2">
+                        <span className="text-xs text-gray-500 arabic-spacing">
+                          الحذف متاح للمدراء فقط
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

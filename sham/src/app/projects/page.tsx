@@ -557,6 +557,9 @@ export default function ProjectsPage() {
           <MobileProjectCards
             projects={filteredAndSortedProjects}
             statusConfig={statusConfig}
+            onViewProject={handleViewProject}
+            onEditProject={handleEditProject}
+            getProjectStatusInfo={getProjectStatusInfo}
           />
         ) : viewMode === "table" ? (
           <ProjectsTable
@@ -576,6 +579,20 @@ export default function ProjectsPage() {
           />
         )}
       </div>
+
+      {/* Mobile Floating Action Button for Create Project */}
+      {isMobile && (
+        <div className="fixed bottom-6 right-6 z-50">
+          <PermissionButton
+            permission="canCreateProjects"
+            onClick={handleCreateProject}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white p-4 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 touch-manipulation"
+            viewOnlyTooltip="غير متاح - وضع العرض فقط"
+          >
+            <Plus className="h-6 w-6 no-flip" />
+          </PermissionButton>
+        </div>
+      )}
     </div>
   );
 }
@@ -878,10 +895,13 @@ function ProjectsGrid({
   );
 }
 
-// Mobile Project Cards Component - No Action Buttons
+// Enhanced Mobile Project Cards Component with Touch-Friendly Actions
 function MobileProjectCards({
   projects,
   statusConfig,
+  onViewProject,
+  onEditProject,
+  getProjectStatusInfo,
 }: {
   projects: Project[];
   statusConfig: Record<
@@ -893,12 +913,22 @@ function MobileProjectCards({
       icon: React.ComponentType<any>;
     }
   >;
+  onViewProject: (project: Project) => void;
+  onEditProject: (project: Project) => void;
+  getProjectStatusInfo: (project: Project) => {
+    isCompleted: boolean;
+    completion: number;
+    canEdit: boolean;
+  };
 }) {
+  const permissions = useUIPermissions();
+
   return (
     <div className="space-y-4">
       {projects.map((project) => {
         const status =
           statusConfig[project.status as keyof typeof statusConfig];
+        const statusInfo = getProjectStatusInfo(project);
 
         return (
           <div
@@ -923,9 +953,9 @@ function MobileProjectCards({
               </div>
             </div>
 
-            {/* Mobile Card Content - Minimal Details */}
+            {/* Mobile Card Content */}
             <div className="p-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-sm mb-4">
                 {/* Client */}
                 <div className="flex items-center text-gray-600">
                   <User className="h-4 w-4 ml-2 no-flip flex-shrink-0" />
@@ -954,6 +984,77 @@ function MobileProjectCards({
                   </span>
                 </div>
               </div>
+
+              {/* Progress Bar */}
+              {statusInfo.completion > 0 && (
+                <div className="mb-4">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs text-gray-500 arabic-spacing">
+                      تقدم المشروع
+                    </span>
+                    <span className="text-xs font-medium text-gray-700">
+                      {statusInfo.completion}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-gradient-to-r from-blue-500 to-green-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${statusInfo.completion}%` }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Touch-Friendly Action Buttons */}
+              <div className="flex gap-2">
+                {/* View Button - Always Available */}
+                <button
+                  onClick={() => onViewProject(project)}
+                  className="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-700 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 flex items-center justify-center touch-manipulation"
+                >
+                  <Eye className="h-4 w-4 ml-2 no-flip" />
+                  <span className="arabic-spacing">عرض</span>
+                </button>
+
+                {/* Edit Button - Permission Based */}
+                {permissions.canEditProjects && statusInfo.canEdit && (
+                  <button
+                    onClick={() => onEditProject(project)}
+                    className="flex-1 bg-amber-50 hover:bg-amber-100 text-amber-700 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 flex items-center justify-center touch-manipulation"
+                  >
+                    <Edit3 className="h-4 w-4 ml-2 no-flip" />
+                    <span className="arabic-spacing">تعديل</span>
+                  </button>
+                )}
+
+                {/* Status Indicator for Non-Editable Projects */}
+                {!statusInfo.canEdit && (
+                  <div className="flex-1 bg-gray-50 text-gray-500 px-4 py-3 rounded-lg font-medium text-sm flex items-center justify-center">
+                    <CheckCircle className="h-4 w-4 ml-2 no-flip" />
+                    <span className="arabic-spacing text-xs">مكتمل</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Additional Info for Admin */}
+              {permissions.canViewProjectBudgets && (
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex justify-between items-center text-xs text-gray-500">
+                    <span className="arabic-spacing">
+                      كود المشروع: {project.code || project.id}
+                    </span>
+                    {project.area && (
+                      <span>
+                        المساحة:{" "}
+                        {new Intl.NumberFormat("en-US").format(
+                          Number(project.area)
+                        )}{" "}
+                        م²
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         );

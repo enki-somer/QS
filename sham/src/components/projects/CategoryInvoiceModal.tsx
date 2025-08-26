@@ -219,20 +219,20 @@ export default function CategoryInvoiceModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden shadow-2xl">
         {/* Header */}
-        <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-6">
+        <div className="bg-gradient-to-r from-green-600 to-emerald-600 text-white p-4 sm:p-6">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3 space-x-reverse">
-              <div className="bg-white/20 p-3 rounded-xl">
-                <FileText className="h-6 w-6 no-flip" />
+            <div className="flex items-center space-x-2 sm:space-x-3 space-x-reverse">
+              <div className="bg-white/20 p-2 sm:p-3 rounded-xl">
+                <FileText className="h-5 w-5 sm:h-6 sm:w-6 no-flip" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold arabic-spacing">
+                <h2 className="text-lg sm:text-2xl font-bold arabic-spacing">
                   فاتورة فئة مخصصة
                 </h2>
-                <p className="text-green-100 arabic-spacing">
+                <p className="text-green-100 arabic-spacing text-sm sm:text-base">
                   {category?.name} - {project?.name}
                 </p>
               </div>
@@ -241,16 +241,16 @@ export default function CategoryInvoiceModal({
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="h-10 w-10 p-0 text-white hover:bg-white/20"
+              className="h-8 w-8 sm:h-10 sm:w-10 p-0 text-white hover:bg-white/20 touch-manipulation"
             >
-              <X className="h-5 w-5" />
+              <X className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-160px)]">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="p-3 sm:p-6 overflow-y-auto max-h-[calc(95vh-120px)] sm:max-h-[calc(90vh-160px)]">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Left Column: Selection Steps */}
             <div className="space-y-4">
               {/* Basic Information */}
@@ -504,8 +504,8 @@ export default function CategoryInvoiceModal({
         </div>
 
         {/* Footer */}
-        <div className="bg-gray-50 px-6 py-4 border-t flex items-center justify-between">
-          <div className="text-sm text-gray-600 arabic-spacing">
+        <div className="bg-gray-50 px-3 sm:px-6 py-4 border-t flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-0">
+          <div className="text-sm text-gray-600 arabic-spacing order-2 sm:order-1">
             {selectedAssignment ? (
               <span className="flex items-center">
                 <CheckCircle className="h-4 w-4 text-green-500 ml-1 no-flip" />
@@ -519,14 +519,18 @@ export default function CategoryInvoiceModal({
             )}
           </div>
 
-          <div className="flex items-center space-x-3 space-x-reverse">
-            <Button variant="ghost" onClick={onClose} className="px-6">
+          <div className="flex items-center space-x-3 space-x-reverse w-full sm:w-auto order-1 sm:order-2">
+            <Button
+              variant="ghost"
+              onClick={onClose}
+              className="flex-1 sm:flex-none px-6 py-3 touch-manipulation"
+            >
               إلغاء
             </Button>
             <Button
               onClick={handleSubmit}
               disabled={!isFormValid()}
-              className="bg-green-600 hover:bg-green-700 px-6"
+              className="flex-1 sm:flex-none bg-green-600 hover:bg-green-700 px-6 py-3 touch-manipulation"
             >
               <Save className="h-4 w-4 ml-1 no-flip" />
               إنشاء الفاتورة

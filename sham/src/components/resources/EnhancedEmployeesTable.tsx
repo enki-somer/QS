@@ -23,6 +23,7 @@ import { Employee } from "@/types";
 import { formatCurrency } from "@/lib/utils";
 import { useEmployee } from "@/contexts/EmployeeContext";
 import { useUIPermissions } from "@/hooks/useUIPermissions";
+import { useResponsive } from "@/hooks/useResponsive";
 
 interface EnhancedEmployeesTableProps {
   employees: Employee[];
@@ -55,6 +56,7 @@ export function EnhancedEmployeesTable({
     calculateRemainingSalary,
   } = useEmployee();
   const permissions = useUIPermissions();
+  const { isMobile } = useResponsive();
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [remainingSalaries, setRemainingSalaries] = useState<
@@ -312,6 +314,135 @@ export function EnhancedEmployeesTable({
       <div className="text-center py-12">
         <User className="h-12 w-12 text-gray-400 mx-auto mb-4 no-flip" />
         <p className="text-gray-500 arabic-spacing">لا يوجد موظفون لعرضهم</p>
+      </div>
+    );
+  }
+
+  if (isMobile) {
+    return (
+      <div className="space-y-4">
+        {sortedEmployees.map((employee) => {
+          const monthlySalary = calculateMonthlySalary(employee);
+          const remainingSalary = remainingSalaries[employee.id] || 0;
+          const paymentStatusColor = getPaymentStatusColor(employee);
+
+          return (
+            <div
+              key={employee.id}
+              className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
+            >
+              {/* Employee Card Header */}
+              <div className="bg-gradient-to-r from-slate-50 to-slate-100 p-4 border-b border-gray-200">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center space-x-2 space-x-reverse">
+                    <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <User className="h-5 w-5 text-blue-600 no-flip" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900 arabic-spacing">
+                        {employee.name}
+                      </h3>
+                      <p className="text-sm text-slate-600 arabic-spacing">
+                        {employee.position}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
+                      employee.status === "active"
+                        ? "bg-green-100 text-green-700"
+                        : "bg-red-100 text-red-700"
+                    }`}
+                  >
+                    {employee.status === "active" ? "نشط" : "غير نشط"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Employee Card Content */}
+              <div className="p-4">
+                {/* Contact Info */}
+                {employee.mobile_number && (
+                  <div className="flex items-center space-x-2 space-x-reverse mb-3">
+                    <Phone className="h-4 w-4 text-green-600 no-flip" />
+                    <span className="font-mono text-sm text-slate-900">
+                      {employee.mobile_number}
+                    </span>
+                  </div>
+                )}
+
+                {/* Salary Info */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-slate-50 p-3 rounded-lg">
+                    <p className="text-xs text-slate-600 arabic-spacing mb-1">
+                      الراتب الشهري
+                    </p>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {formatCurrency(monthlySalary)}
+                    </p>
+                  </div>
+                  <div className="bg-slate-50 p-3 rounded-lg">
+                    <p className="text-xs text-slate-600 arabic-spacing mb-1">
+                      المبلغ المتبقي
+                    </p>
+                    <p className="text-sm font-semibold text-slate-900">
+                      {formatCurrency(remainingSalary)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Payment Status */}
+                <div className="flex items-center space-x-2 space-x-reverse mb-4">
+                  <div
+                    className={`w-3 h-3 rounded-full ${paymentStatusColor.bgColor}`}
+                  ></div>
+                  <span
+                    className={`text-sm font-medium ${paymentStatusColor.textColor} arabic-spacing`}
+                  >
+                    {paymentStatusColor.label}
+                  </span>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onViewEmployee(employee)}
+                    className="w-full"
+                  >
+                    <Eye className="h-4 w-4 ml-1 no-flip" />
+                    عرض
+                  </Button>
+                  {!permissions.isViewOnlyMode && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onEditEmployee(employee)}
+                        className="w-full"
+                      >
+                        <Edit className="h-4 w-4 ml-1 no-flip" />
+                        تعديل
+                      </Button>
+                      {remainingSalary > 0 && (
+                        <Button
+                          size="sm"
+                          onClick={() => onPaySalary(employee)}
+                          disabled={!canPaySalary(remainingSalary)}
+                          className="w-full bg-green-600 hover:bg-green-700 col-span-2"
+                        >
+                          <Wallet className="h-4 w-4 ml-1 no-flip" />
+                          دفع راتب ({formatCurrency(remainingSalary)})
+                        </Button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   }
